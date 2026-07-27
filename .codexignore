@@ -1,0 +1,20 @@
+# Version-control metadata
+.git/
+
+# Maven build output and local dependency cache
+target/
+.mvn/wrapper/maven-wrapper.jar
+
+# Local runtime data and generated Graphify artifacts
+data/
+graphify-out/
+
+# IDE and local tooling files
+.idea/
+.vscode/
+.agents/
+
+# Logs and temporary files
+*.log
+*.tmp
+*.bak
