@@ -1,9 +1,29 @@
 {
-  "input_tokens": 0,
-  "output_tokens": 0,
+  "directed": false,
+  "multigraph": false,
+  "graph": {},
   "nodes": [
     {
-      "id": "pkg_com_example_accounting",
+      "label": "AGENTS.md",
+      "file_type": "document",
+      "source_file": "AGENTS.md",
+      "source_location": "L1",
+      "_origin": "ast",
+      "id": "agents",
+      "community": 15,
+      "norm_label": "agents.md"
+    },
+    {
+      "label": "graphify",
+      "file_type": "document",
+      "source_file": "AGENTS.md",
+      "source_location": "L1",
+      "_origin": "ast",
+      "id": "agents_graphify",
+      "community": 15,
+      "norm_label": "graphify"
+    },
+    {
       "label": "com.example:accounting",
       "file_type": "code",
       "type": "package",
@@ -11,2348 +31,2567 @@
       "source_file": "pom.xml",
       "source_location": "L1",
       "version": "0.1.0-SNAPSHOT",
-      "_origin": "ast"
+      "_origin": "ast",
+      "id": "pkg_com_example_accounting",
+      "community": 21,
+      "norm_label": "com.example:accounting"
     },
     {
-      "id": "accounting_accountingapplication",
       "label": "AccountingApplication.java",
       "file_type": "code",
       "source_file": "src/main/java/com/example/accounting/AccountingApplication.java",
       "source_location": "L1",
-      "_origin": "ast"
+      "_origin": "ast",
+      "id": "accounting_accountingapplication",
+      "community": 10,
+      "norm_label": "accountingapplication.java"
     },
     {
-      "id": "accounting_accountingapplication_accountingapplication",
       "label": "AccountingApplication",
       "file_type": "code",
       "source_file": "src/main/java/com/example/accounting/AccountingApplication.java",
       "source_location": "L7",
-      "_origin": "ast"
+      "_origin": "ast",
+      "id": "accounting_accountingapplication_accountingapplication",
+      "community": 10,
+      "norm_label": "accountingapplication"
     },
     {
-      "id": "accounting_accountingapplication_accountingapplication_main",
       "label": ".main()",
       "file_type": "code",
       "source_file": "src/main/java/com/example/accounting/AccountingApplication.java",
       "source_location": "L11",
-      "_origin": "ast"
+      "_origin": "ast",
+      "id": "accounting_accountingapplication_accountingapplication_main",
+      "community": 10,
+      "norm_label": ".main()"
     },
     {
-      "id": "string",
       "label": "String",
       "file_type": "code",
       "source_file": "",
       "source_location": "",
-      "_origin": "ast"
+      "_origin": "ast",
+      "id": "string",
+      "community": 10,
+      "norm_label": "string"
     },
     {
-      "id": "agent_package_info",
       "label": "package-info.java",
       "file_type": "code",
       "source_file": "src/main/java/com/example/accounting/agent/package-info.java",
       "source_location": "L1",
-      "_origin": "ast"
+      "_origin": "ast",
+      "id": "agent_package_info",
+      "community": 16,
+      "norm_label": "package-info.java"
     },
     {
-      "id": "audit_package_info",
       "label": "package-info.java",
       "file_type": "code",
       "source_file": "src/main/java/com/example/accounting/audit/package-info.java",
       "source_location": "L1",
-      "_origin": "ast"
+      "_origin": "ast",
+      "id": "audit_package_info",
+      "community": 17,
+      "norm_label": "package-info.java"
     },
     {
-      "id": "documents_package_info",
       "label": "package-info.java",
       "file_type": "code",
       "source_file": "src/main/java/com/example/accounting/documents/package-info.java",
       "source_location": "L1",
-      "_origin": "ast"
+      "_origin": "ast",
+      "id": "documents_package_info",
+      "community": 18,
+      "norm_label": "package-info.java"
     },
     {
-      "id": "identity_package_info",
       "label": "package-info.java",
       "file_type": "code",
       "source_file": "src/main/java/com/example/accounting/identity/package-info.java",
       "source_location": "L1",
-      "_origin": "ast"
+      "_origin": "ast",
+      "id": "identity_package_info",
+      "community": 19,
+      "norm_label": "package-info.java"
     },
     {
-      "id": "ledger_package_info",
       "label": "package-info.java",
       "file_type": "code",
       "source_file": "src/main/java/com/example/accounting/ledger/package-info.java",
       "source_location": "L1",
-      "_origin": "ast"
+      "_origin": "ast",
+      "id": "ledger_package_info",
+      "community": 20,
+      "norm_label": "package-info.java"
     },
     {
-      "id": "reporting_package_info",
       "label": "package-info.java",
       "file_type": "code",
       "source_file": "src/main/java/com/example/accounting/reporting/package-info.java",
       "source_location": "L1",
-      "_origin": "ast"
+      "_origin": "ast",
+      "id": "reporting_package_info",
+      "community": 22,
+      "norm_label": "package-info.java"
     },
     {
-      "id": "shared_package_info",
       "label": "package-info.java",
       "file_type": "code",
       "source_file": "src/main/java/com/example/accounting/shared/package-info.java",
       "source_location": "L1",
-      "_origin": "ast"
+      "_origin": "ast",
+      "id": "shared_package_info",
+      "community": 23,
+      "norm_label": "package-info.java"
     },
     {
-      "id": "voucher_package_info",
       "label": "package-info.java",
       "file_type": "code",
       "source_file": "src/main/java/com/example/accounting/voucher/package-info.java",
       "source_location": "L1",
-      "_origin": "ast"
+      "_origin": "ast",
+      "id": "voucher_package_info",
+      "community": 24,
+      "norm_label": "package-info.java"
     },
     {
-      "id": "accounting_accountingmodularitytest",
       "label": "AccountingModularityTest.java",
       "file_type": "code",
       "source_file": "src/test/java/com/example/accounting/AccountingModularityTest.java",
       "source_location": "L1",
-      "_origin": "ast"
+      "_origin": "ast",
+      "id": "accounting_accountingmodularitytest",
+      "community": 11,
+      "norm_label": "accountingmodularitytest.java"
     },
     {
-      "id": "accounting_accountingmodularitytest_accountingmodularitytest",
       "label": "AccountingModularityTest",
       "file_type": "code",
       "source_file": "src/test/java/com/example/accounting/AccountingModularityTest.java",
       "source_location": "L6",
-      "_origin": "ast"
+      "_origin": "ast",
+      "id": "accounting_accountingmodularitytest_accountingmodularitytest",
+      "community": 11,
+      "norm_label": "accountingmodularitytest"
     },
     {
-      "id": "accounting_accountingmodularitytest_accountingmodularitytest_modulesfollowthedeclaredboundaries",
       "label": ".modulesFollowTheDeclaredBoundaries()",
       "file_type": "code",
       "source_file": "src/test/java/com/example/accounting/AccountingModularityTest.java",
       "source_location": "L8",
-      "_origin": "ast"
+      "_origin": "ast",
+      "id": "accounting_accountingmodularitytest_accountingmodularitytest_modulesfollowthedeclaredboundaries",
+      "community": 11,
+      "norm_label": ".modulesfollowthedeclaredboundaries()"
     },
     {
-      "id": "test",
       "label": "Test",
       "file_type": "code",
       "source_file": "",
       "source_location": "",
-      "_origin": "ast"
+      "_origin": "ast",
+      "id": "test",
+      "community": 11,
+      "norm_label": "test"
     },
     {
-      "id": "ai财务系统_产品需求文档_prd_v0_1",
-      "label": "AI财务系统_产品需求文档_PRD_v0.1.md",
+      "label": "AI\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_PRD_v0.1.md",
       "file_type": "document",
-      "source_file": "AI财务系统_产品需求文档_PRD_v0.1.md",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_PRD_v0.1.md",
       "source_location": "L1",
-      "_origin": "ast"
+      "_origin": "ast",
+      "id": "ai\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1",
+      "community": 1,
+      "norm_label": "ai\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0.1.md"
     },
     {
-      "id": "ai财务系统_产品需求文档_prd_v0_1_ai_财务系统产品需求文档_prd_v0_1",
-      "label": "AI 财务系统产品需求文档（PRD）v0.1",
+      "label": "AI \u8d22\u52a1\u7cfb\u7edf\u4ea7\u54c1\u9700\u6c42\u6587\u6863\uff08PRD\uff09v0.1",
       "file_type": "document",
-      "source_file": "AI财务系统_产品需求文档_PRD_v0.1.md",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_PRD_v0.1.md",
       "source_location": "L1",
-      "_origin": "ast"
+      "_origin": "ast",
+      "id": "ai\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1_ai_\u8d22\u52a1\u7cfb\u7edf\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1",
+      "community": 1,
+      "norm_label": "ai \u8d22\u52a1\u7cfb\u7edf\u4ea7\u54c1\u9700\u6c42\u6587\u6863(prd)v0.1"
     },
     {
-      "id": "ai财务系统_产品需求文档_prd_v0_1_1_产品概述",
-      "label": "1. 产品概述",
+      "label": "1. \u4ea7\u54c1\u6982\u8ff0",
       "file_type": "document",
-      "source_file": "AI财务系统_产品需求文档_PRD_v0.1.md",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_PRD_v0.1.md",
       "source_location": "L7",
-      "_origin": "ast"
+      "_origin": "ast",
+      "id": "ai\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1_1_\u4ea7\u54c1\u6982\u8ff0",
+      "community": 1,
+      "norm_label": "1. \u4ea7\u54c1\u6982\u8ff0"
     },
     {
-      "id": "ai财务系统_产品需求文档_prd_v0_1_2_产品目标",
-      "label": "2. 产品目标",
+      "label": "2. \u4ea7\u54c1\u76ee\u6807",
       "file_type": "document",
-      "source_file": "AI财务系统_产品需求文档_PRD_v0.1.md",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_PRD_v0.1.md",
       "source_location": "L21",
-      "_origin": "ast"
+      "_origin": "ast",
+      "id": "ai\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1_2_\u4ea7\u54c1\u76ee\u6807",
+      "community": 1,
+      "norm_label": "2. \u4ea7\u54c1\u76ee\u6807"
     },
     {
-      "id": "ai财务系统_产品需求文档_prd_v0_1_3_用户_账套与权限",
-      "label": "3. 用户、账套与权限",
+      "label": "3. \u7528\u6237\u3001\u8d26\u5957\u4e0e\u6743\u9650",
       "file_type": "document",
-      "source_file": "AI财务系统_产品需求文档_PRD_v0.1.md",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_PRD_v0.1.md",
       "source_location": "L34",
-      "_origin": "ast"
+      "_origin": "ast",
+      "id": "ai\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1_3_\u7528\u6237_\u8d26\u5957\u4e0e\u6743\u9650",
+      "community": 1,
+      "norm_label": "3. \u7528\u6237\u3001\u8d26\u5957\u4e0e\u6743\u9650"
     },
     {
-      "id": "ai财务系统_产品需求文档_prd_v0_1_3_1_关系模型",
-      "label": "3.1 关系模型",
+      "label": "3.1 \u5173\u7cfb\u6a21\u578b",
       "file_type": "document",
-      "source_file": "AI财务系统_产品需求文档_PRD_v0.1.md",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_PRD_v0.1.md",
       "source_location": "L36",
-      "_origin": "ast"
+      "_origin": "ast",
+      "id": "ai\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1_3_1_\u5173\u7cfb\u6a21\u578b",
+      "community": 1,
+      "norm_label": "3.1 \u5173\u7cfb\u6a21\u578b"
     },
     {
-      "id": "ai财务系统_产品需求文档_prd_v0_1_3_2_账套角色",
-      "label": "3.2 账套角色",
+      "label": "3.2 \u8d26\u5957\u89d2\u8272",
       "file_type": "document",
-      "source_file": "AI财务系统_产品需求文档_PRD_v0.1.md",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_PRD_v0.1.md",
       "source_location": "L43",
-      "_origin": "ast"
+      "_origin": "ast",
+      "id": "ai\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1_3_2_\u8d26\u5957\u89d2\u8272",
+      "community": 1,
+      "norm_label": "3.2 \u8d26\u5957\u89d2\u8272"
     },
     {
-      "id": "ai财务系统_产品需求文档_prd_v0_1_4_v0_1_范围",
-      "label": "4. v0.1 范围",
+      "label": "4. v0.1 \u8303\u56f4",
       "file_type": "document",
-      "source_file": "AI财务系统_产品需求文档_PRD_v0.1.md",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_PRD_v0.1.md",
       "source_location": "L59",
-      "_origin": "ast"
+      "_origin": "ast",
+      "id": "ai\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1_4_v0_1_\u8303\u56f4",
+      "community": 1,
+      "norm_label": "4. v0.1 \u8303\u56f4"
     },
     {
-      "id": "ai财务系统_产品需求文档_prd_v0_1_4_1_包含",
-      "label": "4.1 包含",
+      "label": "4.1 \u5305\u542b",
       "file_type": "document",
-      "source_file": "AI财务系统_产品需求文档_PRD_v0.1.md",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_PRD_v0.1.md",
       "source_location": "L61",
-      "_origin": "ast"
+      "_origin": "ast",
+      "id": "ai\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1_4_1_\u5305\u542b",
+      "community": 1,
+      "norm_label": "4.1 \u5305\u542b"
     },
     {
-      "id": "ai财务系统_产品需求文档_prd_v0_1_4_2_不包含",
-      "label": "4.2 不包含",
+      "label": "4.2 \u4e0d\u5305\u542b",
       "file_type": "document",
-      "source_file": "AI财务系统_产品需求文档_PRD_v0.1.md",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_PRD_v0.1.md",
       "source_location": "L78",
-      "_origin": "ast"
+      "_origin": "ast",
+      "id": "ai\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1_4_2_\u4e0d\u5305\u542b",
+      "community": 1,
+      "norm_label": "4.2 \u4e0d\u5305\u542b"
     },
     {
-      "id": "ai财务系统_产品需求文档_prd_v0_1_5_核心业务流程",
-      "label": "5. 核心业务流程",
+      "label": "5. \u6838\u5fc3\u4e1a\u52a1\u6d41\u7a0b",
       "file_type": "document",
-      "source_file": "AI财务系统_产品需求文档_PRD_v0.1.md",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_PRD_v0.1.md",
       "source_location": "L90",
-      "_origin": "ast"
+      "_origin": "ast",
+      "id": "ai\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1_5_\u6838\u5fc3\u4e1a\u52a1\u6d41\u7a0b",
+      "community": 5,
+      "norm_label": "5. \u6838\u5fc3\u4e1a\u52a1\u6d41\u7a0b"
     },
     {
-      "id": "ai财务系统_产品需求文档_prd_v0_1_5_1_创建账套",
-      "label": "5.1 创建账套",
+      "label": "5.1 \u521b\u5efa\u8d26\u5957",
       "file_type": "document",
-      "source_file": "AI财务系统_产品需求文档_PRD_v0.1.md",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_PRD_v0.1.md",
       "source_location": "L92",
-      "_origin": "ast"
+      "_origin": "ast",
+      "id": "ai\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1_5_1_\u521b\u5efa\u8d26\u5957",
+      "community": 5,
+      "norm_label": "5.1 \u521b\u5efa\u8d26\u5957"
     },
     {
-      "id": "ai财务系统_产品需求文档_prd_v0_1_5_2_录入期初余额",
-      "label": "5.2 录入期初余额",
+      "label": "5.2 \u5f55\u5165\u671f\u521d\u4f59\u989d",
       "file_type": "document",
-      "source_file": "AI财务系统_产品需求文档_PRD_v0.1.md",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_PRD_v0.1.md",
       "source_location": "L99",
-      "_origin": "ast"
+      "_origin": "ast",
+      "id": "ai\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1_5_2_\u5f55\u5165\u671f\u521d\u4f59\u989d",
+      "community": 5,
+      "norm_label": "5.2 \u5f55\u5165\u671f\u521d\u4f59\u989d"
     },
     {
-      "id": "ai财务系统_产品需求文档_prd_v0_1_5_3_创建与记账凭证",
-      "label": "5.3 创建与记账凭证",
+      "label": "5.3 \u521b\u5efa\u4e0e\u8bb0\u8d26\u51ed\u8bc1",
       "file_type": "document",
-      "source_file": "AI财务系统_产品需求文档_PRD_v0.1.md",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_PRD_v0.1.md",
       "source_location": "L106",
-      "_origin": "ast"
+      "_origin": "ast",
+      "id": "ai\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1_5_3_\u521b\u5efa\u4e0e\u8bb0\u8d26\u51ed\u8bc1",
+      "community": 5,
+      "norm_label": "5.3 \u521b\u5efa\u4e0e\u8bb0\u8d26\u51ed\u8bc1"
     },
     {
-      "id": "ai财务系统_产品需求文档_prd_v0_1_5_4_上传单据并生成草稿",
-      "label": "5.4 上传单据并生成草稿",
+      "label": "5.4 \u4e0a\u4f20\u5355\u636e\u5e76\u751f\u6210\u8349\u7a3f",
       "file_type": "document",
-      "source_file": "AI财务系统_产品需求文档_PRD_v0.1.md",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_PRD_v0.1.md",
       "source_location": "L114",
-      "_origin": "ast"
+      "_origin": "ast",
+      "id": "ai\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1_5_4_\u4e0a\u4f20\u5355\u636e\u5e76\u751f\u6210\u8349\u7a3f",
+      "community": 5,
+      "norm_label": "5.4 \u4e0a\u4f20\u5355\u636e\u5e76\u751f\u6210\u8349\u7a3f"
     },
     {
-      "id": "ai财务系统_产品需求文档_prd_v0_1_5_5_修改_撤销与恢复",
-      "label": "5.5 修改、撤销与恢复",
+      "label": "5.5 \u4fee\u6539\u3001\u64a4\u9500\u4e0e\u6062\u590d",
       "file_type": "document",
-      "source_file": "AI财务系统_产品需求文档_PRD_v0.1.md",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_PRD_v0.1.md",
       "source_location": "L122",
-      "_origin": "ast"
+      "_origin": "ast",
+      "id": "ai\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1_5_5_\u4fee\u6539_\u64a4\u9500\u4e0e\u6062\u590d",
+      "community": 5,
+      "norm_label": "5.5 \u4fee\u6539\u3001\u64a4\u9500\u4e0e\u6062\u590d"
     },
     {
-      "id": "ai财务系统_产品需求文档_prd_v0_1_5_6_查询财务数据",
-      "label": "5.6 查询财务数据",
+      "label": "5.6 \u67e5\u8be2\u8d22\u52a1\u6570\u636e",
       "file_type": "document",
-      "source_file": "AI财务系统_产品需求文档_PRD_v0.1.md",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_PRD_v0.1.md",
       "source_location": "L130",
-      "_origin": "ast"
+      "_origin": "ast",
+      "id": "ai\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1_5_6_\u67e5\u8be2\u8d22\u52a1\u6570\u636e",
+      "community": 5,
+      "norm_label": "5.6 \u67e5\u8be2\u8d22\u52a1\u6570\u636e"
     },
     {
-      "id": "ai财务系统_产品需求文档_prd_v0_1_6_功能需求",
-      "label": "6. 功能需求",
+      "label": "6. \u529f\u80fd\u9700\u6c42",
       "file_type": "document",
-      "source_file": "AI财务系统_产品需求文档_PRD_v0.1.md",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_PRD_v0.1.md",
       "source_location": "L134",
-      "_origin": "ast"
+      "_origin": "ast",
+      "id": "ai\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1_6_\u529f\u80fd\u9700\u6c42",
+      "community": 3,
+      "norm_label": "6. \u529f\u80fd\u9700\u6c42"
     },
     {
-      "id": "ai财务系统_产品需求文档_prd_v0_1_6_1_账套与成员",
-      "label": "6.1 账套与成员",
+      "label": "6.1 \u8d26\u5957\u4e0e\u6210\u5458",
       "file_type": "document",
-      "source_file": "AI财务系统_产品需求文档_PRD_v0.1.md",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_PRD_v0.1.md",
       "source_location": "L136",
-      "_origin": "ast"
+      "_origin": "ast",
+      "id": "ai\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1_6_1_\u8d26\u5957\u4e0e\u6210\u5458",
+      "community": 3,
+      "norm_label": "6.1 \u8d26\u5957\u4e0e\u6210\u5458"
     },
     {
-      "id": "ai财务系统_产品需求文档_prd_v0_1_6_2_会计准则与科目",
-      "label": "6.2 会计准则与科目",
+      "label": "6.2 \u4f1a\u8ba1\u51c6\u5219\u4e0e\u79d1\u76ee",
       "file_type": "document",
-      "source_file": "AI财务系统_产品需求文档_PRD_v0.1.md",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_PRD_v0.1.md",
       "source_location": "L143",
-      "_origin": "ast"
+      "_origin": "ast",
+      "id": "ai\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1_6_2_\u4f1a\u8ba1\u51c6\u5219\u4e0e\u79d1\u76ee",
+      "community": 3,
+      "norm_label": "6.2 \u4f1a\u8ba1\u51c6\u5219\u4e0e\u79d1\u76ee"
     },
     {
-      "id": "ai财务系统_产品需求文档_prd_v0_1_6_3_会计期间",
-      "label": "6.3 会计期间",
+      "label": "6.3 \u4f1a\u8ba1\u671f\u95f4",
       "file_type": "document",
-      "source_file": "AI财务系统_产品需求文档_PRD_v0.1.md",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_PRD_v0.1.md",
       "source_location": "L151",
-      "_origin": "ast"
+      "_origin": "ast",
+      "id": "ai\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1_6_3_\u4f1a\u8ba1\u671f\u95f4",
+      "community": 3,
+      "norm_label": "6.3 \u4f1a\u8ba1\u671f\u95f4"
     },
     {
-      "id": "ai财务系统_产品需求文档_prd_v0_1_6_4_多币种",
-      "label": "6.4 多币种",
+      "label": "6.4 \u591a\u5e01\u79cd",
       "file_type": "document",
-      "source_file": "AI财务系统_产品需求文档_PRD_v0.1.md",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_PRD_v0.1.md",
       "source_location": "L157",
-      "_origin": "ast"
+      "_origin": "ast",
+      "id": "ai\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1_6_4_\u591a\u5e01\u79cd",
+      "community": 3,
+      "norm_label": "6.4 \u591a\u5e01\u79cd"
     },
     {
-      "id": "ai财务系统_产品需求文档_prd_v0_1_6_5_凭证",
-      "label": "6.5 凭证",
+      "label": "6.5 \u51ed\u8bc1",
       "file_type": "document",
-      "source_file": "AI财务系统_产品需求文档_PRD_v0.1.md",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_PRD_v0.1.md",
       "source_location": "L165",
-      "_origin": "ast"
+      "_origin": "ast",
+      "id": "ai\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1_6_5_\u51ed\u8bc1",
+      "community": 3,
+      "norm_label": "6.5 \u51ed\u8bc1"
     },
     {
-      "id": "ai财务系统_产品需求文档_prd_v0_1_6_6_审批",
-      "label": "6.6 审批",
+      "label": "6.6 \u5ba1\u6279",
       "file_type": "document",
-      "source_file": "AI财务系统_产品需求文档_PRD_v0.1.md",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_PRD_v0.1.md",
       "source_location": "L188",
-      "_origin": "ast"
+      "_origin": "ast",
+      "id": "ai\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1_6_6_\u5ba1\u6279",
+      "community": 3,
+      "norm_label": "6.6 \u5ba1\u6279"
     },
     {
-      "id": "ai财务系统_产品需求文档_prd_v0_1_6_7_重复单据",
-      "label": "6.7 重复单据",
+      "label": "6.7 \u91cd\u590d\u5355\u636e",
       "file_type": "document",
-      "source_file": "AI财务系统_产品需求文档_PRD_v0.1.md",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_PRD_v0.1.md",
       "source_location": "L195",
-      "_origin": "ast"
+      "_origin": "ast",
+      "id": "ai\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1_6_7_\u91cd\u590d\u5355\u636e",
+      "community": 3,
+      "norm_label": "6.7 \u91cd\u590d\u5355\u636e"
     },
     {
-      "id": "ai财务系统_产品需求文档_prd_v0_1_6_8_报表与账簿",
-      "label": "6.8 报表与账簿",
+      "label": "6.8 \u62a5\u8868\u4e0e\u8d26\u7c3f",
       "file_type": "document",
-      "source_file": "AI财务系统_产品需求文档_PRD_v0.1.md",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_PRD_v0.1.md",
       "source_location": "L201",
-      "_origin": "ast"
+      "_origin": "ast",
+      "id": "ai\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1_6_8_\u62a5\u8868\u4e0e\u8d26\u7c3f",
+      "community": 3,
+      "norm_label": "6.8 \u62a5\u8868\u4e0e\u8d26\u7c3f"
     },
     {
-      "id": "ai财务系统_产品需求文档_prd_v0_1_6_9_附件与异步任务",
-      "label": "6.9 附件与异步任务",
+      "label": "6.9 \u9644\u4ef6\u4e0e\u5f02\u6b65\u4efb\u52a1",
       "file_type": "document",
-      "source_file": "AI财务系统_产品需求文档_PRD_v0.1.md",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_PRD_v0.1.md",
       "source_location": "L219",
-      "_origin": "ast"
+      "_origin": "ast",
+      "id": "ai\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1_6_9_\u9644\u4ef6\u4e0e\u5f02\u6b65\u4efb\u52a1",
+      "community": 3,
+      "norm_label": "6.9 \u9644\u4ef6\u4e0e\u5f02\u6b65\u4efb\u52a1"
     },
     {
-      "id": "ai财务系统_产品需求文档_prd_v0_1_6_10_审计",
-      "label": "6.10 审计",
+      "label": "6.10 \u5ba1\u8ba1",
       "file_type": "document",
-      "source_file": "AI财务系统_产品需求文档_PRD_v0.1.md",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_PRD_v0.1.md",
       "source_location": "L227",
-      "_origin": "ast"
+      "_origin": "ast",
+      "id": "ai\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1_6_10_\u5ba1\u8ba1",
+      "community": 3,
+      "norm_label": "6.10 \u5ba1\u8ba1"
     },
     {
-      "id": "ai财务系统_产品需求文档_prd_v0_1_7_api_与_agent_能力",
-      "label": "7. API 与 Agent 能力",
+      "label": "7. API \u4e0e Agent \u80fd\u529b",
       "file_type": "document",
-      "source_file": "AI财务系统_产品需求文档_PRD_v0.1.md",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_PRD_v0.1.md",
       "source_location": "L240",
-      "_origin": "ast"
+      "_origin": "ast",
+      "id": "ai\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1_7_api_\u4e0e_agent_\u80fd\u529b",
+      "community": 1,
+      "norm_label": "7. api \u4e0e agent \u80fd\u529b"
     },
     {
-      "id": "ai财务系统_产品需求文档_prd_v0_1_7_1_rest_api",
       "label": "7.1 REST API",
       "file_type": "document",
-      "source_file": "AI财务系统_产品需求文档_PRD_v0.1.md",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_PRD_v0.1.md",
       "source_location": "L242",
-      "_origin": "ast"
+      "_origin": "ast",
+      "id": "ai\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1_7_1_rest_api",
+      "community": 1,
+      "norm_label": "7.1 rest api"
     },
     {
-      "id": "ai财务系统_产品需求文档_prd_v0_1_7_2_mcp_工具白名单",
-      "label": "7.2 MCP 工具白名单",
+      "label": "7.2 MCP \u5de5\u5177\u767d\u540d\u5355",
       "file_type": "document",
-      "source_file": "AI财务系统_产品需求文档_PRD_v0.1.md",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_PRD_v0.1.md",
       "source_location": "L251",
-      "_origin": "ast"
+      "_origin": "ast",
+      "id": "ai\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1_7_2_mcp_\u5de5\u5177\u767d\u540d\u5355",
+      "community": 1,
+      "norm_label": "7.2 mcp \u5de5\u5177\u767d\u540d\u5355"
     },
     {
-      "id": "ai财务系统_产品需求文档_prd_v0_1_8_状态与关键规则",
-      "label": "8. 状态与关键规则",
+      "label": "8. \u72b6\u6001\u4e0e\u5173\u952e\u89c4\u5219",
       "file_type": "document",
-      "source_file": "AI财务系统_产品需求文档_PRD_v0.1.md",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_PRD_v0.1.md",
       "source_location": "L267",
-      "_origin": "ast"
+      "_origin": "ast",
+      "id": "ai\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1_8_\u72b6\u6001\u4e0e\u5173\u952e\u89c4\u5219",
+      "community": 1,
+      "norm_label": "8. \u72b6\u6001\u4e0e\u5173\u952e\u89c4\u5219"
     },
     {
-      "id": "ai财务系统_产品需求文档_prd_v0_1_8_1_凭证状态",
-      "label": "8.1 凭证状态",
+      "label": "8.1 \u51ed\u8bc1\u72b6\u6001",
       "file_type": "document",
-      "source_file": "AI财务系统_产品需求文档_PRD_v0.1.md",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_PRD_v0.1.md",
       "source_location": "L269",
-      "_origin": "ast"
+      "_origin": "ast",
+      "id": "ai\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1_8_1_\u51ed\u8bc1\u72b6\u6001",
+      "community": 1,
+      "norm_label": "8.1 \u51ed\u8bc1\u72b6\u6001"
     },
     {
-      "id": "ai财务系统_产品需求文档_prd_v0_1_8_2_不变量",
-      "label": "8.2 不变量",
+      "label": "8.2 \u4e0d\u53d8\u91cf",
       "file_type": "document",
-      "source_file": "AI财务系统_产品需求文档_PRD_v0.1.md",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_PRD_v0.1.md",
       "source_location": "L286",
-      "_origin": "ast"
+      "_origin": "ast",
+      "id": "ai\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1_8_2_\u4e0d\u53d8\u91cf",
+      "community": 1,
+      "norm_label": "8.2 \u4e0d\u53d8\u91cf"
     },
     {
-      "id": "ai财务系统_产品需求文档_prd_v0_1_9_非功能需求",
-      "label": "9. 非功能需求",
+      "label": "9. \u975e\u529f\u80fd\u9700\u6c42",
       "file_type": "document",
-      "source_file": "AI财务系统_产品需求文档_PRD_v0.1.md",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_PRD_v0.1.md",
       "source_location": "L296",
-      "_origin": "ast"
+      "_origin": "ast",
+      "id": "ai\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1_9_\u975e\u529f\u80fd\u9700\u6c42",
+      "community": 7,
+      "norm_label": "9. \u975e\u529f\u80fd\u9700\u6c42"
     },
     {
-      "id": "ai财务系统_产品需求文档_prd_v0_1_9_1_安全与隔离",
-      "label": "9.1 安全与隔离",
+      "label": "9.1 \u5b89\u5168\u4e0e\u9694\u79bb",
       "file_type": "document",
-      "source_file": "AI财务系统_产品需求文档_PRD_v0.1.md",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_PRD_v0.1.md",
       "source_location": "L298",
-      "_origin": "ast"
+      "_origin": "ast",
+      "id": "ai\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1_9_1_\u5b89\u5168\u4e0e\u9694\u79bb",
+      "community": 7,
+      "norm_label": "9.1 \u5b89\u5168\u4e0e\u9694\u79bb"
     },
     {
-      "id": "ai财务系统_产品需求文档_prd_v0_1_9_2_性能目标",
-      "label": "9.2 性能目标",
+      "label": "9.2 \u6027\u80fd\u76ee\u6807",
       "file_type": "document",
-      "source_file": "AI财务系统_产品需求文档_PRD_v0.1.md",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_PRD_v0.1.md",
       "source_location": "L305",
-      "_origin": "ast"
+      "_origin": "ast",
+      "id": "ai\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1_9_2_\u6027\u80fd\u76ee\u6807",
+      "community": 7,
+      "norm_label": "9.2 \u6027\u80fd\u76ee\u6807"
     },
     {
-      "id": "ai财务系统_产品需求文档_prd_v0_1_9_3_可观测性",
-      "label": "9.3 可观测性",
+      "label": "9.3 \u53ef\u89c2\u6d4b\u6027",
       "file_type": "document",
-      "source_file": "AI财务系统_产品需求文档_PRD_v0.1.md",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_PRD_v0.1.md",
       "source_location": "L314",
-      "_origin": "ast"
+      "_origin": "ast",
+      "id": "ai\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1_9_3_\u53ef\u89c2\u6d4b\u6027",
+      "community": 7,
+      "norm_label": "9.3 \u53ef\u89c2\u6d4b\u6027"
     },
     {
-      "id": "ai财务系统_产品需求文档_prd_v0_1_9_4_保留与删除",
-      "label": "9.4 保留与删除",
+      "label": "9.4 \u4fdd\u7559\u4e0e\u5220\u9664",
       "file_type": "document",
-      "source_file": "AI财务系统_产品需求文档_PRD_v0.1.md",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_PRD_v0.1.md",
       "source_location": "L321",
-      "_origin": "ast"
+      "_origin": "ast",
+      "id": "ai\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1_9_4_\u4fdd\u7559\u4e0e\u5220\u9664",
+      "community": 7,
+      "norm_label": "9.4 \u4fdd\u7559\u4e0e\u5220\u9664"
     },
     {
-      "id": "ai财务系统_产品需求文档_prd_v0_1_10_v0_1_验收标准",
-      "label": "10. v0.1 验收标准",
+      "label": "10. v0.1 \u9a8c\u6536\u6807\u51c6",
       "file_type": "document",
-      "source_file": "AI财务系统_产品需求文档_PRD_v0.1.md",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_PRD_v0.1.md",
       "source_location": "L328",
-      "_origin": "ast"
+      "_origin": "ast",
+      "id": "ai\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1_10_v0_1_\u9a8c\u6536\u6807\u51c6",
+      "community": 1,
+      "norm_label": "10. v0.1 \u9a8c\u6536\u6807\u51c6"
     },
     {
-      "id": "ai财务系统_产品需求文档_prd_v0_1_11_交付路线",
-      "label": "11. 交付路线",
+      "label": "11. \u4ea4\u4ed8\u8def\u7ebf",
       "file_type": "document",
-      "source_file": "AI财务系统_产品需求文档_PRD_v0.1.md",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_PRD_v0.1.md",
       "source_location": "L346",
-      "_origin": "ast"
+      "_origin": "ast",
+      "id": "ai\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1_11_\u4ea4\u4ed8\u8def\u7ebf",
+      "community": 6,
+      "norm_label": "11. \u4ea4\u4ed8\u8def\u7ebf"
     },
     {
-      "id": "ai财务系统_产品需求文档_prd_v0_1_m0_工程基础与账套访问",
-      "label": "M0：工程基础与账套访问",
+      "label": "M0\uff1a\u5de5\u7a0b\u57fa\u7840\u4e0e\u8d26\u5957\u8bbf\u95ee",
       "file_type": "document",
-      "source_file": "AI财务系统_产品需求文档_PRD_v0.1.md",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_PRD_v0.1.md",
       "source_location": "L348",
-      "_origin": "ast"
+      "_origin": "ast",
+      "id": "ai\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1_m0_\u5de5\u7a0b\u57fa\u7840\u4e0e\u8d26\u5957\u8bbf\u95ee",
+      "community": 6,
+      "norm_label": "m0:\u5de5\u7a0b\u57fa\u7840\u4e0e\u8d26\u5957\u8bbf\u95ee"
     },
     {
-      "id": "ai财务系统_产品需求文档_prd_v0_1_m1_会计核心",
-      "label": "M1：会计核心",
+      "label": "M1\uff1a\u4f1a\u8ba1\u6838\u5fc3",
       "file_type": "document",
-      "source_file": "AI财务系统_产品需求文档_PRD_v0.1.md",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_PRD_v0.1.md",
       "source_location": "L353",
-      "_origin": "ast"
+      "_origin": "ast",
+      "id": "ai\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1_m1_\u4f1a\u8ba1\u6838\u5fc3",
+      "community": 6,
+      "norm_label": "m1:\u4f1a\u8ba1\u6838\u5fc3"
     },
     {
-      "id": "ai财务系统_产品需求文档_prd_v0_1_m2_附件与任务",
-      "label": "M2：附件与任务",
+      "label": "M2\uff1a\u9644\u4ef6\u4e0e\u4efb\u52a1",
       "file_type": "document",
-      "source_file": "AI财务系统_产品需求文档_PRD_v0.1.md",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_PRD_v0.1.md",
       "source_location": "L359",
-      "_origin": "ast"
+      "_origin": "ast",
+      "id": "ai\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1_m2_\u9644\u4ef6\u4e0e\u4efb\u52a1",
+      "community": 6,
+      "norm_label": "m2:\u9644\u4ef6\u4e0e\u4efb\u52a1"
     },
     {
-      "id": "ai财务系统_产品需求文档_prd_v0_1_m3_agent_与交付加固",
-      "label": "M3：Agent 与交付加固",
+      "label": "M3\uff1aAgent \u4e0e\u4ea4\u4ed8\u52a0\u56fa",
       "file_type": "document",
-      "source_file": "AI财务系统_产品需求文档_PRD_v0.1.md",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_PRD_v0.1.md",
       "source_location": "L364",
-      "_origin": "ast"
+      "_origin": "ast",
+      "id": "ai\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1_m3_agent_\u4e0e\u4ea4\u4ed8\u52a0\u56fa",
+      "community": 6,
+      "norm_label": "m3:agent \u4e0e\u4ea4\u4ed8\u52a0\u56fa"
     },
     {
-      "id": "ai财务系统_产品需求文档_prd_v0_1_12_产品边界说明",
-      "label": "12. 产品边界说明",
+      "label": "12. \u4ea7\u54c1\u8fb9\u754c\u8bf4\u660e",
       "file_type": "document",
-      "source_file": "AI财务系统_产品需求文档_PRD_v0.1.md",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_PRD_v0.1.md",
       "source_location": "L369",
-      "_origin": "ast"
+      "_origin": "ast",
+      "id": "ai\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1_12_\u4ea7\u54c1\u8fb9\u754c\u8bf4\u660e",
+      "community": 1,
+      "norm_label": "12. \u4ea7\u54c1\u8fb9\u754c\u8bf4\u660e"
     },
     {
-      "id": "ai财务系统_开发设计文档_tdd_v0_1",
-      "label": "AI财务系统_开发设计文档_TDD_v0.1.md",
+      "label": "AI\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_TDD_v0.1.md",
       "file_type": "document",
-      "source_file": "AI财务系统_开发设计文档_TDD_v0.1.md",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_TDD_v0.1.md",
       "source_location": "L1",
-      "_origin": "ast"
+      "_origin": "ast",
+      "id": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1",
+      "community": 0,
+      "norm_label": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0.1.md"
     },
     {
-      "id": "ai财务系统_开发设计文档_tdd_v0_1_ai_财务系统开发设计文档_tdd_v0_1",
-      "label": "AI 财务系统开发设计文档（TDD）v0.1",
+      "label": "AI \u8d22\u52a1\u7cfb\u7edf\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863\uff08TDD\uff09v0.1",
       "file_type": "document",
-      "source_file": "AI财务系统_开发设计文档_TDD_v0.1.md",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_TDD_v0.1.md",
       "source_location": "L1",
-      "_origin": "ast"
+      "_origin": "ast",
+      "id": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_ai_\u8d22\u52a1\u7cfb\u7edf\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1",
+      "community": 0,
+      "norm_label": "ai \u8d22\u52a1\u7cfb\u7edf\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863(tdd)v0.1"
     },
     {
-      "id": "ai财务系统_开发设计文档_tdd_v0_1_1_设计目标",
-      "label": "1. 设计目标",
+      "label": "1. \u8bbe\u8ba1\u76ee\u6807",
       "file_type": "document",
-      "source_file": "AI财务系统_开发设计文档_TDD_v0.1.md",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_TDD_v0.1.md",
       "source_location": "L7",
-      "_origin": "ast"
+      "_origin": "ast",
+      "id": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_1_\u8bbe\u8ba1\u76ee\u6807",
+      "community": 0,
+      "norm_label": "1. \u8bbe\u8ba1\u76ee\u6807"
     },
     {
-      "id": "ai财务系统_开发设计文档_tdd_v0_1_2_架构决策",
-      "label": "2. 架构决策",
+      "label": "2. \u67b6\u6784\u51b3\u7b56",
       "file_type": "document",
-      "source_file": "AI财务系统_开发设计文档_TDD_v0.1.md",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_TDD_v0.1.md",
       "source_location": "L21",
-      "_origin": "ast"
+      "_origin": "ast",
+      "id": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_2_\u67b6\u6784\u51b3\u7b56",
+      "community": 13,
+      "norm_label": "2. \u67b6\u6784\u51b3\u7b56"
     },
     {
-      "id": "ai财务系统_开发设计文档_tdd_v0_1_2_1_技术栈",
-      "label": "2.1 技术栈",
+      "label": "2.1 \u6280\u672f\u6808",
       "file_type": "document",
-      "source_file": "AI财务系统_开发设计文档_TDD_v0.1.md",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_TDD_v0.1.md",
       "source_location": "L23",
-      "_origin": "ast"
+      "_origin": "ast",
+      "id": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_2_1_\u6280\u672f\u6808",
+      "community": 13,
+      "norm_label": "2.1 \u6280\u672f\u6808"
     },
     {
-      "id": "ai财务系统_开发设计文档_tdd_v0_1_2_2_为什么采用_spring_boot",
-      "label": "2.2 为什么采用 Spring Boot",
+      "label": "2.2 \u4e3a\u4ec0\u4e48\u91c7\u7528 Spring Boot",
       "file_type": "document",
-      "source_file": "AI财务系统_开发设计文档_TDD_v0.1.md",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_TDD_v0.1.md",
       "source_location": "L43",
-      "_origin": "ast"
+      "_origin": "ast",
+      "id": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_2_2_\u4e3a\u4ec0\u4e48\u91c7\u7528_spring_boot",
+      "community": 13,
+      "norm_label": "2.2 \u4e3a\u4ec0\u4e48\u91c7\u7528 spring boot"
     },
     {
-      "id": "ai财务系统_开发设计文档_tdd_v0_1_2_3_保持简单的边界",
-      "label": "2.3 保持简单的边界",
+      "label": "2.3 \u4fdd\u6301\u7b80\u5355\u7684\u8fb9\u754c",
       "file_type": "document",
-      "source_file": "AI财务系统_开发设计文档_TDD_v0.1.md",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_TDD_v0.1.md",
       "source_location": "L47",
-      "_origin": "ast"
+      "_origin": "ast",
+      "id": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_2_3_\u4fdd\u6301\u7b80\u5355\u7684\u8fb9\u754c",
+      "community": 13,
+      "norm_label": "2.3 \u4fdd\u6301\u7b80\u5355\u7684\u8fb9\u754c"
     },
     {
-      "id": "ai财务系统_开发设计文档_tdd_v0_1_3_总体架构",
-      "label": "3. 总体架构",
+      "label": "3. \u603b\u4f53\u67b6\u6784",
       "file_type": "document",
-      "source_file": "AI财务系统_开发设计文档_TDD_v0.1.md",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_TDD_v0.1.md",
       "source_location": "L61",
-      "_origin": "ast"
+      "_origin": "ast",
+      "id": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_3_\u603b\u4f53\u67b6\u6784",
+      "community": 0,
+      "norm_label": "3. \u603b\u4f53\u67b6\u6784"
     },
     {
-      "id": "ai财务系统_开发设计文档_tdd_v0_1_4_工程结构",
-      "label": "4. 工程结构",
+      "label": "4. \u5de5\u7a0b\u7ed3\u6784",
       "file_type": "document",
-      "source_file": "AI财务系统_开发设计文档_TDD_v0.1.md",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_TDD_v0.1.md",
       "source_location": "L95",
-      "_origin": "ast"
+      "_origin": "ast",
+      "id": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_4_\u5de5\u7a0b\u7ed3\u6784",
+      "community": 0,
+      "norm_label": "4. \u5de5\u7a0b\u7ed3\u6784"
     },
     {
-      "id": "ai财务系统_开发设计文档_tdd_v0_1_5_数据模型",
-      "label": "5. 数据模型",
+      "label": "5. \u6570\u636e\u6a21\u578b",
       "file_type": "document",
-      "source_file": "AI财务系统_开发设计文档_TDD_v0.1.md",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_TDD_v0.1.md",
       "source_location": "L138",
-      "_origin": "ast"
+      "_origin": "ast",
+      "id": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_5_\u6570\u636e\u6a21\u578b",
+      "community": 2,
+      "norm_label": "5. \u6570\u636e\u6a21\u578b"
     },
     {
-      "id": "ai财务系统_开发设计文档_tdd_v0_1_5_1_通用字段",
-      "label": "5.1 通用字段",
+      "label": "5.1 \u901a\u7528\u5b57\u6bb5",
       "file_type": "document",
-      "source_file": "AI财务系统_开发设计文档_TDD_v0.1.md",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_TDD_v0.1.md",
       "source_location": "L140",
-      "_origin": "ast"
+      "_origin": "ast",
+      "id": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_5_1_\u901a\u7528\u5b57\u6bb5",
+      "community": 2,
+      "norm_label": "5.1 \u901a\u7528\u5b57\u6bb5"
     },
     {
-      "id": "ai财务系统_开发设计文档_tdd_v0_1_5_2_身份与账套",
-      "label": "5.2 身份与账套",
+      "label": "5.2 \u8eab\u4efd\u4e0e\u8d26\u5957",
       "file_type": "document",
-      "source_file": "AI财务系统_开发设计文档_TDD_v0.1.md",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_TDD_v0.1.md",
       "source_location": "L163",
-      "_origin": "ast"
+      "_origin": "ast",
+      "id": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_5_2_\u8eab\u4efd\u4e0e\u8d26\u5957",
+      "community": 2,
+      "norm_label": "5.2 \u8eab\u4efd\u4e0e\u8d26\u5957"
     },
     {
-      "id": "ai财务系统_开发设计文档_tdd_v0_1_app_user",
       "label": "`app_user`",
       "file_type": "document",
-      "source_file": "AI财务系统_开发设计文档_TDD_v0.1.md",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_TDD_v0.1.md",
       "source_location": "L165",
-      "_origin": "ast"
+      "_origin": "ast",
+      "id": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_app_user",
+      "community": 2,
+      "norm_label": "`app_user`"
     },
     {
-      "id": "ai财务系统_开发设计文档_tdd_v0_1_ledger",
       "label": "`ledger`",
       "file_type": "document",
-      "source_file": "AI财务系统_开发设计文档_TDD_v0.1.md",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_TDD_v0.1.md",
       "source_location": "L177",
-      "_origin": "ast"
+      "_origin": "ast",
+      "id": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_ledger",
+      "community": 2,
+      "norm_label": "`ledger`"
     },
     {
-      "id": "ai财务系统_开发设计文档_tdd_v0_1_ledger_membership",
       "label": "`ledger_membership`",
       "file_type": "document",
-      "source_file": "AI财务系统_开发设计文档_TDD_v0.1.md",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_TDD_v0.1.md",
       "source_location": "L189",
-      "_origin": "ast"
+      "_origin": "ast",
+      "id": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_ledger_membership",
+      "community": 2,
+      "norm_label": "`ledger_membership`"
     },
     {
-      "id": "ai财务系统_开发设计文档_tdd_v0_1_5_3_基础资料",
-      "label": "5.3 基础资料",
+      "label": "5.3 \u57fa\u7840\u8d44\u6599",
       "file_type": "document",
-      "source_file": "AI财务系统_开发设计文档_TDD_v0.1.md",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_TDD_v0.1.md",
       "source_location": "L200",
-      "_origin": "ast"
+      "_origin": "ast",
+      "id": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_5_3_\u57fa\u7840\u8d44\u6599",
+      "community": 8,
+      "norm_label": "5.3 \u57fa\u7840\u8d44\u6599"
     },
     {
-      "id": "ai财务系统_开发设计文档_tdd_v0_1_account",
       "label": "`account`",
       "file_type": "document",
-      "source_file": "AI财务系统_开发设计文档_TDD_v0.1.md",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_TDD_v0.1.md",
       "source_location": "L202",
-      "_origin": "ast"
+      "_origin": "ast",
+      "id": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_account",
+      "community": 8,
+      "norm_label": "`account`"
     },
     {
-      "id": "ai财务系统_开发设计文档_tdd_v0_1_accounting_period",
       "label": "`accounting_period`",
       "file_type": "document",
-      "source_file": "AI财务系统_开发设计文档_TDD_v0.1.md",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_TDD_v0.1.md",
       "source_location": "L214",
-      "_origin": "ast"
+      "_origin": "ast",
+      "id": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_accounting_period",
+      "community": 8,
+      "norm_label": "`accounting_period`"
     },
     {
-      "id": "ai财务系统_开发设计文档_tdd_v0_1_dimension_type_dimension_value",
       "label": "`dimension_type` / `dimension_value`",
       "file_type": "document",
-      "source_file": "AI财务系统_开发设计文档_TDD_v0.1.md",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_TDD_v0.1.md",
       "source_location": "L224",
-      "_origin": "ast"
+      "_origin": "ast",
+      "id": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_dimension_type_dimension_value",
+      "community": 8,
+      "norm_label": "`dimension_type` / `dimension_value`"
     },
     {
-      "id": "ai财务系统_开发设计文档_tdd_v0_1_opening_balance",
       "label": "`opening_balance`",
       "file_type": "document",
-      "source_file": "AI财务系统_开发设计文档_TDD_v0.1.md",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_TDD_v0.1.md",
       "source_location": "L228",
-      "_origin": "ast"
+      "_origin": "ast",
+      "id": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_opening_balance",
+      "community": 8,
+      "norm_label": "`opening_balance`"
     },
     {
-      "id": "ai财务系统_开发设计文档_tdd_v0_1_5_4_凭证",
-      "label": "5.4 凭证",
+      "label": "5.4 \u51ed\u8bc1",
       "file_type": "document",
-      "source_file": "AI财务系统_开发设计文档_TDD_v0.1.md",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_TDD_v0.1.md",
       "source_location": "L244",
-      "_origin": "ast"
+      "_origin": "ast",
+      "id": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_5_4_\u51ed\u8bc1",
+      "community": 2,
+      "norm_label": "5.4 \u51ed\u8bc1"
     },
     {
-      "id": "ai财务系统_开发设计文档_tdd_v0_1_voucher",
       "label": "`voucher`",
       "file_type": "document",
-      "source_file": "AI财务系统_开发设计文档_TDD_v0.1.md",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_TDD_v0.1.md",
       "source_location": "L246",
-      "_origin": "ast"
+      "_origin": "ast",
+      "id": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_voucher",
+      "community": 2,
+      "norm_label": "`voucher`"
     },
     {
-      "id": "ai财务系统_开发设计文档_tdd_v0_1_voucher_line",
       "label": "`voucher_line`",
       "file_type": "document",
-      "source_file": "AI财务系统_开发设计文档_TDD_v0.1.md",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_TDD_v0.1.md",
       "source_location": "L265",
-      "_origin": "ast"
+      "_origin": "ast",
+      "id": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_voucher_line",
+      "community": 2,
+      "norm_label": "`voucher_line`"
     },
     {
-      "id": "ai财务系统_开发设计文档_tdd_v0_1_voucher_line_dimension",
       "label": "`voucher_line_dimension`",
       "file_type": "document",
-      "source_file": "AI财务系统_开发设计文档_TDD_v0.1.md",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_TDD_v0.1.md",
       "source_location": "L281",
-      "_origin": "ast"
+      "_origin": "ast",
+      "id": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_voucher_line_dimension",
+      "community": 2,
+      "norm_label": "`voucher_line_dimension`"
     },
     {
-      "id": "ai财务系统_开发设计文档_tdd_v0_1_voucher_approval",
       "label": "`voucher_approval`",
       "file_type": "document",
-      "source_file": "AI财务系统_开发设计文档_TDD_v0.1.md",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_TDD_v0.1.md",
       "source_location": "L289",
-      "_origin": "ast"
+      "_origin": "ast",
+      "id": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_voucher_approval",
+      "community": 2,
+      "norm_label": "`voucher_approval`"
     },
     {
-      "id": "ai财务系统_开发设计文档_tdd_v0_1_5_5_文档与任务",
-      "label": "5.5 文档与任务",
+      "label": "5.5 \u6587\u6863\u4e0e\u4efb\u52a1",
       "file_type": "document",
-      "source_file": "AI财务系统_开发设计文档_TDD_v0.1.md",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_TDD_v0.1.md",
       "source_location": "L298",
-      "_origin": "ast"
+      "_origin": "ast",
+      "id": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_5_5_\u6587\u6863\u4e0e\u4efb\u52a1",
+      "community": 2,
+      "norm_label": "5.5 \u6587\u6863\u4e0e\u4efb\u52a1"
     },
     {
-      "id": "ai财务系统_开发设计文档_tdd_v0_1_document",
       "label": "`document`",
       "file_type": "document",
-      "source_file": "AI财务系统_开发设计文档_TDD_v0.1.md",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_TDD_v0.1.md",
       "source_location": "L300",
-      "_origin": "ast"
+      "_origin": "ast",
+      "id": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_document",
+      "community": 2,
+      "norm_label": "`document`"
     },
     {
-      "id": "ai财务系统_开发设计文档_tdd_v0_1_document_extraction",
       "label": "`document_extraction`",
       "file_type": "document",
-      "source_file": "AI财务系统_开发设计文档_TDD_v0.1.md",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_TDD_v0.1.md",
       "source_location": "L313",
-      "_origin": "ast"
+      "_origin": "ast",
+      "id": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_document_extraction",
+      "community": 2,
+      "norm_label": "`document_extraction`"
     },
     {
-      "id": "ai财务系统_开发设计文档_tdd_v0_1_background_job",
       "label": "`background_job`",
       "file_type": "document",
-      "source_file": "AI财务系统_开发设计文档_TDD_v0.1.md",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_TDD_v0.1.md",
       "source_location": "L327",
-      "_origin": "ast"
+      "_origin": "ast",
+      "id": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_background_job",
+      "community": 2,
+      "norm_label": "`background_job`"
     },
     {
-      "id": "ai财务系统_开发设计文档_tdd_v0_1_5_6_审计与幂等",
-      "label": "5.6 审计与幂等",
+      "label": "5.6 \u5ba1\u8ba1\u4e0e\u5e42\u7b49",
       "file_type": "document",
-      "source_file": "AI财务系统_开发设计文档_TDD_v0.1.md",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_TDD_v0.1.md",
       "source_location": "L344",
-      "_origin": "ast"
+      "_origin": "ast",
+      "id": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_5_6_\u5ba1\u8ba1\u4e0e\u5e42\u7b49",
+      "community": 2,
+      "norm_label": "5.6 \u5ba1\u8ba1\u4e0e\u5e42\u7b49"
     },
     {
-      "id": "ai财务系统_开发设计文档_tdd_v0_1_audit_revision",
       "label": "`audit_revision`",
       "file_type": "document",
-      "source_file": "AI财务系统_开发设计文档_TDD_v0.1.md",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_TDD_v0.1.md",
       "source_location": "L346",
-      "_origin": "ast"
+      "_origin": "ast",
+      "id": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_audit_revision",
+      "community": 2,
+      "norm_label": "`audit_revision`"
     },
     {
-      "id": "ai财务系统_开发设计文档_tdd_v0_1_idempotency_record",
       "label": "`idempotency_record`",
       "file_type": "document",
-      "source_file": "AI财务系统_开发设计文档_TDD_v0.1.md",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_TDD_v0.1.md",
       "source_location": "L363",
-      "_origin": "ast"
+      "_origin": "ast",
+      "id": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_idempotency_record",
+      "community": 2,
+      "norm_label": "`idempotency_record`"
     },
     {
-      "id": "ai财务系统_开发设计文档_tdd_v0_1_6_金额与会计规则",
-      "label": "6. 金额与会计规则",
+      "label": "6. \u91d1\u989d\u4e0e\u4f1a\u8ba1\u89c4\u5219",
       "file_type": "document",
-      "source_file": "AI财务系统_开发设计文档_TDD_v0.1.md",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_TDD_v0.1.md",
       "source_location": "L377",
-      "_origin": "ast"
+      "_origin": "ast",
+      "id": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_6_\u91d1\u989d\u4e0e\u4f1a\u8ba1\u89c4\u5219",
+      "community": 0,
+      "norm_label": "6. \u91d1\u989d\u4e0e\u4f1a\u8ba1\u89c4\u5219"
     },
     {
-      "id": "ai财务系统_开发设计文档_tdd_v0_1_7_安全与账套隔离",
-      "label": "7. 安全与账套隔离",
+      "label": "7. \u5b89\u5168\u4e0e\u8d26\u5957\u9694\u79bb",
       "file_type": "document",
-      "source_file": "AI财务系统_开发设计文档_TDD_v0.1.md",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_TDD_v0.1.md",
       "source_location": "L393",
-      "_origin": "ast"
+      "_origin": "ast",
+      "id": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_7_\u5b89\u5168\u4e0e\u8d26\u5957\u9694\u79bb",
+      "community": 0,
+      "norm_label": "7. \u5b89\u5168\u4e0e\u8d26\u5957\u9694\u79bb"
     },
     {
-      "id": "ai财务系统_开发设计文档_tdd_v0_1_7_1_认证",
-      "label": "7.1 认证",
+      "label": "7.1 \u8ba4\u8bc1",
       "file_type": "document",
-      "source_file": "AI财务系统_开发设计文档_TDD_v0.1.md",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_TDD_v0.1.md",
       "source_location": "L395",
-      "_origin": "ast"
+      "_origin": "ast",
+      "id": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_7_1_\u8ba4\u8bc1",
+      "community": 0,
+      "norm_label": "7.1 \u8ba4\u8bc1"
     },
     {
-      "id": "ai财务系统_开发设计文档_tdd_v0_1_7_2_授权",
-      "label": "7.2 授权",
+      "label": "7.2 \u6388\u6743",
       "file_type": "document",
-      "source_file": "AI财务系统_开发设计文档_TDD_v0.1.md",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_TDD_v0.1.md",
       "source_location": "L403",
-      "_origin": "ast"
+      "_origin": "ast",
+      "id": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_7_2_\u6388\u6743",
+      "community": 0,
+      "norm_label": "7.2 \u6388\u6743"
     },
     {
-      "id": "ai财务系统_开发设计文档_tdd_v0_1_8_api_规范",
-      "label": "8. API 规范",
+      "label": "8. API \u89c4\u8303",
       "file_type": "document",
-      "source_file": "AI财务系统_开发设计文档_TDD_v0.1.md",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_TDD_v0.1.md",
       "source_location": "L425",
-      "_origin": "ast"
+      "_origin": "ast",
+      "id": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_8_api_\u89c4\u8303",
+      "community": 0,
+      "norm_label": "8. api \u89c4\u8303"
     },
     {
-      "id": "ai财务系统_开发设计文档_tdd_v0_1_8_1_通用约定",
-      "label": "8.1 通用约定",
+      "label": "8.1 \u901a\u7528\u7ea6\u5b9a",
       "file_type": "document",
-      "source_file": "AI财务系统_开发设计文档_TDD_v0.1.md",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_TDD_v0.1.md",
       "source_location": "L427",
-      "_origin": "ast"
+      "_origin": "ast",
+      "id": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_8_1_\u901a\u7528\u7ea6\u5b9a",
+      "community": 0,
+      "norm_label": "8.1 \u901a\u7528\u7ea6\u5b9a"
     },
     {
-      "id": "ai财务系统_开发设计文档_tdd_v0_1_8_2_主要接口",
-      "label": "8.2 主要接口",
+      "label": "8.2 \u4e3b\u8981\u63a5\u53e3",
       "file_type": "document",
-      "source_file": "AI财务系统_开发设计文档_TDD_v0.1.md",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_TDD_v0.1.md",
       "source_location": "L462",
-      "_origin": "ast"
+      "_origin": "ast",
+      "id": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_8_2_\u4e3b\u8981\u63a5\u53e3",
+      "community": 0,
+      "norm_label": "8.2 \u4e3b\u8981\u63a5\u53e3"
     },
     {
-      "id": "ai财务系统_开发设计文档_tdd_v0_1_9_凭证状态_事务与修订",
-      "label": "9. 凭证状态、事务与修订",
+      "label": "9. \u51ed\u8bc1\u72b6\u6001\u3001\u4e8b\u52a1\u4e0e\u4fee\u8ba2",
       "file_type": "document",
-      "source_file": "AI财务系统_开发设计文档_TDD_v0.1.md",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_TDD_v0.1.md",
       "source_location": "L534",
-      "_origin": "ast"
+      "_origin": "ast",
+      "id": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_9_\u51ed\u8bc1\u72b6\u6001_\u4e8b\u52a1\u4e0e\u4fee\u8ba2",
+      "community": 14,
+      "norm_label": "9. \u51ed\u8bc1\u72b6\u6001\u3001\u4e8b\u52a1\u4e0e\u4fee\u8ba2"
     },
     {
-      "id": "ai财务系统_开发设计文档_tdd_v0_1_9_1_状态机",
-      "label": "9.1 状态机",
+      "label": "9.1 \u72b6\u6001\u673a",
       "file_type": "document",
-      "source_file": "AI财务系统_开发设计文档_TDD_v0.1.md",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_TDD_v0.1.md",
       "source_location": "L536",
-      "_origin": "ast"
+      "_origin": "ast",
+      "id": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_9_1_\u72b6\u6001\u673a",
+      "community": 14,
+      "norm_label": "9.1 \u72b6\u6001\u673a"
     },
     {
-      "id": "ai财务系统_开发设计文档_tdd_v0_1_9_2_事务",
-      "label": "9.2 事务",
+      "label": "9.2 \u4e8b\u52a1",
       "file_type": "document",
-      "source_file": "AI财务系统_开发设计文档_TDD_v0.1.md",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_TDD_v0.1.md",
       "source_location": "L559",
-      "_origin": "ast"
+      "_origin": "ast",
+      "id": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_9_2_\u4e8b\u52a1",
+      "community": 14,
+      "norm_label": "9.2 \u4e8b\u52a1"
     },
     {
-      "id": "ai财务系统_开发设计文档_tdd_v0_1_9_3_修改与恢复",
-      "label": "9.3 修改与恢复",
+      "label": "9.3 \u4fee\u6539\u4e0e\u6062\u590d",
       "file_type": "document",
-      "source_file": "AI财务系统_开发设计文档_TDD_v0.1.md",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_TDD_v0.1.md",
       "source_location": "L573",
-      "_origin": "ast"
+      "_origin": "ast",
+      "id": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_9_3_\u4fee\u6539\u4e0e\u6062\u590d",
+      "community": 14,
+      "norm_label": "9.3 \u4fee\u6539\u4e0e\u6062\u590d"
     },
     {
-      "id": "ai财务系统_开发设计文档_tdd_v0_1_10_报表与查询_dsl",
-      "label": "10. 报表与查询 DSL",
+      "label": "10. \u62a5\u8868\u4e0e\u67e5\u8be2 DSL",
       "file_type": "document",
-      "source_file": "AI财务系统_开发设计文档_TDD_v0.1.md",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_TDD_v0.1.md",
       "source_location": "L582",
-      "_origin": "ast"
+      "_origin": "ast",
+      "id": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_10_\u62a5\u8868\u4e0e\u67e5\u8be2_dsl",
+      "community": 0,
+      "norm_label": "10. \u62a5\u8868\u4e0e\u67e5\u8be2 dsl"
     },
     {
-      "id": "ai财务系统_开发设计文档_tdd_v0_1_11_附件与异步任务",
-      "label": "11. 附件与异步任务",
+      "label": "11. \u9644\u4ef6\u4e0e\u5f02\u6b65\u4efb\u52a1",
       "file_type": "document",
-      "source_file": "AI财务系统_开发设计文档_TDD_v0.1.md",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_TDD_v0.1.md",
       "source_location": "L619",
-      "_origin": "ast"
+      "_origin": "ast",
+      "id": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_11_\u9644\u4ef6\u4e0e\u5f02\u6b65\u4efb\u52a1",
+      "community": 12,
+      "norm_label": "11. \u9644\u4ef6\u4e0e\u5f02\u6b65\u4efb\u52a1"
     },
     {
-      "id": "ai财务系统_开发设计文档_tdd_v0_1_11_1_上传",
-      "label": "11.1 上传",
+      "label": "11.1 \u4e0a\u4f20",
       "file_type": "document",
-      "source_file": "AI财务系统_开发设计文档_TDD_v0.1.md",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_TDD_v0.1.md",
       "source_location": "L621",
-      "_origin": "ast"
+      "_origin": "ast",
+      "id": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_11_1_\u4e0a\u4f20",
+      "community": 12,
+      "norm_label": "11.1 \u4e0a\u4f20"
     },
     {
-      "id": "ai财务系统_开发设计文档_tdd_v0_1_11_2_postgresql_任务队列",
-      "label": "11.2 PostgreSQL 任务队列",
+      "label": "11.2 PostgreSQL \u4efb\u52a1\u961f\u5217",
       "file_type": "document",
-      "source_file": "AI财务系统_开发设计文档_TDD_v0.1.md",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_TDD_v0.1.md",
       "source_location": "L631",
-      "_origin": "ast"
+      "_origin": "ast",
+      "id": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_11_2_postgresql_\u4efb\u52a1\u961f\u5217",
+      "community": 12,
+      "norm_label": "11.2 postgresql \u4efb\u52a1\u961f\u5217"
     },
     {
-      "id": "ai财务系统_开发设计文档_tdd_v0_1_11_3_mock_提取",
-      "label": "11.3 Mock 提取",
+      "label": "11.3 Mock \u63d0\u53d6",
       "file_type": "document",
-      "source_file": "AI财务系统_开发设计文档_TDD_v0.1.md",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_TDD_v0.1.md",
       "source_location": "L651",
-      "_origin": "ast"
+      "_origin": "ast",
+      "id": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_11_3_mock_\u63d0\u53d6",
+      "community": 12,
+      "norm_label": "11.3 mock \u63d0\u53d6"
     },
     {
-      "id": "ai财务系统_开发设计文档_tdd_v0_1_12_mcp_设计",
-      "label": "12. MCP 设计",
+      "label": "12. MCP \u8bbe\u8ba1",
       "file_type": "document",
-      "source_file": "AI财务系统_开发设计文档_TDD_v0.1.md",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_TDD_v0.1.md",
       "source_location": "L663",
-      "_origin": "ast"
+      "_origin": "ast",
+      "id": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_12_mcp_\u8bbe\u8ba1",
+      "community": 0,
+      "norm_label": "12. mcp \u8bbe\u8ba1"
     },
     {
-      "id": "ai财务系统_开发设计文档_tdd_v0_1_13_幂等_并发与错误处理",
-      "label": "13. 幂等、并发与错误处理",
+      "label": "13. \u5e42\u7b49\u3001\u5e76\u53d1\u4e0e\u9519\u8bef\u5904\u7406",
       "file_type": "document",
-      "source_file": "AI财务系统_开发设计文档_TDD_v0.1.md",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_TDD_v0.1.md",
       "source_location": "L686",
-      "_origin": "ast"
+      "_origin": "ast",
+      "id": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_13_\u5e42\u7b49_\u5e76\u53d1\u4e0e\u9519\u8bef\u5904\u7406",
+      "community": 0,
+      "norm_label": "13. \u5e42\u7b49\u3001\u5e76\u53d1\u4e0e\u9519\u8bef\u5904\u7406"
     },
     {
-      "id": "ai财务系统_开发设计文档_tdd_v0_1_14_可观测性与保留",
-      "label": "14. 可观测性与保留",
+      "label": "14. \u53ef\u89c2\u6d4b\u6027\u4e0e\u4fdd\u7559",
       "file_type": "document",
-      "source_file": "AI财务系统_开发设计文档_TDD_v0.1.md",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_TDD_v0.1.md",
       "source_location": "L695",
-      "_origin": "ast"
+      "_origin": "ast",
+      "id": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_14_\u53ef\u89c2\u6d4b\u6027\u4e0e\u4fdd\u7559",
+      "community": 0,
+      "norm_label": "14. \u53ef\u89c2\u6d4b\u6027\u4e0e\u4fdd\u7559"
     },
     {
-      "id": "ai财务系统_开发设计文档_tdd_v0_1_14_1_可观测性",
-      "label": "14.1 可观测性",
+      "label": "14.1 \u53ef\u89c2\u6d4b\u6027",
       "file_type": "document",
-      "source_file": "AI财务系统_开发设计文档_TDD_v0.1.md",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_TDD_v0.1.md",
       "source_location": "L697",
-      "_origin": "ast"
+      "_origin": "ast",
+      "id": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_14_1_\u53ef\u89c2\u6d4b\u6027",
+      "community": 0,
+      "norm_label": "14.1 \u53ef\u89c2\u6d4b\u6027"
     },
     {
-      "id": "ai财务系统_开发设计文档_tdd_v0_1_14_2_保留",
-      "label": "14.2 保留",
+      "label": "14.2 \u4fdd\u7559",
       "file_type": "document",
-      "source_file": "AI财务系统_开发设计文档_TDD_v0.1.md",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_TDD_v0.1.md",
       "source_location": "L704",
-      "_origin": "ast"
+      "_origin": "ast",
+      "id": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_14_2_\u4fdd\u7559",
+      "community": 0,
+      "norm_label": "14.2 \u4fdd\u7559"
     },
     {
-      "id": "ai财务系统_开发设计文档_tdd_v0_1_15_测试策略",
-      "label": "15. 测试策略",
+      "label": "15. \u6d4b\u8bd5\u7b56\u7565",
       "file_type": "document",
-      "source_file": "AI财务系统_开发设计文档_TDD_v0.1.md",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_TDD_v0.1.md",
       "source_location": "L711",
-      "_origin": "ast"
+      "_origin": "ast",
+      "id": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_15_\u6d4b\u8bd5\u7b56\u7565",
+      "community": 0,
+      "norm_label": "15. \u6d4b\u8bd5\u7b56\u7565"
     },
     {
-      "id": "ai财务系统_开发设计文档_tdd_v0_1_16_具体开发计划",
-      "label": "16. 具体开发计划",
+      "label": "16. \u5177\u4f53\u5f00\u53d1\u8ba1\u5212",
       "file_type": "document",
-      "source_file": "AI财务系统_开发设计文档_TDD_v0.1.md",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_TDD_v0.1.md",
       "source_location": "L727",
-      "_origin": "ast"
+      "_origin": "ast",
+      "id": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_16_\u5177\u4f53\u5f00\u53d1\u8ba1\u5212",
+      "community": 4,
+      "norm_label": "16. \u5177\u4f53\u5f00\u53d1\u8ba1\u5212"
     },
     {
-      "id": "ai财务系统_开发设计文档_tdd_v0_1_阶段_0_工程基础",
-      "label": "阶段 0：工程基础",
+      "label": "\u9636\u6bb5 0\uff1a\u5de5\u7a0b\u57fa\u7840",
       "file_type": "document",
-      "source_file": "AI财务系统_开发设计文档_TDD_v0.1.md",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_TDD_v0.1.md",
       "source_location": "L731",
-      "_origin": "ast"
+      "_origin": "ast",
+      "id": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_\u9636\u6bb5_0_\u5de5\u7a0b\u57fa\u7840",
+      "community": 4,
+      "norm_label": "\u9636\u6bb5 0:\u5de5\u7a0b\u57fa\u7840"
     },
     {
-      "id": "ai财务系统_开发设计文档_tdd_v0_1_阶段_1_身份_账套与隔离",
-      "label": "阶段 1：身份、账套与隔离",
+      "label": "\u9636\u6bb5 1\uff1a\u8eab\u4efd\u3001\u8d26\u5957\u4e0e\u9694\u79bb",
       "file_type": "document",
-      "source_file": "AI财务系统_开发设计文档_TDD_v0.1.md",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_TDD_v0.1.md",
       "source_location": "L749",
-      "_origin": "ast"
+      "_origin": "ast",
+      "id": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_\u9636\u6bb5_1_\u8eab\u4efd_\u8d26\u5957\u4e0e\u9694\u79bb",
+      "community": 4,
+      "norm_label": "\u9636\u6bb5 1:\u8eab\u4efd\u3001\u8d26\u5957\u4e0e\u9694\u79bb"
     },
     {
-      "id": "ai财务系统_开发设计文档_tdd_v0_1_阶段_2_准则包与基础资料",
-      "label": "阶段 2：准则包与基础资料",
+      "label": "\u9636\u6bb5 2\uff1a\u51c6\u5219\u5305\u4e0e\u57fa\u7840\u8d44\u6599",
       "file_type": "document",
-      "source_file": "AI财务系统_开发设计文档_TDD_v0.1.md",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_TDD_v0.1.md",
       "source_location": "L767",
-      "_origin": "ast"
+      "_origin": "ast",
+      "id": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_\u9636\u6bb5_2_\u51c6\u5219\u5305\u4e0e\u57fa\u7840\u8d44\u6599",
+      "community": 4,
+      "norm_label": "\u9636\u6bb5 2:\u51c6\u5219\u5305\u4e0e\u57fa\u7840\u8d44\u6599"
     },
     {
-      "id": "ai财务系统_开发设计文档_tdd_v0_1_阶段_3_凭证核心",
-      "label": "阶段 3：凭证核心",
+      "label": "\u9636\u6bb5 3\uff1a\u51ed\u8bc1\u6838\u5fc3",
       "file_type": "document",
-      "source_file": "AI财务系统_开发设计文档_TDD_v0.1.md",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_TDD_v0.1.md",
       "source_location": "L785",
-      "_origin": "ast"
+      "_origin": "ast",
+      "id": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_\u9636\u6bb5_3_\u51ed\u8bc1\u6838\u5fc3",
+      "community": 4,
+      "norm_label": "\u9636\u6bb5 3:\u51ed\u8bc1\u6838\u5fc3"
     },
     {
-      "id": "ai财务系统_开发设计文档_tdd_v0_1_阶段_4_账簿与报表",
-      "label": "阶段 4：账簿与报表",
+      "label": "\u9636\u6bb5 4\uff1a\u8d26\u7c3f\u4e0e\u62a5\u8868",
       "file_type": "document",
-      "source_file": "AI财务系统_开发设计文档_TDD_v0.1.md",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_TDD_v0.1.md",
       "source_location": "L806",
-      "_origin": "ast"
+      "_origin": "ast",
+      "id": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_\u9636\u6bb5_4_\u8d26\u7c3f\u4e0e\u62a5\u8868",
+      "community": 4,
+      "norm_label": "\u9636\u6bb5 4:\u8d26\u7c3f\u4e0e\u62a5\u8868"
     },
     {
-      "id": "ai财务系统_开发设计文档_tdd_v0_1_阶段_5_附件与异步任务",
-      "label": "阶段 5：附件与异步任务",
+      "label": "\u9636\u6bb5 5\uff1a\u9644\u4ef6\u4e0e\u5f02\u6b65\u4efb\u52a1",
       "file_type": "document",
-      "source_file": "AI财务系统_开发设计文档_TDD_v0.1.md",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_TDD_v0.1.md",
       "source_location": "L823",
-      "_origin": "ast"
+      "_origin": "ast",
+      "id": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_\u9636\u6bb5_5_\u9644\u4ef6\u4e0e\u5f02\u6b65\u4efb\u52a1",
+      "community": 4,
+      "norm_label": "\u9636\u6bb5 5:\u9644\u4ef6\u4e0e\u5f02\u6b65\u4efb\u52a1"
     },
     {
-      "id": "ai财务系统_开发设计文档_tdd_v0_1_阶段_6_mcp",
-      "label": "阶段 6：MCP",
+      "label": "\u9636\u6bb5 6\uff1aMCP",
       "file_type": "document",
-      "source_file": "AI财务系统_开发设计文档_TDD_v0.1.md",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_TDD_v0.1.md",
       "source_location": "L842",
-      "_origin": "ast"
+      "_origin": "ast",
+      "id": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_\u9636\u6bb5_6_mcp",
+      "community": 4,
+      "norm_label": "\u9636\u6bb5 6:mcp"
     },
     {
-      "id": "ai财务系统_开发设计文档_tdd_v0_1_阶段_7_交付加固",
-      "label": "阶段 7：交付加固",
+      "label": "\u9636\u6bb5 7\uff1a\u4ea4\u4ed8\u52a0\u56fa",
       "file_type": "document",
-      "source_file": "AI财务系统_开发设计文档_TDD_v0.1.md",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_TDD_v0.1.md",
       "source_location": "L857",
-      "_origin": "ast"
+      "_origin": "ast",
+      "id": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_\u9636\u6bb5_7_\u4ea4\u4ed8\u52a0\u56fa",
+      "community": 4,
+      "norm_label": "\u9636\u6bb5 7:\u4ea4\u4ed8\u52a0\u56fa"
     },
     {
-      "id": "ai财务系统_开发设计文档_tdd_v0_1_17_开发执行约定",
-      "label": "17. 开发执行约定",
+      "label": "17. \u5f00\u53d1\u6267\u884c\u7ea6\u5b9a",
       "file_type": "document",
-      "source_file": "AI财务系统_开发设计文档_TDD_v0.1.md",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_TDD_v0.1.md",
       "source_location": "L875",
-      "_origin": "ast"
+      "_origin": "ast",
+      "id": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_17_\u5f00\u53d1\u6267\u884c\u7ea6\u5b9a",
+      "community": 0,
+      "norm_label": "17. \u5f00\u53d1\u6267\u884c\u7ea6\u5b9a"
     },
     {
-      "id": "ai财务系统_开发设计文档_tdd_v0_1_18_完成定义",
-      "label": "18. 完成定义",
+      "label": "18. \u5b8c\u6210\u5b9a\u4e49",
       "file_type": "document",
-      "source_file": "AI财务系统_开发设计文档_TDD_v0.1.md",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_TDD_v0.1.md",
       "source_location": "L896",
-      "_origin": "ast"
+      "_origin": "ast",
+      "id": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_18_\u5b8c\u6210\u5b9a\u4e49",
+      "community": 0,
+      "norm_label": "18. \u5b8c\u6210\u5b9a\u4e49"
     },
     {
-      "id": "ai财务系统_开发设计文档_tdd_v0_1_19_实现参考",
-      "label": "19. 实现参考",
+      "label": "19. \u5b9e\u73b0\u53c2\u8003",
       "file_type": "document",
-      "source_file": "AI财务系统_开发设计文档_TDD_v0.1.md",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_TDD_v0.1.md",
       "source_location": "L908",
-      "_origin": "ast"
+      "_origin": "ast",
+      "id": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_19_\u5b9e\u73b0\u53c2\u8003",
+      "community": 0,
+      "norm_label": "19. \u5b9e\u73b0\u53c2\u8003"
     },
     {
-      "id": "readme",
       "label": "README.md",
       "file_type": "document",
       "source_file": "README.md",
       "source_location": "L1",
-      "_origin": "ast"
+      "_origin": "ast",
+      "id": "readme",
+      "community": 9,
+      "norm_label": "readme.md"
     },
     {
-      "id": "readme_ai_财务系统",
-      "label": "AI 财务系统",
+      "label": "AI \u8d22\u52a1\u7cfb\u7edf",
       "file_type": "document",
       "source_file": "README.md",
       "source_location": "L1",
-      "_origin": "ast"
+      "_origin": "ast",
+      "id": "readme_ai_\u8d22\u52a1\u7cfb\u7edf",
+      "community": 9,
+      "norm_label": "ai \u8d22\u52a1\u7cfb\u7edf"
     },
     {
-      "id": "readme_当前本地环境决策",
-      "label": "当前本地环境决策",
+      "label": "\u5f53\u524d\u672c\u5730\u73af\u5883\u51b3\u7b56",
       "file_type": "document",
       "source_file": "README.md",
       "source_location": "L5",
-      "_origin": "ast"
+      "_origin": "ast",
+      "id": "readme_\u5f53\u524d\u672c\u5730\u73af\u5883\u51b3\u7b56",
+      "community": 9,
+      "norm_label": "\u5f53\u524d\u672c\u5730\u73af\u5883\u51b3\u7b56"
     },
     {
-      "id": "readme_启动前准备",
-      "label": "启动前准备",
+      "label": "\u542f\u52a8\u524d\u51c6\u5907",
       "file_type": "document",
       "source_file": "README.md",
       "source_location": "L11",
-      "_origin": "ast"
+      "_origin": "ast",
+      "id": "readme_\u542f\u52a8\u524d\u51c6\u5907",
+      "community": 9,
+      "norm_label": "\u542f\u52a8\u524d\u51c6\u5907"
     },
     {
-      "id": "readme_常用命令",
-      "label": "常用命令",
+      "label": "\u5e38\u7528\u547d\u4ee4",
       "file_type": "document",
       "source_file": "README.md",
       "source_location": "L19",
-      "_origin": "ast"
+      "_origin": "ast",
+      "id": "readme_\u5e38\u7528\u547d\u4ee4",
+      "community": 9,
+      "norm_label": "\u5e38\u7528\u547d\u4ee4"
     }
   ],
   "links": [
     {
-      "source": "pkg_com_example_accounting",
-      "target": "pkg_org_springframework_modulith_spring_modulith_bom",
-      "relation": "depends_on",
-      "context": "dependency",
+      "relation": "contains",
       "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": "pom.xml",
+      "source_file": "AGENTS.md",
       "source_location": "L1",
-      "weight": 1.0
+      "weight": 1.0,
+      "source": "agents",
+      "target": "agents_graphify",
+      "confidence_score": 1.0
     },
     {
-      "source": "pkg_com_example_accounting",
-      "target": "pkg_org_springframework_boot_spring_boot_starter_web",
-      "relation": "depends_on",
-      "context": "dependency",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": "pom.xml",
-      "source_location": "L1",
-      "weight": 1.0
-    },
-    {
-      "source": "pkg_com_example_accounting",
-      "target": "pkg_org_springframework_boot_spring_boot_starter_validation",
-      "relation": "depends_on",
-      "context": "dependency",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": "pom.xml",
-      "source_location": "L1",
-      "weight": 1.0
-    },
-    {
-      "source": "pkg_com_example_accounting",
-      "target": "pkg_org_springframework_boot_spring_boot_starter_security",
-      "relation": "depends_on",
-      "context": "dependency",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": "pom.xml",
-      "source_location": "L1",
-      "weight": 1.0
-    },
-    {
-      "source": "pkg_com_example_accounting",
-      "target": "pkg_org_springframework_boot_spring_boot_starter_oauth2_resource_server",
-      "relation": "depends_on",
-      "context": "dependency",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": "pom.xml",
-      "source_location": "L1",
-      "weight": 1.0
-    },
-    {
-      "source": "pkg_com_example_accounting",
-      "target": "pkg_org_springframework_boot_spring_boot_starter_data_jpa",
-      "relation": "depends_on",
-      "context": "dependency",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": "pom.xml",
-      "source_location": "L1",
-      "weight": 1.0
-    },
-    {
-      "source": "pkg_com_example_accounting",
-      "target": "pkg_org_springframework_boot_spring_boot_starter_jdbc",
-      "relation": "depends_on",
-      "context": "dependency",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": "pom.xml",
-      "source_location": "L1",
-      "weight": 1.0
-    },
-    {
-      "source": "pkg_com_example_accounting",
-      "target": "pkg_org_springframework_boot_spring_boot_starter_actuator",
-      "relation": "depends_on",
-      "context": "dependency",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": "pom.xml",
-      "source_location": "L1",
-      "weight": 1.0
-    },
-    {
-      "source": "pkg_com_example_accounting",
-      "target": "pkg_org_springframework_boot_spring_boot_starter_flyway",
-      "relation": "depends_on",
-      "context": "dependency",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": "pom.xml",
-      "source_location": "L1",
-      "weight": 1.0
-    },
-    {
-      "source": "pkg_com_example_accounting",
-      "target": "pkg_org_postgresql_postgresql",
-      "relation": "depends_on",
-      "context": "dependency",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": "pom.xml",
-      "source_location": "L1",
-      "weight": 1.0
-    },
-    {
-      "source": "pkg_com_example_accounting",
-      "target": "pkg_org_springframework_modulith_spring_modulith_starter_core",
-      "relation": "depends_on",
-      "context": "dependency",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": "pom.xml",
-      "source_location": "L1",
-      "weight": 1.0
-    },
-    {
-      "source": "pkg_com_example_accounting",
-      "target": "pkg_org_springframework_boot_spring_boot_starter_test",
-      "relation": "depends_on",
-      "context": "dependency",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": "pom.xml",
-      "source_location": "L1",
-      "weight": 1.0
-    },
-    {
-      "source": "pkg_com_example_accounting",
-      "target": "pkg_org_springframework_modulith_spring_modulith_starter_test",
-      "relation": "depends_on",
-      "context": "dependency",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": "pom.xml",
-      "source_location": "L1",
-      "weight": 1.0
-    },
-    {
-      "source": "accounting_accountingapplication",
-      "target": "springapplication",
-      "relation": "imports",
-      "context": "import",
-      "confidence": "EXTRACTED",
-      "source_file": "src/main/java/com/example/accounting/AccountingApplication.java",
-      "source_location": "L3",
-      "weight": 1.0
-    },
-    {
-      "source": "accounting_accountingapplication",
-      "target": "springbootapplication",
-      "relation": "imports",
-      "context": "import",
-      "confidence": "EXTRACTED",
-      "source_file": "src/main/java/com/example/accounting/AccountingApplication.java",
-      "source_location": "L4",
-      "weight": 1.0
-    },
-    {
-      "source": "accounting_accountingapplication",
-      "target": "modulithic",
-      "relation": "imports",
-      "context": "import",
-      "confidence": "EXTRACTED",
-      "source_file": "src/main/java/com/example/accounting/AccountingApplication.java",
-      "source_location": "L5",
-      "weight": 1.0
-    },
-    {
-      "source": "accounting_accountingapplication",
-      "target": "accounting_accountingapplication_accountingapplication",
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src/main/java/com/example/accounting/AccountingApplication.java",
       "source_location": "L7",
-      "weight": 1.0
+      "weight": 1.0,
+      "source": "accounting_accountingapplication",
+      "target": "accounting_accountingapplication_accountingapplication",
+      "confidence_score": 1.0
     },
     {
-      "source": "accounting_accountingapplication_accountingapplication",
-      "target": "accounting_accountingapplication_accountingapplication_main",
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "src/main/java/com/example/accounting/AccountingApplication.java",
       "source_location": "L11",
-      "weight": 1.0
+      "weight": 1.0,
+      "source": "accounting_accountingapplication_accountingapplication",
+      "target": "accounting_accountingapplication_accountingapplication_main",
+      "confidence_score": 1.0
     },
     {
-      "source": "accounting_accountingapplication_accountingapplication_main",
-      "target": "string",
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "src/main/java/com/example/accounting/AccountingApplication.java",
       "source_location": "L11",
       "weight": 1.0,
-      "context": "parameter_type"
+      "context": "parameter_type",
+      "source": "accounting_accountingapplication_accountingapplication_main",
+      "target": "string",
+      "confidence_score": 1.0
     },
     {
-      "source": "accounting_accountingmodularitytest",
-      "target": "test",
-      "relation": "imports",
-      "context": "import",
-      "confidence": "EXTRACTED",
-      "source_file": "src/test/java/com/example/accounting/AccountingModularityTest.java",
-      "source_location": "L3",
-      "weight": 1.0
-    },
-    {
-      "source": "accounting_accountingmodularitytest",
-      "target": "applicationmodules",
-      "relation": "imports",
-      "context": "import",
-      "confidence": "EXTRACTED",
-      "source_file": "src/test/java/com/example/accounting/AccountingModularityTest.java",
-      "source_location": "L4",
-      "weight": 1.0
-    },
-    {
-      "source": "accounting_accountingmodularitytest",
-      "target": "accounting_accountingmodularitytest_accountingmodularitytest",
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src/test/java/com/example/accounting/AccountingModularityTest.java",
       "source_location": "L6",
-      "weight": 1.0
+      "weight": 1.0,
+      "source": "accounting_accountingmodularitytest",
+      "target": "accounting_accountingmodularitytest_accountingmodularitytest",
+      "confidence_score": 1.0
     },
     {
-      "source": "accounting_accountingmodularitytest_accountingmodularitytest",
-      "target": "accounting_accountingmodularitytest_accountingmodularitytest_modulesfollowthedeclaredboundaries",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "src/test/java/com/example/accounting/AccountingModularityTest.java",
+      "source_location": "L3",
+      "weight": 1.0,
+      "source": "accounting_accountingmodularitytest",
+      "target": "test",
+      "confidence_score": 1.0
+    },
+    {
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "src/test/java/com/example/accounting/AccountingModularityTest.java",
       "source_location": "L8",
-      "weight": 1.0
+      "weight": 1.0,
+      "source": "accounting_accountingmodularitytest_accountingmodularitytest",
+      "target": "accounting_accountingmodularitytest_accountingmodularitytest_modulesfollowthedeclaredboundaries",
+      "confidence_score": 1.0
     },
     {
-      "source": "accounting_accountingmodularitytest_accountingmodularitytest_modulesfollowthedeclaredboundaries",
-      "target": "test",
       "relation": "references",
       "confidence": "EXTRACTED",
       "source_file": "src/test/java/com/example/accounting/AccountingModularityTest.java",
       "source_location": "L8",
       "weight": 1.0,
-      "context": "attribute"
+      "context": "attribute",
+      "source": "accounting_accountingmodularitytest_accountingmodularitytest_modulesfollowthedeclaredboundaries",
+      "target": "test",
+      "confidence_score": 1.0
     },
     {
-      "source": "ai财务系统_产品需求文档_prd_v0_1",
-      "target": "ai财务系统_产品需求文档_prd_v0_1_ai_财务系统产品需求文档_prd_v0_1",
       "relation": "contains",
       "confidence": "EXTRACTED",
-      "source_file": "AI财务系统_产品需求文档_PRD_v0.1.md",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_PRD_v0.1.md",
       "source_location": "L1",
-      "weight": 1.0
+      "weight": 1.0,
+      "source": "ai\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1",
+      "target": "ai\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1_ai_\u8d22\u52a1\u7cfb\u7edf\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1",
+      "confidence_score": 1.0
     },
     {
-      "source": "ai财务系统_产品需求文档_prd_v0_1_ai_财务系统产品需求文档_prd_v0_1",
-      "target": "ai财务系统_产品需求文档_prd_v0_1_1_产品概述",
       "relation": "contains",
       "confidence": "EXTRACTED",
-      "source_file": "AI财务系统_产品需求文档_PRD_v0.1.md",
-      "source_location": "L7",
-      "weight": 1.0
-    },
-    {
-      "source": "ai财务系统_产品需求文档_prd_v0_1_ai_财务系统产品需求文档_prd_v0_1",
-      "target": "ai财务系统_产品需求文档_prd_v0_1_2_产品目标",
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "AI财务系统_产品需求文档_PRD_v0.1.md",
-      "source_location": "L21",
-      "weight": 1.0
-    },
-    {
-      "source": "ai财务系统_产品需求文档_prd_v0_1_ai_财务系统产品需求文档_prd_v0_1",
-      "target": "ai财务系统_产品需求文档_prd_v0_1_3_用户_账套与权限",
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "AI财务系统_产品需求文档_PRD_v0.1.md",
-      "source_location": "L34",
-      "weight": 1.0
-    },
-    {
-      "source": "ai财务系统_产品需求文档_prd_v0_1_3_用户_账套与权限",
-      "target": "ai财务系统_产品需求文档_prd_v0_1_3_1_关系模型",
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "AI财务系统_产品需求文档_PRD_v0.1.md",
-      "source_location": "L36",
-      "weight": 1.0
-    },
-    {
-      "source": "ai财务系统_产品需求文档_prd_v0_1_3_用户_账套与权限",
-      "target": "ai财务系统_产品需求文档_prd_v0_1_3_2_账套角色",
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "AI财务系统_产品需求文档_PRD_v0.1.md",
-      "source_location": "L43",
-      "weight": 1.0
-    },
-    {
-      "source": "ai财务系统_产品需求文档_prd_v0_1_ai_财务系统产品需求文档_prd_v0_1",
-      "target": "ai财务系统_产品需求文档_prd_v0_1_4_v0_1_范围",
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "AI财务系统_产品需求文档_PRD_v0.1.md",
-      "source_location": "L59",
-      "weight": 1.0
-    },
-    {
-      "source": "ai财务系统_产品需求文档_prd_v0_1_4_v0_1_范围",
-      "target": "ai财务系统_产品需求文档_prd_v0_1_4_1_包含",
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "AI财务系统_产品需求文档_PRD_v0.1.md",
-      "source_location": "L61",
-      "weight": 1.0
-    },
-    {
-      "source": "ai财务系统_产品需求文档_prd_v0_1_4_v0_1_范围",
-      "target": "ai财务系统_产品需求文档_prd_v0_1_4_2_不包含",
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "AI财务系统_产品需求文档_PRD_v0.1.md",
-      "source_location": "L78",
-      "weight": 1.0
-    },
-    {
-      "source": "ai财务系统_产品需求文档_prd_v0_1_ai_财务系统产品需求文档_prd_v0_1",
-      "target": "ai财务系统_产品需求文档_prd_v0_1_5_核心业务流程",
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "AI财务系统_产品需求文档_PRD_v0.1.md",
-      "source_location": "L90",
-      "weight": 1.0
-    },
-    {
-      "source": "ai财务系统_产品需求文档_prd_v0_1_5_核心业务流程",
-      "target": "ai财务系统_产品需求文档_prd_v0_1_5_1_创建账套",
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "AI财务系统_产品需求文档_PRD_v0.1.md",
-      "source_location": "L92",
-      "weight": 1.0
-    },
-    {
-      "source": "ai财务系统_产品需求文档_prd_v0_1_5_核心业务流程",
-      "target": "ai财务系统_产品需求文档_prd_v0_1_5_2_录入期初余额",
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "AI财务系统_产品需求文档_PRD_v0.1.md",
-      "source_location": "L99",
-      "weight": 1.0
-    },
-    {
-      "source": "ai财务系统_产品需求文档_prd_v0_1_5_核心业务流程",
-      "target": "ai财务系统_产品需求文档_prd_v0_1_5_3_创建与记账凭证",
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "AI财务系统_产品需求文档_PRD_v0.1.md",
-      "source_location": "L106",
-      "weight": 1.0
-    },
-    {
-      "source": "ai财务系统_产品需求文档_prd_v0_1_5_核心业务流程",
-      "target": "ai财务系统_产品需求文档_prd_v0_1_5_4_上传单据并生成草稿",
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "AI财务系统_产品需求文档_PRD_v0.1.md",
-      "source_location": "L114",
-      "weight": 1.0
-    },
-    {
-      "source": "ai财务系统_产品需求文档_prd_v0_1_5_核心业务流程",
-      "target": "ai财务系统_产品需求文档_prd_v0_1_5_5_修改_撤销与恢复",
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "AI财务系统_产品需求文档_PRD_v0.1.md",
-      "source_location": "L122",
-      "weight": 1.0
-    },
-    {
-      "source": "ai财务系统_产品需求文档_prd_v0_1_5_核心业务流程",
-      "target": "ai财务系统_产品需求文档_prd_v0_1_5_6_查询财务数据",
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "AI财务系统_产品需求文档_PRD_v0.1.md",
-      "source_location": "L130",
-      "weight": 1.0
-    },
-    {
-      "source": "ai财务系统_产品需求文档_prd_v0_1_ai_财务系统产品需求文档_prd_v0_1",
-      "target": "ai财务系统_产品需求文档_prd_v0_1_6_功能需求",
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "AI财务系统_产品需求文档_PRD_v0.1.md",
-      "source_location": "L134",
-      "weight": 1.0
-    },
-    {
-      "source": "ai财务系统_产品需求文档_prd_v0_1_6_功能需求",
-      "target": "ai财务系统_产品需求文档_prd_v0_1_6_1_账套与成员",
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "AI财务系统_产品需求文档_PRD_v0.1.md",
-      "source_location": "L136",
-      "weight": 1.0
-    },
-    {
-      "source": "ai财务系统_产品需求文档_prd_v0_1_6_功能需求",
-      "target": "ai财务系统_产品需求文档_prd_v0_1_6_2_会计准则与科目",
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "AI财务系统_产品需求文档_PRD_v0.1.md",
-      "source_location": "L143",
-      "weight": 1.0
-    },
-    {
-      "source": "ai财务系统_产品需求文档_prd_v0_1_6_功能需求",
-      "target": "ai财务系统_产品需求文档_prd_v0_1_6_3_会计期间",
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "AI财务系统_产品需求文档_PRD_v0.1.md",
-      "source_location": "L151",
-      "weight": 1.0
-    },
-    {
-      "source": "ai财务系统_产品需求文档_prd_v0_1_6_功能需求",
-      "target": "ai财务系统_产品需求文档_prd_v0_1_6_4_多币种",
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "AI财务系统_产品需求文档_PRD_v0.1.md",
-      "source_location": "L157",
-      "weight": 1.0
-    },
-    {
-      "source": "ai财务系统_产品需求文档_prd_v0_1_6_功能需求",
-      "target": "ai财务系统_产品需求文档_prd_v0_1_6_5_凭证",
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "AI财务系统_产品需求文档_PRD_v0.1.md",
-      "source_location": "L165",
-      "weight": 1.0
-    },
-    {
-      "source": "ai财务系统_产品需求文档_prd_v0_1_6_功能需求",
-      "target": "ai财务系统_产品需求文档_prd_v0_1_6_6_审批",
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "AI财务系统_产品需求文档_PRD_v0.1.md",
-      "source_location": "L188",
-      "weight": 1.0
-    },
-    {
-      "source": "ai财务系统_产品需求文档_prd_v0_1_6_功能需求",
-      "target": "ai财务系统_产品需求文档_prd_v0_1_6_7_重复单据",
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "AI财务系统_产品需求文档_PRD_v0.1.md",
-      "source_location": "L195",
-      "weight": 1.0
-    },
-    {
-      "source": "ai财务系统_产品需求文档_prd_v0_1_6_功能需求",
-      "target": "ai财务系统_产品需求文档_prd_v0_1_6_8_报表与账簿",
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "AI财务系统_产品需求文档_PRD_v0.1.md",
-      "source_location": "L201",
-      "weight": 1.0
-    },
-    {
-      "source": "ai财务系统_产品需求文档_prd_v0_1_6_功能需求",
-      "target": "ai财务系统_产品需求文档_prd_v0_1_6_9_附件与异步任务",
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "AI财务系统_产品需求文档_PRD_v0.1.md",
-      "source_location": "L219",
-      "weight": 1.0
-    },
-    {
-      "source": "ai财务系统_产品需求文档_prd_v0_1_6_功能需求",
-      "target": "ai财务系统_产品需求文档_prd_v0_1_6_10_审计",
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "AI财务系统_产品需求文档_PRD_v0.1.md",
-      "source_location": "L227",
-      "weight": 1.0
-    },
-    {
-      "source": "ai财务系统_产品需求文档_prd_v0_1_ai_财务系统产品需求文档_prd_v0_1",
-      "target": "ai财务系统_产品需求文档_prd_v0_1_7_api_与_agent_能力",
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "AI财务系统_产品需求文档_PRD_v0.1.md",
-      "source_location": "L240",
-      "weight": 1.0
-    },
-    {
-      "source": "ai财务系统_产品需求文档_prd_v0_1_7_api_与_agent_能力",
-      "target": "ai财务系统_产品需求文档_prd_v0_1_7_1_rest_api",
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "AI财务系统_产品需求文档_PRD_v0.1.md",
-      "source_location": "L242",
-      "weight": 1.0
-    },
-    {
-      "source": "ai财务系统_产品需求文档_prd_v0_1_7_api_与_agent_能力",
-      "target": "ai财务系统_产品需求文档_prd_v0_1_7_2_mcp_工具白名单",
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "AI财务系统_产品需求文档_PRD_v0.1.md",
-      "source_location": "L251",
-      "weight": 1.0
-    },
-    {
-      "source": "ai财务系统_产品需求文档_prd_v0_1_ai_财务系统产品需求文档_prd_v0_1",
-      "target": "ai财务系统_产品需求文档_prd_v0_1_8_状态与关键规则",
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "AI财务系统_产品需求文档_PRD_v0.1.md",
-      "source_location": "L267",
-      "weight": 1.0
-    },
-    {
-      "source": "ai财务系统_产品需求文档_prd_v0_1_8_状态与关键规则",
-      "target": "ai财务系统_产品需求文档_prd_v0_1_8_1_凭证状态",
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "AI财务系统_产品需求文档_PRD_v0.1.md",
-      "source_location": "L269",
-      "weight": 1.0
-    },
-    {
-      "source": "ai财务系统_产品需求文档_prd_v0_1_8_状态与关键规则",
-      "target": "ai财务系统_产品需求文档_prd_v0_1_8_2_不变量",
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "AI财务系统_产品需求文档_PRD_v0.1.md",
-      "source_location": "L286",
-      "weight": 1.0
-    },
-    {
-      "source": "ai财务系统_产品需求文档_prd_v0_1_ai_财务系统产品需求文档_prd_v0_1",
-      "target": "ai财务系统_产品需求文档_prd_v0_1_9_非功能需求",
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "AI财务系统_产品需求文档_PRD_v0.1.md",
-      "source_location": "L296",
-      "weight": 1.0
-    },
-    {
-      "source": "ai财务系统_产品需求文档_prd_v0_1_9_非功能需求",
-      "target": "ai财务系统_产品需求文档_prd_v0_1_9_1_安全与隔离",
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "AI财务系统_产品需求文档_PRD_v0.1.md",
-      "source_location": "L298",
-      "weight": 1.0
-    },
-    {
-      "source": "ai财务系统_产品需求文档_prd_v0_1_9_非功能需求",
-      "target": "ai财务系统_产品需求文档_prd_v0_1_9_2_性能目标",
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "AI财务系统_产品需求文档_PRD_v0.1.md",
-      "source_location": "L305",
-      "weight": 1.0
-    },
-    {
-      "source": "ai财务系统_产品需求文档_prd_v0_1_9_非功能需求",
-      "target": "ai财务系统_产品需求文档_prd_v0_1_9_3_可观测性",
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "AI财务系统_产品需求文档_PRD_v0.1.md",
-      "source_location": "L314",
-      "weight": 1.0
-    },
-    {
-      "source": "ai财务系统_产品需求文档_prd_v0_1_9_非功能需求",
-      "target": "ai财务系统_产品需求文档_prd_v0_1_9_4_保留与删除",
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "AI财务系统_产品需求文档_PRD_v0.1.md",
-      "source_location": "L321",
-      "weight": 1.0
-    },
-    {
-      "source": "ai财务系统_产品需求文档_prd_v0_1_ai_财务系统产品需求文档_prd_v0_1",
-      "target": "ai财务系统_产品需求文档_prd_v0_1_10_v0_1_验收标准",
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "AI财务系统_产品需求文档_PRD_v0.1.md",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_PRD_v0.1.md",
       "source_location": "L328",
-      "weight": 1.0
+      "weight": 1.0,
+      "source": "ai\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1_ai_\u8d22\u52a1\u7cfb\u7edf\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1",
+      "target": "ai\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1_10_v0_1_\u9a8c\u6536\u6807\u51c6",
+      "confidence_score": 1.0
     },
     {
-      "source": "ai财务系统_产品需求文档_prd_v0_1_ai_财务系统产品需求文档_prd_v0_1",
-      "target": "ai财务系统_产品需求文档_prd_v0_1_11_交付路线",
       "relation": "contains",
       "confidence": "EXTRACTED",
-      "source_file": "AI财务系统_产品需求文档_PRD_v0.1.md",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_PRD_v0.1.md",
       "source_location": "L346",
-      "weight": 1.0
+      "weight": 1.0,
+      "source": "ai\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1_ai_\u8d22\u52a1\u7cfb\u7edf\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1",
+      "target": "ai\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1_11_\u4ea4\u4ed8\u8def\u7ebf",
+      "confidence_score": 1.0
     },
     {
-      "source": "ai财务系统_产品需求文档_prd_v0_1_11_交付路线",
-      "target": "ai财务系统_产品需求文档_prd_v0_1_m0_工程基础与账套访问",
       "relation": "contains",
       "confidence": "EXTRACTED",
-      "source_file": "AI财务系统_产品需求文档_PRD_v0.1.md",
-      "source_location": "L348",
-      "weight": 1.0
-    },
-    {
-      "source": "ai财务系统_产品需求文档_prd_v0_1_11_交付路线",
-      "target": "ai财务系统_产品需求文档_prd_v0_1_m1_会计核心",
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "AI财务系统_产品需求文档_PRD_v0.1.md",
-      "source_location": "L353",
-      "weight": 1.0
-    },
-    {
-      "source": "ai财务系统_产品需求文档_prd_v0_1_11_交付路线",
-      "target": "ai财务系统_产品需求文档_prd_v0_1_m2_附件与任务",
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "AI财务系统_产品需求文档_PRD_v0.1.md",
-      "source_location": "L359",
-      "weight": 1.0
-    },
-    {
-      "source": "ai财务系统_产品需求文档_prd_v0_1_11_交付路线",
-      "target": "ai财务系统_产品需求文档_prd_v0_1_m3_agent_与交付加固",
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "AI财务系统_产品需求文档_PRD_v0.1.md",
-      "source_location": "L364",
-      "weight": 1.0
-    },
-    {
-      "source": "ai财务系统_产品需求文档_prd_v0_1_ai_财务系统产品需求文档_prd_v0_1",
-      "target": "ai财务系统_产品需求文档_prd_v0_1_12_产品边界说明",
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "AI财务系统_产品需求文档_PRD_v0.1.md",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_PRD_v0.1.md",
       "source_location": "L369",
-      "weight": 1.0
+      "weight": 1.0,
+      "source": "ai\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1_ai_\u8d22\u52a1\u7cfb\u7edf\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1",
+      "target": "ai\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1_12_\u4ea7\u54c1\u8fb9\u754c\u8bf4\u660e",
+      "confidence_score": 1.0
     },
     {
-      "source": "ai财务系统_开发设计文档_tdd_v0_1",
-      "target": "ai财务系统_开发设计文档_tdd_v0_1_ai_财务系统开发设计文档_tdd_v0_1",
       "relation": "contains",
       "confidence": "EXTRACTED",
-      "source_file": "AI财务系统_开发设计文档_TDD_v0.1.md",
-      "source_location": "L1",
-      "weight": 1.0
-    },
-    {
-      "source": "ai财务系统_开发设计文档_tdd_v0_1_ai_财务系统开发设计文档_tdd_v0_1",
-      "target": "ai财务系统_开发设计文档_tdd_v0_1_1_设计目标",
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "AI财务系统_开发设计文档_TDD_v0.1.md",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_PRD_v0.1.md",
       "source_location": "L7",
-      "weight": 1.0
+      "weight": 1.0,
+      "source": "ai\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1_ai_\u8d22\u52a1\u7cfb\u7edf\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1",
+      "target": "ai\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1_1_\u4ea7\u54c1\u6982\u8ff0",
+      "confidence_score": 1.0
     },
     {
-      "source": "ai财务系统_开发设计文档_tdd_v0_1_ai_财务系统开发设计文档_tdd_v0_1",
-      "target": "ai财务系统_开发设计文档_tdd_v0_1_2_架构决策",
       "relation": "contains",
       "confidence": "EXTRACTED",
-      "source_file": "AI财务系统_开发设计文档_TDD_v0.1.md",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_PRD_v0.1.md",
       "source_location": "L21",
-      "weight": 1.0
+      "weight": 1.0,
+      "source": "ai\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1_ai_\u8d22\u52a1\u7cfb\u7edf\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1",
+      "target": "ai\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1_2_\u4ea7\u54c1\u76ee\u6807",
+      "confidence_score": 1.0
     },
     {
-      "source": "ai财务系统_开发设计文档_tdd_v0_1_2_架构决策",
-      "target": "ai财务系统_开发设计文档_tdd_v0_1_2_1_技术栈",
       "relation": "contains",
       "confidence": "EXTRACTED",
-      "source_file": "AI财务系统_开发设计文档_TDD_v0.1.md",
-      "source_location": "L23",
-      "weight": 1.0
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_PRD_v0.1.md",
+      "source_location": "L34",
+      "weight": 1.0,
+      "source": "ai\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1_ai_\u8d22\u52a1\u7cfb\u7edf\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1",
+      "target": "ai\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1_3_\u7528\u6237_\u8d26\u5957\u4e0e\u6743\u9650",
+      "confidence_score": 1.0
     },
     {
-      "source": "ai财务系统_开发设计文档_tdd_v0_1_2_架构决策",
-      "target": "ai财务系统_开发设计文档_tdd_v0_1_2_2_为什么采用_spring_boot",
       "relation": "contains",
       "confidence": "EXTRACTED",
-      "source_file": "AI财务系统_开发设计文档_TDD_v0.1.md",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_PRD_v0.1.md",
+      "source_location": "L59",
+      "weight": 1.0,
+      "source": "ai\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1_ai_\u8d22\u52a1\u7cfb\u7edf\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1",
+      "target": "ai\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1_4_v0_1_\u8303\u56f4",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_PRD_v0.1.md",
+      "source_location": "L90",
+      "weight": 1.0,
+      "source": "ai\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1_ai_\u8d22\u52a1\u7cfb\u7edf\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1",
+      "target": "ai\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1_5_\u6838\u5fc3\u4e1a\u52a1\u6d41\u7a0b",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_PRD_v0.1.md",
+      "source_location": "L134",
+      "weight": 1.0,
+      "source": "ai\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1_ai_\u8d22\u52a1\u7cfb\u7edf\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1",
+      "target": "ai\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1_6_\u529f\u80fd\u9700\u6c42",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_PRD_v0.1.md",
+      "source_location": "L240",
+      "weight": 1.0,
+      "source": "ai\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1_ai_\u8d22\u52a1\u7cfb\u7edf\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1",
+      "target": "ai\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1_7_api_\u4e0e_agent_\u80fd\u529b",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_PRD_v0.1.md",
+      "source_location": "L267",
+      "weight": 1.0,
+      "source": "ai\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1_ai_\u8d22\u52a1\u7cfb\u7edf\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1",
+      "target": "ai\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1_8_\u72b6\u6001\u4e0e\u5173\u952e\u89c4\u5219",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_PRD_v0.1.md",
+      "source_location": "L296",
+      "weight": 1.0,
+      "source": "ai\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1_ai_\u8d22\u52a1\u7cfb\u7edf\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1",
+      "target": "ai\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1_9_\u975e\u529f\u80fd\u9700\u6c42",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_PRD_v0.1.md",
+      "source_location": "L36",
+      "weight": 1.0,
+      "source": "ai\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1_3_\u7528\u6237_\u8d26\u5957\u4e0e\u6743\u9650",
+      "target": "ai\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1_3_1_\u5173\u7cfb\u6a21\u578b",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_PRD_v0.1.md",
       "source_location": "L43",
-      "weight": 1.0
+      "weight": 1.0,
+      "source": "ai\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1_3_\u7528\u6237_\u8d26\u5957\u4e0e\u6743\u9650",
+      "target": "ai\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1_3_2_\u8d26\u5957\u89d2\u8272",
+      "confidence_score": 1.0
     },
     {
-      "source": "ai财务系统_开发设计文档_tdd_v0_1_2_架构决策",
-      "target": "ai财务系统_开发设计文档_tdd_v0_1_2_3_保持简单的边界",
       "relation": "contains",
       "confidence": "EXTRACTED",
-      "source_file": "AI财务系统_开发设计文档_TDD_v0.1.md",
-      "source_location": "L47",
-      "weight": 1.0
-    },
-    {
-      "source": "ai财务系统_开发设计文档_tdd_v0_1_ai_财务系统开发设计文档_tdd_v0_1",
-      "target": "ai财务系统_开发设计文档_tdd_v0_1_3_总体架构",
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "AI财务系统_开发设计文档_TDD_v0.1.md",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_PRD_v0.1.md",
       "source_location": "L61",
-      "weight": 1.0
+      "weight": 1.0,
+      "source": "ai\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1_4_v0_1_\u8303\u56f4",
+      "target": "ai\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1_4_1_\u5305\u542b",
+      "confidence_score": 1.0
     },
     {
-      "source": "ai财务系统_开发设计文档_tdd_v0_1_ai_财务系统开发设计文档_tdd_v0_1",
-      "target": "ai财务系统_开发设计文档_tdd_v0_1_4_工程结构",
       "relation": "contains",
       "confidence": "EXTRACTED",
-      "source_file": "AI财务系统_开发设计文档_TDD_v0.1.md",
-      "source_location": "L95",
-      "weight": 1.0
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_PRD_v0.1.md",
+      "source_location": "L78",
+      "weight": 1.0,
+      "source": "ai\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1_4_v0_1_\u8303\u56f4",
+      "target": "ai\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1_4_2_\u4e0d\u5305\u542b",
+      "confidence_score": 1.0
     },
     {
-      "source": "ai财务系统_开发设计文档_tdd_v0_1_ai_财务系统开发设计文档_tdd_v0_1",
-      "target": "ai财务系统_开发设计文档_tdd_v0_1_5_数据模型",
       "relation": "contains",
       "confidence": "EXTRACTED",
-      "source_file": "AI财务系统_开发设计文档_TDD_v0.1.md",
-      "source_location": "L138",
-      "weight": 1.0
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_PRD_v0.1.md",
+      "source_location": "L92",
+      "weight": 1.0,
+      "source": "ai\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1_5_\u6838\u5fc3\u4e1a\u52a1\u6d41\u7a0b",
+      "target": "ai\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1_5_1_\u521b\u5efa\u8d26\u5957",
+      "confidence_score": 1.0
     },
     {
-      "source": "ai财务系统_开发设计文档_tdd_v0_1_5_数据模型",
-      "target": "ai财务系统_开发设计文档_tdd_v0_1_5_1_通用字段",
       "relation": "contains",
       "confidence": "EXTRACTED",
-      "source_file": "AI财务系统_开发设计文档_TDD_v0.1.md",
-      "source_location": "L140",
-      "weight": 1.0
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_PRD_v0.1.md",
+      "source_location": "L99",
+      "weight": 1.0,
+      "source": "ai\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1_5_\u6838\u5fc3\u4e1a\u52a1\u6d41\u7a0b",
+      "target": "ai\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1_5_2_\u5f55\u5165\u671f\u521d\u4f59\u989d",
+      "confidence_score": 1.0
     },
     {
-      "source": "ai财务系统_开发设计文档_tdd_v0_1_5_数据模型",
-      "target": "ai财务系统_开发设计文档_tdd_v0_1_5_2_身份与账套",
       "relation": "contains",
       "confidence": "EXTRACTED",
-      "source_file": "AI财务系统_开发设计文档_TDD_v0.1.md",
-      "source_location": "L163",
-      "weight": 1.0
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_PRD_v0.1.md",
+      "source_location": "L106",
+      "weight": 1.0,
+      "source": "ai\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1_5_\u6838\u5fc3\u4e1a\u52a1\u6d41\u7a0b",
+      "target": "ai\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1_5_3_\u521b\u5efa\u4e0e\u8bb0\u8d26\u51ed\u8bc1",
+      "confidence_score": 1.0
     },
     {
-      "source": "ai财务系统_开发设计文档_tdd_v0_1_5_2_身份与账套",
-      "target": "ai财务系统_开发设计文档_tdd_v0_1_app_user",
       "relation": "contains",
       "confidence": "EXTRACTED",
-      "source_file": "AI财务系统_开发设计文档_TDD_v0.1.md",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_PRD_v0.1.md",
+      "source_location": "L114",
+      "weight": 1.0,
+      "source": "ai\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1_5_\u6838\u5fc3\u4e1a\u52a1\u6d41\u7a0b",
+      "target": "ai\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1_5_4_\u4e0a\u4f20\u5355\u636e\u5e76\u751f\u6210\u8349\u7a3f",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_PRD_v0.1.md",
+      "source_location": "L122",
+      "weight": 1.0,
+      "source": "ai\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1_5_\u6838\u5fc3\u4e1a\u52a1\u6d41\u7a0b",
+      "target": "ai\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1_5_5_\u4fee\u6539_\u64a4\u9500\u4e0e\u6062\u590d",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_PRD_v0.1.md",
+      "source_location": "L130",
+      "weight": 1.0,
+      "source": "ai\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1_5_\u6838\u5fc3\u4e1a\u52a1\u6d41\u7a0b",
+      "target": "ai\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1_5_6_\u67e5\u8be2\u8d22\u52a1\u6570\u636e",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_PRD_v0.1.md",
+      "source_location": "L227",
+      "weight": 1.0,
+      "source": "ai\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1_6_\u529f\u80fd\u9700\u6c42",
+      "target": "ai\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1_6_10_\u5ba1\u8ba1",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_PRD_v0.1.md",
+      "source_location": "L136",
+      "weight": 1.0,
+      "source": "ai\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1_6_\u529f\u80fd\u9700\u6c42",
+      "target": "ai\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1_6_1_\u8d26\u5957\u4e0e\u6210\u5458",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_PRD_v0.1.md",
+      "source_location": "L143",
+      "weight": 1.0,
+      "source": "ai\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1_6_\u529f\u80fd\u9700\u6c42",
+      "target": "ai\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1_6_2_\u4f1a\u8ba1\u51c6\u5219\u4e0e\u79d1\u76ee",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_PRD_v0.1.md",
+      "source_location": "L151",
+      "weight": 1.0,
+      "source": "ai\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1_6_\u529f\u80fd\u9700\u6c42",
+      "target": "ai\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1_6_3_\u4f1a\u8ba1\u671f\u95f4",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_PRD_v0.1.md",
+      "source_location": "L157",
+      "weight": 1.0,
+      "source": "ai\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1_6_\u529f\u80fd\u9700\u6c42",
+      "target": "ai\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1_6_4_\u591a\u5e01\u79cd",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_PRD_v0.1.md",
       "source_location": "L165",
-      "weight": 1.0
+      "weight": 1.0,
+      "source": "ai\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1_6_\u529f\u80fd\u9700\u6c42",
+      "target": "ai\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1_6_5_\u51ed\u8bc1",
+      "confidence_score": 1.0
     },
     {
-      "source": "ai财务系统_开发设计文档_tdd_v0_1_5_2_身份与账套",
-      "target": "ai财务系统_开发设计文档_tdd_v0_1_ledger",
       "relation": "contains",
       "confidence": "EXTRACTED",
-      "source_file": "AI财务系统_开发设计文档_TDD_v0.1.md",
-      "source_location": "L177",
-      "weight": 1.0
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_PRD_v0.1.md",
+      "source_location": "L188",
+      "weight": 1.0,
+      "source": "ai\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1_6_\u529f\u80fd\u9700\u6c42",
+      "target": "ai\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1_6_6_\u5ba1\u6279",
+      "confidence_score": 1.0
     },
     {
-      "source": "ai财务系统_开发设计文档_tdd_v0_1_5_2_身份与账套",
-      "target": "ai财务系统_开发设计文档_tdd_v0_1_ledger_membership",
       "relation": "contains",
       "confidence": "EXTRACTED",
-      "source_file": "AI财务系统_开发设计文档_TDD_v0.1.md",
-      "source_location": "L189",
-      "weight": 1.0
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_PRD_v0.1.md",
+      "source_location": "L195",
+      "weight": 1.0,
+      "source": "ai\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1_6_\u529f\u80fd\u9700\u6c42",
+      "target": "ai\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1_6_7_\u91cd\u590d\u5355\u636e",
+      "confidence_score": 1.0
     },
     {
-      "source": "ai财务系统_开发设计文档_tdd_v0_1_5_数据模型",
-      "target": "ai财务系统_开发设计文档_tdd_v0_1_5_3_基础资料",
       "relation": "contains",
       "confidence": "EXTRACTED",
-      "source_file": "AI财务系统_开发设计文档_TDD_v0.1.md",
-      "source_location": "L200",
-      "weight": 1.0
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_PRD_v0.1.md",
+      "source_location": "L201",
+      "weight": 1.0,
+      "source": "ai\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1_6_\u529f\u80fd\u9700\u6c42",
+      "target": "ai\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1_6_8_\u62a5\u8868\u4e0e\u8d26\u7c3f",
+      "confidence_score": 1.0
     },
     {
-      "source": "ai财务系统_开发设计文档_tdd_v0_1_5_3_基础资料",
-      "target": "ai财务系统_开发设计文档_tdd_v0_1_account",
       "relation": "contains",
       "confidence": "EXTRACTED",
-      "source_file": "AI财务系统_开发设计文档_TDD_v0.1.md",
-      "source_location": "L202",
-      "weight": 1.0
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_PRD_v0.1.md",
+      "source_location": "L219",
+      "weight": 1.0,
+      "source": "ai\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1_6_\u529f\u80fd\u9700\u6c42",
+      "target": "ai\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1_6_9_\u9644\u4ef6\u4e0e\u5f02\u6b65\u4efb\u52a1",
+      "confidence_score": 1.0
     },
     {
-      "source": "ai财务系统_开发设计文档_tdd_v0_1_5_3_基础资料",
-      "target": "ai财务系统_开发设计文档_tdd_v0_1_accounting_period",
       "relation": "contains",
       "confidence": "EXTRACTED",
-      "source_file": "AI财务系统_开发设计文档_TDD_v0.1.md",
-      "source_location": "L214",
-      "weight": 1.0
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_PRD_v0.1.md",
+      "source_location": "L242",
+      "weight": 1.0,
+      "source": "ai\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1_7_api_\u4e0e_agent_\u80fd\u529b",
+      "target": "ai\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1_7_1_rest_api",
+      "confidence_score": 1.0
     },
     {
-      "source": "ai财务系统_开发设计文档_tdd_v0_1_5_3_基础资料",
-      "target": "ai财务系统_开发设计文档_tdd_v0_1_dimension_type_dimension_value",
       "relation": "contains",
       "confidence": "EXTRACTED",
-      "source_file": "AI财务系统_开发设计文档_TDD_v0.1.md",
-      "source_location": "L224",
-      "weight": 1.0
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_PRD_v0.1.md",
+      "source_location": "L251",
+      "weight": 1.0,
+      "source": "ai\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1_7_api_\u4e0e_agent_\u80fd\u529b",
+      "target": "ai\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1_7_2_mcp_\u5de5\u5177\u767d\u540d\u5355",
+      "confidence_score": 1.0
     },
     {
-      "source": "ai财务系统_开发设计文档_tdd_v0_1_5_3_基础资料",
-      "target": "ai财务系统_开发设计文档_tdd_v0_1_opening_balance",
       "relation": "contains",
       "confidence": "EXTRACTED",
-      "source_file": "AI财务系统_开发设计文档_TDD_v0.1.md",
-      "source_location": "L228",
-      "weight": 1.0
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_PRD_v0.1.md",
+      "source_location": "L269",
+      "weight": 1.0,
+      "source": "ai\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1_8_\u72b6\u6001\u4e0e\u5173\u952e\u89c4\u5219",
+      "target": "ai\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1_8_1_\u51ed\u8bc1\u72b6\u6001",
+      "confidence_score": 1.0
     },
     {
-      "source": "ai财务系统_开发设计文档_tdd_v0_1_5_数据模型",
-      "target": "ai财务系统_开发设计文档_tdd_v0_1_5_4_凭证",
       "relation": "contains",
       "confidence": "EXTRACTED",
-      "source_file": "AI财务系统_开发设计文档_TDD_v0.1.md",
-      "source_location": "L244",
-      "weight": 1.0
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_PRD_v0.1.md",
+      "source_location": "L286",
+      "weight": 1.0,
+      "source": "ai\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1_8_\u72b6\u6001\u4e0e\u5173\u952e\u89c4\u5219",
+      "target": "ai\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1_8_2_\u4e0d\u53d8\u91cf",
+      "confidence_score": 1.0
     },
     {
-      "source": "ai财务系统_开发设计文档_tdd_v0_1_5_4_凭证",
-      "target": "ai财务系统_开发设计文档_tdd_v0_1_voucher",
       "relation": "contains",
       "confidence": "EXTRACTED",
-      "source_file": "AI财务系统_开发设计文档_TDD_v0.1.md",
-      "source_location": "L246",
-      "weight": 1.0
-    },
-    {
-      "source": "ai财务系统_开发设计文档_tdd_v0_1_5_4_凭证",
-      "target": "ai财务系统_开发设计文档_tdd_v0_1_voucher_line",
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "AI财务系统_开发设计文档_TDD_v0.1.md",
-      "source_location": "L265",
-      "weight": 1.0
-    },
-    {
-      "source": "ai财务系统_开发设计文档_tdd_v0_1_5_4_凭证",
-      "target": "ai财务系统_开发设计文档_tdd_v0_1_voucher_line_dimension",
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "AI财务系统_开发设计文档_TDD_v0.1.md",
-      "source_location": "L281",
-      "weight": 1.0
-    },
-    {
-      "source": "ai财务系统_开发设计文档_tdd_v0_1_5_4_凭证",
-      "target": "ai财务系统_开发设计文档_tdd_v0_1_voucher_approval",
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "AI财务系统_开发设计文档_TDD_v0.1.md",
-      "source_location": "L289",
-      "weight": 1.0
-    },
-    {
-      "source": "ai财务系统_开发设计文档_tdd_v0_1_5_数据模型",
-      "target": "ai财务系统_开发设计文档_tdd_v0_1_5_5_文档与任务",
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "AI财务系统_开发设计文档_TDD_v0.1.md",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_PRD_v0.1.md",
       "source_location": "L298",
-      "weight": 1.0
+      "weight": 1.0,
+      "source": "ai\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1_9_\u975e\u529f\u80fd\u9700\u6c42",
+      "target": "ai\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1_9_1_\u5b89\u5168\u4e0e\u9694\u79bb",
+      "confidence_score": 1.0
     },
     {
-      "source": "ai财务系统_开发设计文档_tdd_v0_1_5_5_文档与任务",
-      "target": "ai财务系统_开发设计文档_tdd_v0_1_document",
       "relation": "contains",
       "confidence": "EXTRACTED",
-      "source_file": "AI财务系统_开发设计文档_TDD_v0.1.md",
-      "source_location": "L300",
-      "weight": 1.0
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_PRD_v0.1.md",
+      "source_location": "L305",
+      "weight": 1.0,
+      "source": "ai\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1_9_\u975e\u529f\u80fd\u9700\u6c42",
+      "target": "ai\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1_9_2_\u6027\u80fd\u76ee\u6807",
+      "confidence_score": 1.0
     },
     {
-      "source": "ai财务系统_开发设计文档_tdd_v0_1_5_5_文档与任务",
-      "target": "ai财务系统_开发设计文档_tdd_v0_1_document_extraction",
       "relation": "contains",
       "confidence": "EXTRACTED",
-      "source_file": "AI财务系统_开发设计文档_TDD_v0.1.md",
-      "source_location": "L313",
-      "weight": 1.0
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_PRD_v0.1.md",
+      "source_location": "L314",
+      "weight": 1.0,
+      "source": "ai\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1_9_\u975e\u529f\u80fd\u9700\u6c42",
+      "target": "ai\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1_9_3_\u53ef\u89c2\u6d4b\u6027",
+      "confidence_score": 1.0
     },
     {
-      "source": "ai财务系统_开发设计文档_tdd_v0_1_5_5_文档与任务",
-      "target": "ai财务系统_开发设计文档_tdd_v0_1_background_job",
       "relation": "contains",
       "confidence": "EXTRACTED",
-      "source_file": "AI财务系统_开发设计文档_TDD_v0.1.md",
-      "source_location": "L327",
-      "weight": 1.0
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_PRD_v0.1.md",
+      "source_location": "L321",
+      "weight": 1.0,
+      "source": "ai\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1_9_\u975e\u529f\u80fd\u9700\u6c42",
+      "target": "ai\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1_9_4_\u4fdd\u7559\u4e0e\u5220\u9664",
+      "confidence_score": 1.0
     },
     {
-      "source": "ai财务系统_开发设计文档_tdd_v0_1_5_数据模型",
-      "target": "ai财务系统_开发设计文档_tdd_v0_1_5_6_审计与幂等",
       "relation": "contains",
       "confidence": "EXTRACTED",
-      "source_file": "AI财务系统_开发设计文档_TDD_v0.1.md",
-      "source_location": "L344",
-      "weight": 1.0
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_PRD_v0.1.md",
+      "source_location": "L348",
+      "weight": 1.0,
+      "source": "ai\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1_11_\u4ea4\u4ed8\u8def\u7ebf",
+      "target": "ai\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1_m0_\u5de5\u7a0b\u57fa\u7840\u4e0e\u8d26\u5957\u8bbf\u95ee",
+      "confidence_score": 1.0
     },
     {
-      "source": "ai财务系统_开发设计文档_tdd_v0_1_5_6_审计与幂等",
-      "target": "ai财务系统_开发设计文档_tdd_v0_1_audit_revision",
       "relation": "contains",
       "confidence": "EXTRACTED",
-      "source_file": "AI财务系统_开发设计文档_TDD_v0.1.md",
-      "source_location": "L346",
-      "weight": 1.0
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_PRD_v0.1.md",
+      "source_location": "L353",
+      "weight": 1.0,
+      "source": "ai\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1_11_\u4ea4\u4ed8\u8def\u7ebf",
+      "target": "ai\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1_m1_\u4f1a\u8ba1\u6838\u5fc3",
+      "confidence_score": 1.0
     },
     {
-      "source": "ai财务系统_开发设计文档_tdd_v0_1_5_6_审计与幂等",
-      "target": "ai财务系统_开发设计文档_tdd_v0_1_idempotency_record",
       "relation": "contains",
       "confidence": "EXTRACTED",
-      "source_file": "AI财务系统_开发设计文档_TDD_v0.1.md",
-      "source_location": "L363",
-      "weight": 1.0
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_PRD_v0.1.md",
+      "source_location": "L359",
+      "weight": 1.0,
+      "source": "ai\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1_11_\u4ea4\u4ed8\u8def\u7ebf",
+      "target": "ai\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1_m2_\u9644\u4ef6\u4e0e\u4efb\u52a1",
+      "confidence_score": 1.0
     },
     {
-      "source": "ai财务系统_开发设计文档_tdd_v0_1_ai_财务系统开发设计文档_tdd_v0_1",
-      "target": "ai财务系统_开发设计文档_tdd_v0_1_6_金额与会计规则",
       "relation": "contains",
       "confidence": "EXTRACTED",
-      "source_file": "AI财务系统_开发设计文档_TDD_v0.1.md",
-      "source_location": "L377",
-      "weight": 1.0
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_PRD_v0.1.md",
+      "source_location": "L364",
+      "weight": 1.0,
+      "source": "ai\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1_11_\u4ea4\u4ed8\u8def\u7ebf",
+      "target": "ai\u8d22\u52a1\u7cfb\u7edf_\u4ea7\u54c1\u9700\u6c42\u6587\u6863_prd_v0_1_m3_agent_\u4e0e\u4ea4\u4ed8\u52a0\u56fa",
+      "confidence_score": 1.0
     },
     {
-      "source": "ai财务系统_开发设计文档_tdd_v0_1_ai_财务系统开发设计文档_tdd_v0_1",
-      "target": "ai财务系统_开发设计文档_tdd_v0_1_7_安全与账套隔离",
       "relation": "contains",
       "confidence": "EXTRACTED",
-      "source_file": "AI财务系统_开发设计文档_TDD_v0.1.md",
-      "source_location": "L393",
-      "weight": 1.0
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_TDD_v0.1.md",
+      "source_location": "L1",
+      "weight": 1.0,
+      "source": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1",
+      "target": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_ai_\u8d22\u52a1\u7cfb\u7edf\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1",
+      "confidence_score": 1.0
     },
     {
-      "source": "ai财务系统_开发设计文档_tdd_v0_1_7_安全与账套隔离",
-      "target": "ai财务系统_开发设计文档_tdd_v0_1_7_1_认证",
       "relation": "contains",
       "confidence": "EXTRACTED",
-      "source_file": "AI财务系统_开发设计文档_TDD_v0.1.md",
-      "source_location": "L395",
-      "weight": 1.0
-    },
-    {
-      "source": "ai财务系统_开发设计文档_tdd_v0_1_7_安全与账套隔离",
-      "target": "ai财务系统_开发设计文档_tdd_v0_1_7_2_授权",
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "AI财务系统_开发设计文档_TDD_v0.1.md",
-      "source_location": "L403",
-      "weight": 1.0
-    },
-    {
-      "source": "ai财务系统_开发设计文档_tdd_v0_1_ai_财务系统开发设计文档_tdd_v0_1",
-      "target": "ai财务系统_开发设计文档_tdd_v0_1_8_api_规范",
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "AI财务系统_开发设计文档_TDD_v0.1.md",
-      "source_location": "L425",
-      "weight": 1.0
-    },
-    {
-      "source": "ai财务系统_开发设计文档_tdd_v0_1_8_api_规范",
-      "target": "ai财务系统_开发设计文档_tdd_v0_1_8_1_通用约定",
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "AI财务系统_开发设计文档_TDD_v0.1.md",
-      "source_location": "L427",
-      "weight": 1.0
-    },
-    {
-      "source": "ai财务系统_开发设计文档_tdd_v0_1_8_api_规范",
-      "target": "ai财务系统_开发设计文档_tdd_v0_1_8_2_主要接口",
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "AI财务系统_开发设计文档_TDD_v0.1.md",
-      "source_location": "L462",
-      "weight": 1.0
-    },
-    {
-      "source": "ai财务系统_开发设计文档_tdd_v0_1_ai_财务系统开发设计文档_tdd_v0_1",
-      "target": "ai财务系统_开发设计文档_tdd_v0_1_9_凭证状态_事务与修订",
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "AI财务系统_开发设计文档_TDD_v0.1.md",
-      "source_location": "L534",
-      "weight": 1.0
-    },
-    {
-      "source": "ai财务系统_开发设计文档_tdd_v0_1_9_凭证状态_事务与修订",
-      "target": "ai财务系统_开发设计文档_tdd_v0_1_9_1_状态机",
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "AI财务系统_开发设计文档_TDD_v0.1.md",
-      "source_location": "L536",
-      "weight": 1.0
-    },
-    {
-      "source": "ai财务系统_开发设计文档_tdd_v0_1_9_凭证状态_事务与修订",
-      "target": "ai财务系统_开发设计文档_tdd_v0_1_9_2_事务",
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "AI财务系统_开发设计文档_TDD_v0.1.md",
-      "source_location": "L559",
-      "weight": 1.0
-    },
-    {
-      "source": "ai财务系统_开发设计文档_tdd_v0_1_9_凭证状态_事务与修订",
-      "target": "ai财务系统_开发设计文档_tdd_v0_1_9_3_修改与恢复",
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "AI财务系统_开发设计文档_TDD_v0.1.md",
-      "source_location": "L573",
-      "weight": 1.0
-    },
-    {
-      "source": "ai财务系统_开发设计文档_tdd_v0_1_ai_财务系统开发设计文档_tdd_v0_1",
-      "target": "ai财务系统_开发设计文档_tdd_v0_1_10_报表与查询_dsl",
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "AI财务系统_开发设计文档_TDD_v0.1.md",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_TDD_v0.1.md",
       "source_location": "L582",
-      "weight": 1.0
+      "weight": 1.0,
+      "source": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_ai_\u8d22\u52a1\u7cfb\u7edf\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1",
+      "target": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_10_\u62a5\u8868\u4e0e\u67e5\u8be2_dsl",
+      "confidence_score": 1.0
     },
     {
-      "source": "ai财务系统_开发设计文档_tdd_v0_1_ai_财务系统开发设计文档_tdd_v0_1",
-      "target": "ai财务系统_开发设计文档_tdd_v0_1_11_附件与异步任务",
       "relation": "contains",
       "confidence": "EXTRACTED",
-      "source_file": "AI财务系统_开发设计文档_TDD_v0.1.md",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_TDD_v0.1.md",
       "source_location": "L619",
-      "weight": 1.0
+      "weight": 1.0,
+      "source": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_ai_\u8d22\u52a1\u7cfb\u7edf\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1",
+      "target": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_11_\u9644\u4ef6\u4e0e\u5f02\u6b65\u4efb\u52a1",
+      "confidence_score": 1.0
     },
     {
-      "source": "ai财务系统_开发设计文档_tdd_v0_1_11_附件与异步任务",
-      "target": "ai财务系统_开发设计文档_tdd_v0_1_11_1_上传",
       "relation": "contains",
       "confidence": "EXTRACTED",
-      "source_file": "AI财务系统_开发设计文档_TDD_v0.1.md",
-      "source_location": "L621",
-      "weight": 1.0
-    },
-    {
-      "source": "ai财务系统_开发设计文档_tdd_v0_1_11_附件与异步任务",
-      "target": "ai财务系统_开发设计文档_tdd_v0_1_11_2_postgresql_任务队列",
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "AI财务系统_开发设计文档_TDD_v0.1.md",
-      "source_location": "L631",
-      "weight": 1.0
-    },
-    {
-      "source": "ai财务系统_开发设计文档_tdd_v0_1_11_附件与异步任务",
-      "target": "ai财务系统_开发设计文档_tdd_v0_1_11_3_mock_提取",
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "AI财务系统_开发设计文档_TDD_v0.1.md",
-      "source_location": "L651",
-      "weight": 1.0
-    },
-    {
-      "source": "ai财务系统_开发设计文档_tdd_v0_1_ai_财务系统开发设计文档_tdd_v0_1",
-      "target": "ai财务系统_开发设计文档_tdd_v0_1_12_mcp_设计",
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "AI财务系统_开发设计文档_TDD_v0.1.md",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_TDD_v0.1.md",
       "source_location": "L663",
-      "weight": 1.0
+      "weight": 1.0,
+      "source": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_ai_\u8d22\u52a1\u7cfb\u7edf\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1",
+      "target": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_12_mcp_\u8bbe\u8ba1",
+      "confidence_score": 1.0
     },
     {
-      "source": "ai财务系统_开发设计文档_tdd_v0_1_ai_财务系统开发设计文档_tdd_v0_1",
-      "target": "ai财务系统_开发设计文档_tdd_v0_1_13_幂等_并发与错误处理",
       "relation": "contains",
       "confidence": "EXTRACTED",
-      "source_file": "AI财务系统_开发设计文档_TDD_v0.1.md",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_TDD_v0.1.md",
       "source_location": "L686",
-      "weight": 1.0
+      "weight": 1.0,
+      "source": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_ai_\u8d22\u52a1\u7cfb\u7edf\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1",
+      "target": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_13_\u5e42\u7b49_\u5e76\u53d1\u4e0e\u9519\u8bef\u5904\u7406",
+      "confidence_score": 1.0
     },
     {
-      "source": "ai财务系统_开发设计文档_tdd_v0_1_ai_财务系统开发设计文档_tdd_v0_1",
-      "target": "ai财务系统_开发设计文档_tdd_v0_1_14_可观测性与保留",
       "relation": "contains",
       "confidence": "EXTRACTED",
-      "source_file": "AI财务系统_开发设计文档_TDD_v0.1.md",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_TDD_v0.1.md",
       "source_location": "L695",
-      "weight": 1.0
+      "weight": 1.0,
+      "source": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_ai_\u8d22\u52a1\u7cfb\u7edf\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1",
+      "target": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_14_\u53ef\u89c2\u6d4b\u6027\u4e0e\u4fdd\u7559",
+      "confidence_score": 1.0
     },
     {
-      "source": "ai财务系统_开发设计文档_tdd_v0_1_14_可观测性与保留",
-      "target": "ai财务系统_开发设计文档_tdd_v0_1_14_1_可观测性",
       "relation": "contains",
       "confidence": "EXTRACTED",
-      "source_file": "AI财务系统_开发设计文档_TDD_v0.1.md",
-      "source_location": "L697",
-      "weight": 1.0
-    },
-    {
-      "source": "ai财务系统_开发设计文档_tdd_v0_1_14_可观测性与保留",
-      "target": "ai财务系统_开发设计文档_tdd_v0_1_14_2_保留",
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "AI财务系统_开发设计文档_TDD_v0.1.md",
-      "source_location": "L704",
-      "weight": 1.0
-    },
-    {
-      "source": "ai财务系统_开发设计文档_tdd_v0_1_ai_财务系统开发设计文档_tdd_v0_1",
-      "target": "ai财务系统_开发设计文档_tdd_v0_1_15_测试策略",
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "AI财务系统_开发设计文档_TDD_v0.1.md",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_TDD_v0.1.md",
       "source_location": "L711",
-      "weight": 1.0
+      "weight": 1.0,
+      "source": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_ai_\u8d22\u52a1\u7cfb\u7edf\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1",
+      "target": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_15_\u6d4b\u8bd5\u7b56\u7565",
+      "confidence_score": 1.0
     },
     {
-      "source": "ai财务系统_开发设计文档_tdd_v0_1_ai_财务系统开发设计文档_tdd_v0_1",
-      "target": "ai财务系统_开发设计文档_tdd_v0_1_16_具体开发计划",
       "relation": "contains",
       "confidence": "EXTRACTED",
-      "source_file": "AI财务系统_开发设计文档_TDD_v0.1.md",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_TDD_v0.1.md",
       "source_location": "L727",
-      "weight": 1.0
+      "weight": 1.0,
+      "source": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_ai_\u8d22\u52a1\u7cfb\u7edf\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1",
+      "target": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_16_\u5177\u4f53\u5f00\u53d1\u8ba1\u5212",
+      "confidence_score": 1.0
     },
     {
-      "source": "ai财务系统_开发设计文档_tdd_v0_1_16_具体开发计划",
-      "target": "ai财务系统_开发设计文档_tdd_v0_1_阶段_0_工程基础",
       "relation": "contains",
       "confidence": "EXTRACTED",
-      "source_file": "AI财务系统_开发设计文档_TDD_v0.1.md",
-      "source_location": "L731",
-      "weight": 1.0
-    },
-    {
-      "source": "ai财务系统_开发设计文档_tdd_v0_1_16_具体开发计划",
-      "target": "ai财务系统_开发设计文档_tdd_v0_1_阶段_1_身份_账套与隔离",
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "AI财务系统_开发设计文档_TDD_v0.1.md",
-      "source_location": "L749",
-      "weight": 1.0
-    },
-    {
-      "source": "ai财务系统_开发设计文档_tdd_v0_1_16_具体开发计划",
-      "target": "ai财务系统_开发设计文档_tdd_v0_1_阶段_2_准则包与基础资料",
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "AI财务系统_开发设计文档_TDD_v0.1.md",
-      "source_location": "L767",
-      "weight": 1.0
-    },
-    {
-      "source": "ai财务系统_开发设计文档_tdd_v0_1_16_具体开发计划",
-      "target": "ai财务系统_开发设计文档_tdd_v0_1_阶段_3_凭证核心",
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "AI财务系统_开发设计文档_TDD_v0.1.md",
-      "source_location": "L785",
-      "weight": 1.0
-    },
-    {
-      "source": "ai财务系统_开发设计文档_tdd_v0_1_16_具体开发计划",
-      "target": "ai财务系统_开发设计文档_tdd_v0_1_阶段_4_账簿与报表",
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "AI财务系统_开发设计文档_TDD_v0.1.md",
-      "source_location": "L806",
-      "weight": 1.0
-    },
-    {
-      "source": "ai财务系统_开发设计文档_tdd_v0_1_16_具体开发计划",
-      "target": "ai财务系统_开发设计文档_tdd_v0_1_阶段_5_附件与异步任务",
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "AI财务系统_开发设计文档_TDD_v0.1.md",
-      "source_location": "L823",
-      "weight": 1.0
-    },
-    {
-      "source": "ai财务系统_开发设计文档_tdd_v0_1_16_具体开发计划",
-      "target": "ai财务系统_开发设计文档_tdd_v0_1_阶段_6_mcp",
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "AI财务系统_开发设计文档_TDD_v0.1.md",
-      "source_location": "L842",
-      "weight": 1.0
-    },
-    {
-      "source": "ai财务系统_开发设计文档_tdd_v0_1_16_具体开发计划",
-      "target": "ai财务系统_开发设计文档_tdd_v0_1_阶段_7_交付加固",
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "AI财务系统_开发设计文档_TDD_v0.1.md",
-      "source_location": "L857",
-      "weight": 1.0
-    },
-    {
-      "source": "ai财务系统_开发设计文档_tdd_v0_1_ai_财务系统开发设计文档_tdd_v0_1",
-      "target": "ai财务系统_开发设计文档_tdd_v0_1_17_开发执行约定",
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "AI财务系统_开发设计文档_TDD_v0.1.md",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_TDD_v0.1.md",
       "source_location": "L875",
-      "weight": 1.0
+      "weight": 1.0,
+      "source": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_ai_\u8d22\u52a1\u7cfb\u7edf\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1",
+      "target": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_17_\u5f00\u53d1\u6267\u884c\u7ea6\u5b9a",
+      "confidence_score": 1.0
     },
     {
-      "source": "ai财务系统_开发设计文档_tdd_v0_1_ai_财务系统开发设计文档_tdd_v0_1",
-      "target": "ai财务系统_开发设计文档_tdd_v0_1_18_完成定义",
       "relation": "contains",
       "confidence": "EXTRACTED",
-      "source_file": "AI财务系统_开发设计文档_TDD_v0.1.md",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_TDD_v0.1.md",
       "source_location": "L896",
-      "weight": 1.0
+      "weight": 1.0,
+      "source": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_ai_\u8d22\u52a1\u7cfb\u7edf\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1",
+      "target": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_18_\u5b8c\u6210\u5b9a\u4e49",
+      "confidence_score": 1.0
     },
     {
-      "source": "ai财务系统_开发设计文档_tdd_v0_1_ai_财务系统开发设计文档_tdd_v0_1",
-      "target": "ai财务系统_开发设计文档_tdd_v0_1_19_实现参考",
       "relation": "contains",
       "confidence": "EXTRACTED",
-      "source_file": "AI财务系统_开发设计文档_TDD_v0.1.md",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_TDD_v0.1.md",
       "source_location": "L908",
-      "weight": 1.0
+      "weight": 1.0,
+      "source": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_ai_\u8d22\u52a1\u7cfb\u7edf\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1",
+      "target": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_19_\u5b9e\u73b0\u53c2\u8003",
+      "confidence_score": 1.0
     },
     {
-      "source": "readme",
-      "target": "readme_ai_财务系统",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_TDD_v0.1.md",
+      "source_location": "L7",
+      "weight": 1.0,
+      "source": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_ai_\u8d22\u52a1\u7cfb\u7edf\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1",
+      "target": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_1_\u8bbe\u8ba1\u76ee\u6807",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_TDD_v0.1.md",
+      "source_location": "L21",
+      "weight": 1.0,
+      "source": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_ai_\u8d22\u52a1\u7cfb\u7edf\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1",
+      "target": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_2_\u67b6\u6784\u51b3\u7b56",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_TDD_v0.1.md",
+      "source_location": "L61",
+      "weight": 1.0,
+      "source": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_ai_\u8d22\u52a1\u7cfb\u7edf\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1",
+      "target": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_3_\u603b\u4f53\u67b6\u6784",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_TDD_v0.1.md",
+      "source_location": "L95",
+      "weight": 1.0,
+      "source": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_ai_\u8d22\u52a1\u7cfb\u7edf\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1",
+      "target": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_4_\u5de5\u7a0b\u7ed3\u6784",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_TDD_v0.1.md",
+      "source_location": "L138",
+      "weight": 1.0,
+      "source": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_ai_\u8d22\u52a1\u7cfb\u7edf\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1",
+      "target": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_5_\u6570\u636e\u6a21\u578b",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_TDD_v0.1.md",
+      "source_location": "L377",
+      "weight": 1.0,
+      "source": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_ai_\u8d22\u52a1\u7cfb\u7edf\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1",
+      "target": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_6_\u91d1\u989d\u4e0e\u4f1a\u8ba1\u89c4\u5219",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_TDD_v0.1.md",
+      "source_location": "L393",
+      "weight": 1.0,
+      "source": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_ai_\u8d22\u52a1\u7cfb\u7edf\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1",
+      "target": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_7_\u5b89\u5168\u4e0e\u8d26\u5957\u9694\u79bb",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_TDD_v0.1.md",
+      "source_location": "L425",
+      "weight": 1.0,
+      "source": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_ai_\u8d22\u52a1\u7cfb\u7edf\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1",
+      "target": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_8_api_\u89c4\u8303",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_TDD_v0.1.md",
+      "source_location": "L534",
+      "weight": 1.0,
+      "source": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_ai_\u8d22\u52a1\u7cfb\u7edf\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1",
+      "target": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_9_\u51ed\u8bc1\u72b6\u6001_\u4e8b\u52a1\u4e0e\u4fee\u8ba2",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_TDD_v0.1.md",
+      "source_location": "L23",
+      "weight": 1.0,
+      "source": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_2_\u67b6\u6784\u51b3\u7b56",
+      "target": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_2_1_\u6280\u672f\u6808",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_TDD_v0.1.md",
+      "source_location": "L43",
+      "weight": 1.0,
+      "source": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_2_\u67b6\u6784\u51b3\u7b56",
+      "target": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_2_2_\u4e3a\u4ec0\u4e48\u91c7\u7528_spring_boot",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_TDD_v0.1.md",
+      "source_location": "L47",
+      "weight": 1.0,
+      "source": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_2_\u67b6\u6784\u51b3\u7b56",
+      "target": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_2_3_\u4fdd\u6301\u7b80\u5355\u7684\u8fb9\u754c",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_TDD_v0.1.md",
+      "source_location": "L140",
+      "weight": 1.0,
+      "source": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_5_\u6570\u636e\u6a21\u578b",
+      "target": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_5_1_\u901a\u7528\u5b57\u6bb5",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_TDD_v0.1.md",
+      "source_location": "L163",
+      "weight": 1.0,
+      "source": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_5_\u6570\u636e\u6a21\u578b",
+      "target": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_5_2_\u8eab\u4efd\u4e0e\u8d26\u5957",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_TDD_v0.1.md",
+      "source_location": "L200",
+      "weight": 1.0,
+      "source": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_5_\u6570\u636e\u6a21\u578b",
+      "target": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_5_3_\u57fa\u7840\u8d44\u6599",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_TDD_v0.1.md",
+      "source_location": "L244",
+      "weight": 1.0,
+      "source": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_5_\u6570\u636e\u6a21\u578b",
+      "target": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_5_4_\u51ed\u8bc1",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_TDD_v0.1.md",
+      "source_location": "L298",
+      "weight": 1.0,
+      "source": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_5_\u6570\u636e\u6a21\u578b",
+      "target": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_5_5_\u6587\u6863\u4e0e\u4efb\u52a1",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_TDD_v0.1.md",
+      "source_location": "L344",
+      "weight": 1.0,
+      "source": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_5_\u6570\u636e\u6a21\u578b",
+      "target": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_5_6_\u5ba1\u8ba1\u4e0e\u5e42\u7b49",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_TDD_v0.1.md",
+      "source_location": "L165",
+      "weight": 1.0,
+      "source": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_5_2_\u8eab\u4efd\u4e0e\u8d26\u5957",
+      "target": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_app_user",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_TDD_v0.1.md",
+      "source_location": "L177",
+      "weight": 1.0,
+      "source": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_5_2_\u8eab\u4efd\u4e0e\u8d26\u5957",
+      "target": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_ledger",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_TDD_v0.1.md",
+      "source_location": "L189",
+      "weight": 1.0,
+      "source": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_5_2_\u8eab\u4efd\u4e0e\u8d26\u5957",
+      "target": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_ledger_membership",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_TDD_v0.1.md",
+      "source_location": "L202",
+      "weight": 1.0,
+      "source": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_5_3_\u57fa\u7840\u8d44\u6599",
+      "target": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_account",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_TDD_v0.1.md",
+      "source_location": "L214",
+      "weight": 1.0,
+      "source": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_5_3_\u57fa\u7840\u8d44\u6599",
+      "target": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_accounting_period",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_TDD_v0.1.md",
+      "source_location": "L224",
+      "weight": 1.0,
+      "source": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_5_3_\u57fa\u7840\u8d44\u6599",
+      "target": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_dimension_type_dimension_value",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_TDD_v0.1.md",
+      "source_location": "L228",
+      "weight": 1.0,
+      "source": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_5_3_\u57fa\u7840\u8d44\u6599",
+      "target": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_opening_balance",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_TDD_v0.1.md",
+      "source_location": "L246",
+      "weight": 1.0,
+      "source": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_5_4_\u51ed\u8bc1",
+      "target": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_voucher",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_TDD_v0.1.md",
+      "source_location": "L289",
+      "weight": 1.0,
+      "source": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_5_4_\u51ed\u8bc1",
+      "target": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_voucher_approval",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_TDD_v0.1.md",
+      "source_location": "L265",
+      "weight": 1.0,
+      "source": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_5_4_\u51ed\u8bc1",
+      "target": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_voucher_line",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_TDD_v0.1.md",
+      "source_location": "L281",
+      "weight": 1.0,
+      "source": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_5_4_\u51ed\u8bc1",
+      "target": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_voucher_line_dimension",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_TDD_v0.1.md",
+      "source_location": "L327",
+      "weight": 1.0,
+      "source": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_5_5_\u6587\u6863\u4e0e\u4efb\u52a1",
+      "target": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_background_job",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_TDD_v0.1.md",
+      "source_location": "L300",
+      "weight": 1.0,
+      "source": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_5_5_\u6587\u6863\u4e0e\u4efb\u52a1",
+      "target": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_document",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_TDD_v0.1.md",
+      "source_location": "L313",
+      "weight": 1.0,
+      "source": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_5_5_\u6587\u6863\u4e0e\u4efb\u52a1",
+      "target": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_document_extraction",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_TDD_v0.1.md",
+      "source_location": "L346",
+      "weight": 1.0,
+      "source": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_5_6_\u5ba1\u8ba1\u4e0e\u5e42\u7b49",
+      "target": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_audit_revision",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_TDD_v0.1.md",
+      "source_location": "L363",
+      "weight": 1.0,
+      "source": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_5_6_\u5ba1\u8ba1\u4e0e\u5e42\u7b49",
+      "target": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_idempotency_record",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_TDD_v0.1.md",
+      "source_location": "L395",
+      "weight": 1.0,
+      "source": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_7_\u5b89\u5168\u4e0e\u8d26\u5957\u9694\u79bb",
+      "target": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_7_1_\u8ba4\u8bc1",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_TDD_v0.1.md",
+      "source_location": "L403",
+      "weight": 1.0,
+      "source": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_7_\u5b89\u5168\u4e0e\u8d26\u5957\u9694\u79bb",
+      "target": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_7_2_\u6388\u6743",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_TDD_v0.1.md",
+      "source_location": "L427",
+      "weight": 1.0,
+      "source": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_8_api_\u89c4\u8303",
+      "target": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_8_1_\u901a\u7528\u7ea6\u5b9a",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_TDD_v0.1.md",
+      "source_location": "L462",
+      "weight": 1.0,
+      "source": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_8_api_\u89c4\u8303",
+      "target": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_8_2_\u4e3b\u8981\u63a5\u53e3",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_TDD_v0.1.md",
+      "source_location": "L536",
+      "weight": 1.0,
+      "source": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_9_\u51ed\u8bc1\u72b6\u6001_\u4e8b\u52a1\u4e0e\u4fee\u8ba2",
+      "target": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_9_1_\u72b6\u6001\u673a",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_TDD_v0.1.md",
+      "source_location": "L559",
+      "weight": 1.0,
+      "source": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_9_\u51ed\u8bc1\u72b6\u6001_\u4e8b\u52a1\u4e0e\u4fee\u8ba2",
+      "target": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_9_2_\u4e8b\u52a1",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_TDD_v0.1.md",
+      "source_location": "L573",
+      "weight": 1.0,
+      "source": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_9_\u51ed\u8bc1\u72b6\u6001_\u4e8b\u52a1\u4e0e\u4fee\u8ba2",
+      "target": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_9_3_\u4fee\u6539\u4e0e\u6062\u590d",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_TDD_v0.1.md",
+      "source_location": "L621",
+      "weight": 1.0,
+      "source": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_11_\u9644\u4ef6\u4e0e\u5f02\u6b65\u4efb\u52a1",
+      "target": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_11_1_\u4e0a\u4f20",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_TDD_v0.1.md",
+      "source_location": "L631",
+      "weight": 1.0,
+      "source": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_11_\u9644\u4ef6\u4e0e\u5f02\u6b65\u4efb\u52a1",
+      "target": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_11_2_postgresql_\u4efb\u52a1\u961f\u5217",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_TDD_v0.1.md",
+      "source_location": "L651",
+      "weight": 1.0,
+      "source": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_11_\u9644\u4ef6\u4e0e\u5f02\u6b65\u4efb\u52a1",
+      "target": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_11_3_mock_\u63d0\u53d6",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_TDD_v0.1.md",
+      "source_location": "L697",
+      "weight": 1.0,
+      "source": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_14_\u53ef\u89c2\u6d4b\u6027\u4e0e\u4fdd\u7559",
+      "target": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_14_1_\u53ef\u89c2\u6d4b\u6027",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_TDD_v0.1.md",
+      "source_location": "L704",
+      "weight": 1.0,
+      "source": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_14_\u53ef\u89c2\u6d4b\u6027\u4e0e\u4fdd\u7559",
+      "target": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_14_2_\u4fdd\u7559",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_TDD_v0.1.md",
+      "source_location": "L731",
+      "weight": 1.0,
+      "source": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_16_\u5177\u4f53\u5f00\u53d1\u8ba1\u5212",
+      "target": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_\u9636\u6bb5_0_\u5de5\u7a0b\u57fa\u7840",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_TDD_v0.1.md",
+      "source_location": "L749",
+      "weight": 1.0,
+      "source": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_16_\u5177\u4f53\u5f00\u53d1\u8ba1\u5212",
+      "target": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_\u9636\u6bb5_1_\u8eab\u4efd_\u8d26\u5957\u4e0e\u9694\u79bb",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_TDD_v0.1.md",
+      "source_location": "L767",
+      "weight": 1.0,
+      "source": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_16_\u5177\u4f53\u5f00\u53d1\u8ba1\u5212",
+      "target": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_\u9636\u6bb5_2_\u51c6\u5219\u5305\u4e0e\u57fa\u7840\u8d44\u6599",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_TDD_v0.1.md",
+      "source_location": "L785",
+      "weight": 1.0,
+      "source": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_16_\u5177\u4f53\u5f00\u53d1\u8ba1\u5212",
+      "target": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_\u9636\u6bb5_3_\u51ed\u8bc1\u6838\u5fc3",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_TDD_v0.1.md",
+      "source_location": "L806",
+      "weight": 1.0,
+      "source": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_16_\u5177\u4f53\u5f00\u53d1\u8ba1\u5212",
+      "target": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_\u9636\u6bb5_4_\u8d26\u7c3f\u4e0e\u62a5\u8868",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_TDD_v0.1.md",
+      "source_location": "L823",
+      "weight": 1.0,
+      "source": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_16_\u5177\u4f53\u5f00\u53d1\u8ba1\u5212",
+      "target": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_\u9636\u6bb5_5_\u9644\u4ef6\u4e0e\u5f02\u6b65\u4efb\u52a1",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_TDD_v0.1.md",
+      "source_location": "L842",
+      "weight": 1.0,
+      "source": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_16_\u5177\u4f53\u5f00\u53d1\u8ba1\u5212",
+      "target": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_\u9636\u6bb5_6_mcp",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "AI\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_TDD_v0.1.md",
+      "source_location": "L857",
+      "weight": 1.0,
+      "source": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_16_\u5177\u4f53\u5f00\u53d1\u8ba1\u5212",
+      "target": "ai\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_tdd_v0_1_\u9636\u6bb5_7_\u4ea4\u4ed8\u52a0\u56fa",
+      "confidence_score": 1.0
+    },
+    {
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "README.md",
       "source_location": "L1",
-      "weight": 1.0
+      "weight": 1.0,
+      "source": "readme",
+      "target": "readme_ai_\u8d22\u52a1\u7cfb\u7edf",
+      "confidence_score": 1.0
     },
     {
-      "source": "readme_ai_财务系统",
-      "target": "readme_当前本地环境决策",
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "README.md",
-      "source_location": "L5",
-      "weight": 1.0
-    },
-    {
-      "source": "readme_ai_财务系统",
-      "target": "readme_启动前准备",
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "README.md",
       "source_location": "L11",
-      "weight": 1.0
+      "weight": 1.0,
+      "source": "readme_ai_\u8d22\u52a1\u7cfb\u7edf",
+      "target": "readme_\u542f\u52a8\u524d\u51c6\u5907",
+      "confidence_score": 1.0
     },
     {
-      "source": "readme_ai_财务系统",
-      "target": "readme_常用命令",
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "README.md",
       "source_location": "L19",
-      "weight": 1.0
+      "weight": 1.0,
+      "source": "readme_ai_\u8d22\u52a1\u7cfb\u7edf",
+      "target": "readme_\u5e38\u7528\u547d\u4ee4",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "README.md",
+      "source_location": "L5",
+      "weight": 1.0,
+      "source": "readme_ai_\u8d22\u52a1\u7cfb\u7edf",
+      "target": "readme_\u5f53\u524d\u672c\u5730\u73af\u5883\u51b3\u7b56",
+      "confidence_score": 1.0
     }
-  ]
+  ],
+  "hyperedges": [],
+  "built_at_commit": "9424c43fb79801c7a33f901e552ac3d377b7ba32"
 }

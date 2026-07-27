@@ -83,5 +83,15 @@
     "mtime": 1785115888.409661,
     "ast_hash": "aab68d14f16186e0fa13a514ac246742",
     "semantic_hash": ""
+  },
+  ".codex/hooks.json": {
+    "mtime": 1785116959.9359734,
+    "ast_hash": "16dccc20befef00c0336b1524dec5d5c",
+    "semantic_hash": ""
+  },
+  "AGENTS.md": {
+    "mtime": 1785116959.8444111,
+    "ast_hash": "752aa83aa64361ac32860f882dcff932",
+    "semantic_hash": ""
   }
 }
