@@ -13,7 +13,7 @@ public final class VoucherResponses {
 
     public record Voucher(UUID id, UUID ledgerId, UUID periodId, LocalDate voucherDate, String voucherType,
                           String voucherNumber, String summary, String status, boolean approvalRequired,
-                          List<Line> lines) {
+                          long version, List<Line> lines) {
     }
 
     public record Line(UUID id, int lineNo, UUID accountId, String side, String currency,

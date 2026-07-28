@@ -54,7 +54,8 @@ v0.1 明确不做：
 - 不使用 PostgreSQL RLS；在应用服务和仓储查询中强制 `ledger_id`。
 - 不重复保存 `tenant_id`；权限由 `user_id + ledger_id` 成员关系决定。
 - 不建设通用规则引擎、工作流引擎或插件系统。
-- 不为单个实现创建接口；仅 Mock 提取器因后续必然替换外部服务而保留一个窄接口。
+- 公共应用服务使用稳定接口；数据库访问使用模块内 Repository 接口，以便后续增加数据库适配器。
+- 当前只实现 PostgreSQL/JDBC Repository，不预建数据库工厂、通用 CRUD 仓储或第二套适配器。
 - 不使用 Lombok、MapStruct；简单映射显式编写。
 - 没有真实事件消费者前不建设 outbox。
 
@@ -71,10 +72,11 @@ Security + Ledger Access Guard
     ▼
 Application Services
     │
-    ├── JPA：事务写入
-    ├── JdbcClient：账簿与报表查询
-    ├── 本地文件系统：附件对象
-    └── PostgreSQL：业务数据、审计、任务队列
+    ▼
+Repository Ports
+    │
+    ├── PostgreSQL/JDBC Adapter：业务数据、审计、任务队列
+    └── 本地文件系统：附件对象
 ```
 
 模块：
@@ -90,7 +92,10 @@ Application Services
 | `audit` | 修订快照、操作日志、幂等 |
 | `shared` | 错误模型、金额类型、时间与基础配置 |
 
-每个模块根包只暴露必要的应用服务和 DTO，实现放在 `internal` 子包。模块之间通过公开应用服务调用，不直接访问对方的 repository。
+每个模块根包只暴露应用服务接口和 DTO。事务与业务编排实现放在
+`internal.application`，数据库无关的 Repository 端口放在 `internal.port`，
+PostgreSQL/JDBC 实现放在 `internal.persistence`。模块之间只通过公开应用服务接口调用，
+不直接访问对方的 Repository。
 
 ## 4. 工程结构
 

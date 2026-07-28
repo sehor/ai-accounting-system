@@ -1,6 +1,7 @@
 package com.example.accounting.ledger;
 
 import com.example.accounting.identity.CurrentUserResolver;
+import com.example.accounting.identity.UserResponse;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import java.util.List;
@@ -14,6 +15,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.ResponseStatus;
@@ -54,6 +56,12 @@ public class LedgerController {
     @GetMapping("/{ledgerId}/members")
     public List<Member> listMembers(HttpServletRequest request, @PathVariable UUID ledgerId) {
         return ledgerService.listMembers(user(request), ledgerId);
+    }
+
+    @GetMapping("/{ledgerId}/member-candidates")
+    public List<UserResponse> findMemberCandidates(HttpServletRequest request, @PathVariable UUID ledgerId,
+                                                   @RequestParam String email) {
+        return ledgerService.findMemberCandidates(user(request), ledgerId, email);
     }
 
     @GetMapping("/{ledgerId}/accounts")

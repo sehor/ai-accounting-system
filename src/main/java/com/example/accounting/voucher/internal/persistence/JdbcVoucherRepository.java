@@ -1,0 +1,325 @@
+package com.example.accounting.voucher.internal.persistence;
+
+import com.example.accounting.voucher.VoucherResponses;
+import com.example.accounting.voucher.internal.port.VoucherRepository;
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.OffsetDateTime;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.UUID;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.stereotype.Repository;
+
+@Repository
+public class JdbcVoucherRepository implements VoucherRepository {
+
+    private final JdbcTemplate jdbcTemplate;
+
+    public JdbcVoucherRepository(JdbcTemplate jdbcTemplate) {
+        this.jdbcTemplate = jdbcTemplate;
+    }
+
+    @Override
+    public boolean reserveIdempotency(UUID ledgerId, UUID actorId, String key, String requestHash, UUID voucherId) {
+        return jdbcTemplate.update("""
+                insert into voucher_idempotency (ledger_id, actor_id, idempotency_key, request_hash, voucher_id)
+                values (?, ?, ?, ?, ?) on conflict (ledger_id, actor_id, idempotency_key) do nothing
+                """, ledgerId, actorId, key, requestHash, voucherId) == 1;
+    }
+
+    @Override
+    public Optional<Idempotency> findIdempotency(UUID ledgerId, UUID actorId, String key) {
+        return Optional.ofNullable(jdbcTemplate.query("""
+                select request_hash, voucher_id from voucher_idempotency
+                where ledger_id = ? and actor_id = ? and idempotency_key = ?
+                """, rs -> rs.next() ? new Idempotency(rs.getString("request_hash"),
+                rs.getObject("voucher_id", UUID.class)) : null, ledgerId, actorId, key));
+    }
+
+    @Override
+    public Optional<LedgerContext> findLedgerContext(UUID ledgerId, UUID periodId) {
+        return Optional.ofNullable(jdbcTemplate.query("""
+                select l.base_currency, l.approval_enabled, p.status, p.start_date, p.end_date
+                from ledger l join accounting_period p on p.ledger_id = l.id
+                where l.id = ? and p.id = ? and l.deleted_at is null
+                """, rs -> rs.next() ? new LedgerContext(rs.getString("base_currency"),
+                rs.getBoolean("approval_enabled"), rs.getString("status"),
+                rs.getObject("start_date", LocalDate.class), rs.getObject("end_date", LocalDate.class)) : null,
+                ledgerId, periodId));
+    }
+
+    @Override
+    public boolean activeAccountExists(UUID ledgerId, UUID accountId) {
+        return Boolean.TRUE.equals(jdbcTemplate.queryForObject(
+                "select exists (select 1 from ledger_account where ledger_id = ? and id = ? and status = 'ACTIVE')",
+                Boolean.class, ledgerId, accountId));
+    }
+
+    @Override
+    public void createVoucher(UUID voucherId, UUID ledgerId, UUID periodId, LocalDate voucherDate,
+                              String voucherType, String voucherNumber, String summary, boolean approvalRequired,
+                              UUID reversalOfId, UUID actorId) {
+        jdbcTemplate.update("""
+                insert into voucher (id, ledger_id, period_id, voucher_date, voucher_type, voucher_number,
+                    summary, approval_required, reversal_of_id, created_by, updated_by)
+                values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, voucherId, ledgerId, periodId, voucherDate, voucherType, voucherNumber, summary,
+                approvalRequired, reversalOfId, actorId, actorId);
+    }
+
+    @Override
+    public boolean updateDraft(UUID ledgerId, UUID voucherId, UUID periodId, LocalDate voucherDate,
+                               String voucherType, String voucherNumber, String summary, boolean approvalRequired,
+                               UUID actorId, long expectedVersion) {
+        return jdbcTemplate.update("""
+                update voucher set period_id = ?, voucher_date = ?, voucher_type = ?, voucher_number = ?,
+                    summary = ?, approval_required = ?, current_revision = current_revision + 1,
+                    version = version + 1, updated_at = now(), updated_by = ?
+                where ledger_id = ? and id = ? and status = 'DRAFT' and version = ?
+                """, periodId, voucherDate, voucherType, voucherNumber, summary, approvalRequired, actorId,
+                ledgerId, voucherId, expectedVersion) == 1;
+    }
+
+    @Override
+    public void deleteLines(UUID ledgerId, UUID voucherId) {
+        jdbcTemplate.update("delete from voucher_line where ledger_id = ? and voucher_id = ?", ledgerId, voucherId);
+    }
+
+    @Override
+    public void createLine(UUID lineId, UUID ledgerId, UUID voucherId, int lineNo, UUID accountId, String side,
+                           String currency, BigDecimal originalAmount, BigDecimal exchangeRate,
+                           BigDecimal baseAmount, String summary) {
+        jdbcTemplate.update("""
+                insert into voucher_line (id, ledger_id, voucher_id, line_no, account_id, side, currency,
+                    original_amount, exchange_rate, base_amount, summary)
+                values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, lineId, ledgerId, voucherId, lineNo, accountId, side, currency, originalAmount, exchangeRate,
+                baseAmount, summary);
+    }
+
+    @Override
+    public List<VoucherResponses.Voucher> list(UUID ledgerId, int limit, int offset) {
+        return jdbcTemplate.query("""
+                select id, ledger_id, period_id, voucher_date, voucher_type, voucher_number, summary, status,
+                    approval_required, version
+                from voucher where ledger_id = ? and deleted_at is null
+                order by voucher_date, voucher_number, id limit ? offset ?
+                """, (rs, rowNum) -> voucher(rs.getObject("id", UUID.class),
+                rs.getObject("ledger_id", UUID.class), rs.getObject("period_id", UUID.class),
+                rs.getObject("voucher_date", LocalDate.class), rs.getString("voucher_type"),
+                rs.getString("voucher_number"), rs.getString("summary"), rs.getString("status"),
+                rs.getBoolean("approval_required"), rs.getLong("version"), List.of()), ledgerId, limit, offset);
+    }
+
+    @Override
+    public Optional<VoucherResponses.Voucher> find(UUID ledgerId, UUID voucherId, boolean includeDeleted) {
+        String sql = """
+                select id, ledger_id, period_id, voucher_date, voucher_type, voucher_number, summary, status,
+                    approval_required, version
+                from voucher where ledger_id = ? and id = ?
+                """ + (includeDeleted ? "" : " and deleted_at is null");
+        return Optional.ofNullable(jdbcTemplate.query(sql, rs -> rs.next() ? voucher(
+                rs.getObject("id", UUID.class), rs.getObject("ledger_id", UUID.class),
+                rs.getObject("period_id", UUID.class), rs.getObject("voucher_date", LocalDate.class),
+                rs.getString("voucher_type"), rs.getString("voucher_number"), rs.getString("summary"),
+                rs.getString("status"), rs.getBoolean("approval_required"), rs.getLong("version"),
+                lines(ledgerId, voucherId)) : null,
+                ledgerId, voucherId));
+    }
+
+    @Override
+    public List<VoucherResponses.Line> lines(UUID ledgerId, UUID voucherId) {
+        return jdbcTemplate.query("""
+                select id, line_no, account_id, side, currency, original_amount, exchange_rate, base_amount, summary
+                from voucher_line where ledger_id = ? and voucher_id = ? order by line_no
+                """, (rs, rowNum) -> line(rs.getObject("id", UUID.class), rs.getInt("line_no"),
+                rs.getObject("account_id", UUID.class), rs.getString("side"), rs.getString("currency"),
+                rs.getBigDecimal("original_amount"), rs.getBigDecimal("exchange_rate"),
+                rs.getBigDecimal("base_amount"), rs.getString("summary")), ledgerId, voucherId);
+    }
+
+    @Override
+    public Map<UUID, List<VoucherResponses.Line>> linesByVoucher(UUID ledgerId, List<UUID> voucherIds) {
+        if (voucherIds.isEmpty()) {
+            return Map.of();
+        }
+        String placeholders = String.join(",", java.util.Collections.nCopies(voucherIds.size(), "?"));
+        List<Object> arguments = new ArrayList<>();
+        arguments.add(ledgerId);
+        arguments.addAll(voucherIds);
+        return jdbcTemplate.query("""
+                select voucher_id, id, line_no, account_id, side, currency, original_amount, exchange_rate,
+                    base_amount, summary
+                from voucher_line where ledger_id = ? and voucher_id in (%s)
+                order by voucher_id, line_no
+                """.formatted(placeholders), rs -> {
+            Map<UUID, List<VoucherResponses.Line>> result = new HashMap<>();
+            while (rs.next()) {
+                UUID voucherId = rs.getObject("voucher_id", UUID.class);
+                result.computeIfAbsent(voucherId, ignored -> new ArrayList<>()).add(line(
+                        rs.getObject("id", UUID.class), rs.getInt("line_no"),
+                        rs.getObject("account_id", UUID.class), rs.getString("side"), rs.getString("currency"),
+                        rs.getBigDecimal("original_amount"), rs.getBigDecimal("exchange_rate"),
+                        rs.getBigDecimal("base_amount"), rs.getString("summary")));
+            }
+            return result;
+        }, arguments.toArray());
+    }
+
+    @Override
+    public Optional<VoucherState> findState(UUID ledgerId, UUID voucherId, boolean deletedOnly) {
+        String deletedClause = deletedOnly ? "deleted_at is not null" : "deleted_at is null";
+        return Optional.ofNullable(jdbcTemplate.query("""
+                select status, approval_required, version from voucher
+                where ledger_id = ? and id = ? and %s
+                """.formatted(deletedClause), rs -> rs.next() ? new VoucherState(rs.getString("status"),
+                rs.getBoolean("approval_required"), rs.getLong("version")) : null, ledgerId, voucherId));
+    }
+
+    @Override
+    public int lineCount(UUID ledgerId, UUID voucherId) {
+        Integer result = jdbcTemplate.queryForObject(
+                "select count(*) from voucher_line where ledger_id = ? and voucher_id = ?", Integer.class,
+                ledgerId, voucherId);
+        return result == null ? 0 : result;
+    }
+
+    @Override
+    public BigDecimal total(UUID ledgerId, UUID voucherId, String side) {
+        BigDecimal result = jdbcTemplate.queryForObject(
+                "select coalesce(sum(base_amount), 0) from voucher_line where ledger_id = ? and voucher_id = ? and side = ?",
+                BigDecimal.class, ledgerId, voucherId, side);
+        return result == null ? BigDecimal.ZERO : result;
+    }
+
+    @Override
+    public boolean changeStatus(UUID ledgerId, UUID voucherId, String expected, String next, UUID actorId) {
+        return jdbcTemplate.update("update voucher set status = ?, current_revision = current_revision + 1, "
+                + "version = version + 1, updated_at = now(), updated_by = ? "
+                + "where ledger_id = ? and id = ? and status = ?", next, actorId, ledgerId, voucherId, expected) == 1;
+    }
+
+    @Override
+    public boolean post(UUID ledgerId, UUID voucherId, String expectedStatus, UUID actorId) {
+        return jdbcTemplate.update("update voucher set status = 'POSTED', posted_at = now(), posted_by = ?, "
+                + "current_revision = current_revision + 1, version = version + 1, updated_at = now(), "
+                + "updated_by = ? where ledger_id = ? and id = ? and status = ?",
+                actorId, actorId, ledgerId, voucherId, expectedStatus) == 1;
+    }
+
+    @Override
+    public void recordApproval(UUID ledgerId, UUID voucherId, String action, String comment, UUID actorId) {
+        jdbcTemplate.update("""
+                insert into voucher_approval (id, ledger_id, voucher_id, action, comment, actor_id)
+                values (?, ?, ?, ?, ?, ?)
+                """, UUID.randomUUID(), ledgerId, voucherId, action, comment, actorId);
+    }
+
+    @Override
+    public boolean reversalExists(UUID ledgerId, UUID voucherId) {
+        return Boolean.TRUE.equals(jdbcTemplate.queryForObject("""
+                select exists (
+                    select 1 from voucher
+                    where ledger_id = ? and reversal_of_id = ? and deleted_at is null)
+                """, Boolean.class, ledgerId, voucherId));
+    }
+
+    @Override
+    public void markDeleted(UUID ledgerId, UUID voucherId) {
+        jdbcTemplate.update("update voucher set deleted_at = now() where ledger_id = ? and id = ?",
+                ledgerId, voucherId);
+    }
+
+    @Override
+    public void restoreDeleted(UUID ledgerId, UUID voucherId, UUID actorId) {
+        jdbcTemplate.update("update voucher set status = 'DRAFT', deleted_at = null, "
+                        + "current_revision = current_revision + 1, version = version + 1, updated_at = now(), "
+                        + "updated_by = ? where ledger_id = ? and id = ?",
+                actorId, ledgerId, voucherId);
+    }
+
+    @Override
+    public List<VoucherResponses.Revision> listRevisions(UUID ledgerId, UUID voucherId) {
+        return jdbcTemplate.query("""
+                select id, revision, action, actor_id, reason, before_data::text, after_data::text, created_at
+                from audit_revision where ledger_id = ? and aggregate_type = 'VOUCHER' and aggregate_id = ?
+                order by revision
+                """, (rs, rowNum) -> new VoucherResponses.Revision(rs.getObject("id", UUID.class),
+                rs.getInt("revision"), rs.getString("action"), rs.getObject("actor_id", UUID.class),
+                rs.getString("reason"), rs.getString("before_data"), rs.getString("after_data"),
+                rs.getObject("created_at", OffsetDateTime.class)), ledgerId, voucherId);
+    }
+
+    @Override
+    public Optional<String> findRevisionData(UUID ledgerId, UUID voucherId, int revision) {
+        return Optional.ofNullable(jdbcTemplate.query("""
+                select coalesce(after_data::text, before_data::text)
+                from audit_revision where ledger_id = ? and aggregate_type = 'VOUCHER'
+                    and aggregate_id = ? and revision = ?
+                """, rs -> rs.next() ? rs.getString(1) : null, ledgerId, voucherId, revision));
+    }
+
+    @Override
+    public void restoreHeader(UUID ledgerId, UUID voucherId, UUID periodId, LocalDate voucherDate,
+                              String voucherType, String voucherNumber, String summary, boolean approvalRequired,
+                              UUID actorId) {
+        jdbcTemplate.update("""
+                update voucher set period_id = ?, voucher_date = ?, voucher_type = ?, voucher_number = ?,
+                    summary = ?, approval_required = ?, status = 'DRAFT', current_revision = current_revision + 1,
+                    version = version + 1, updated_at = now(), updated_by = ? where ledger_id = ? and id = ?
+                """, periodId, voucherDate, voucherType, voucherNumber, summary, approvalRequired, actorId,
+                ledgerId, voucherId);
+    }
+
+    @Override
+    public int currentRevision(UUID ledgerId, UUID voucherId) {
+        Integer revision = jdbcTemplate.queryForObject(
+                "select current_revision from voucher where ledger_id = ? and id = ?", Integer.class,
+                ledgerId, voucherId);
+        return revision == null ? 0 : revision;
+    }
+
+    @Override
+    public void recordRevision(UUID ledgerId, UUID voucherId, int revision, String action, UUID actorId,
+                               String reason, String beforeData, String afterData) {
+        jdbcTemplate.update("""
+                insert into audit_revision (id, ledger_id, aggregate_type, aggregate_id, revision, action,
+                    actor_id, reason, before_data, after_data)
+                values (?, ?, 'VOUCHER', ?, ?, ?, ?, ?, ?::jsonb, ?::jsonb)
+                """, UUID.randomUUID(), ledgerId, voucherId, revision, action, actorId, reason,
+                beforeData, afterData);
+    }
+
+    @Override
+    public Optional<UUID> reversalOf(UUID ledgerId, UUID voucherId) {
+        return Optional.ofNullable(jdbcTemplate.query("""
+                select reversal_of_id from voucher where ledger_id = ? and id = ?
+                """, rs -> rs.next() ? rs.getObject(1, UUID.class) : null, ledgerId, voucherId));
+    }
+
+    @Override
+    public void markReversedBy(UUID ledgerId, UUID voucherId, UUID reversalId, UUID actorId) {
+        jdbcTemplate.update("""
+                update voucher set reversed_by_id = ?, updated_at = now(), updated_by = ?
+                where ledger_id = ? and id = ?
+                """, reversalId, actorId, ledgerId, voucherId);
+    }
+
+    private VoucherResponses.Voucher voucher(UUID id, UUID ledgerId, UUID periodId, LocalDate voucherDate,
+                                              String voucherType, String voucherNumber, String summary, String status,
+                                              boolean approvalRequired, long version, List<VoucherResponses.Line> lines) {
+        return new VoucherResponses.Voucher(id, ledgerId, periodId, voucherDate, voucherType, voucherNumber,
+                summary, status, approvalRequired, version, lines);
+    }
+
+    private VoucherResponses.Line line(UUID id, int lineNo, UUID accountId, String side, String currency,
+                                        BigDecimal originalAmount, BigDecimal exchangeRate, BigDecimal baseAmount,
+                                        String summary) {
+        return new VoucherResponses.Line(id, lineNo, accountId, side, currency, originalAmount, exchangeRate,
+                baseAmount, summary);
+    }
+}

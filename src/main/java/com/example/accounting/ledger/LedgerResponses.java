@@ -13,7 +13,8 @@ public final class LedgerResponses {
                          String baseCurrency, LocalDate startDate, boolean approvalEnabled, String status) {
     }
 
-    public record Member(UUID userId, LedgerRole role, MembershipStatus status) {
+    public record Member(UUID userId, LedgerRole role, MembershipStatus status,
+                         String displayName, String email) {
     }
 
     public record Account(UUID id, UUID ledgerId, String code, String name, String category,

@@ -56,6 +56,11 @@ class Stage4ReportingTest {
         assertThat(lines).extracting(ReportResponses.TrialBalanceLine::debit)
                 .contains(new BigDecimal("100.00"));
         assertThat(reportingService.balanceSheet(userId, ledgerId, "2026-01").totalLines()).isGreaterThan(0);
+        assertThat(reportingService.balanceSheet(userId, ledgerId, "2026-01").lines())
+                .filteredOn(line -> line.code().equals("3001"))
+                .singleElement()
+                .extracting(ReportResponses.StatementLine::amount)
+                .isEqualTo(new BigDecimal("50.00"));
         assertThat(reportingService.incomeStatement(userId, ledgerId, "2026-01").totalLines()).isGreaterThan(0);
         assertThat(reportingService.generalLedger(userId, ledgerId, "2026-01")).hasSize(3);
         assertThat(reportingService.subLedger(userId, ledgerId, "2026-01")).hasSize(3);
@@ -69,6 +74,29 @@ class Stage4ReportingTest {
         assertThatThrownBy(() -> reportingService.financeQuery(userId, ledgerId,
                 new FinanceQueryRequests.Query("SQL", null, null, List.of("ACCOUNT"), null)))
                 .isInstanceOf(ApiProblemException.class);
+
+        List<ReportResponses.FinanceQueryLine> aggregate = reportingService.financeQuery(userId, ledgerId,
+                new FinanceQueryRequests.Query("DEBIT", "2026-01", "2026-01", List.of("MONTH"),
+                        new FinanceQueryRequests.Filters(null, "CNY")));
+        assertThat(aggregate).singleElement().satisfies(line -> {
+            assertThat(line.groupKey()).isEqualTo("2026-01");
+            assertThat(line.amount()).isEqualByComparingTo("100.00");
+        });
+
+        jdbcTemplate.update("""
+                update report_formula_snapshot
+                set formula_json = jsonb_set(formula_json, '{creditCategories}', '[]'::jsonb)
+                where ledger_id = ? and code = 'BALANCE_SHEET'
+                """, ledgerId);
+        assertThat(reportingService.balanceSheet(userId, ledgerId, "2026-01").lines())
+                .extracting(ReportResponses.StatementLine::code)
+                .containsExactly("1001");
+
+        VoucherResponses.Voucher reversal = voucherService.reverse(userId, ledgerId, voucher.id());
+        voucherService.validate(userId, ledgerId, reversal.id());
+        voucherService.post(userId, ledgerId, reversal.id());
+        assertThat(reportingService.trialBalance(userId, ledgerId, "2026-01"))
+                .allSatisfy(line -> assertThat(line.balance()).isEqualByComparingTo(BigDecimal.ZERO));
     }
 
     private VoucherRequests.Line line(UUID accountId, String side, String amount) {

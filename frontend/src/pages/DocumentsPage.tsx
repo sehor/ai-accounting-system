@@ -1,0 +1,18 @@
+import { Alert, Button, Card, Empty, List, Modal, Space, Tag, Typography, Upload, message } from 'antd'
+import { UploadOutlined } from '@ant-design/icons'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useParams, useNavigate } from 'react-router-dom'
+import { apiFetch } from '../api/client'
+import type { DocumentRecord, Extraction, Voucher } from '../api/types'
+import { useAuth } from '../auth/AuthProvider'
+
+const allowed = ['application/pdf', 'image/jpeg', 'image/png']
+export function DocumentsPage() {
+  const { ledgerId = '' } = useParams(); const { session } = useAuth(); const client = useQueryClient(); const navigate = useNavigate(); const [messageApi, contextHolder] = message.useMessage()
+  const documents = useQuery({ queryKey: ['documents', ledgerId], queryFn: () => apiFetch<DocumentRecord[]>(`/ledgers/${ledgerId}/documents?limit=100&offset=0`, session!), enabled: Boolean(session && ledgerId) })
+  const upload = useMutation({ mutationFn: (file: File) => { const body = new FormData(); body.append('file', file); return apiFetch<DocumentRecord>(`/ledgers/${ledgerId}/documents`, session!, { method: 'POST', body }) }, onSuccess: () => void client.invalidateQueries({ queryKey: ['documents', ledgerId] }) })
+  const extract = async (document: DocumentRecord) => { try { const result = await apiFetch<Extraction>(`/ledgers/${ledgerId}/documents/${document.id}:extract`, session!, { method: 'POST' }); Modal.info({ title: 'Mock 提取结果', content: <pre style={{ whiteSpace: 'pre-wrap' }}>{result.structuredResult}</pre> }) } catch { messageApi.error('提取失败') } }
+  const download = async (document: DocumentRecord) => { try { const blob = await apiFetch<Blob>(`/ledgers/${ledgerId}/documents/${document.id}/content`, session!); const url = URL.createObjectURL(blob); const anchor = window.document.createElement('a'); anchor.href = url; anchor.download = document.fileName; anchor.click(); URL.revokeObjectURL(url) } catch { messageApi.error('下载失败') } }
+  const createDraft = async (document: DocumentRecord) => { try { const draft = await apiFetch<Voucher>(`/ledgers/${ledgerId}/documents/${document.id}:create-voucher-draft`, session!, { method: 'POST' }); navigate(`/ledgers/${ledgerId}/vouchers/${draft.id}`) } catch { messageApi.error('生成凭证草稿失败') } }
+  return <>{contextHolder}<Space direction="vertical" size={16} style={{ width: '100%' }}><div className="page-heading"><div><Typography.Title level={1}>附件与提取</Typography.Title><Typography.Text type="secondary">支持 PDF、JPEG、PNG，单文件不超过 20 MB。</Typography.Text></div><Upload beforeUpload={(file) => { if (!allowed.includes(file.type) || file.size > 20 * 1024 * 1024) { messageApi.error('仅支持 PDF/JPEG/PNG，且不超过 20 MB'); return Upload.LIST_IGNORE } upload.mutate(file); return false }} showUploadList={false}><Button type="primary" icon={<UploadOutlined />} loading={upload.isPending}>上传附件</Button></Upload></div>{documents.isError && <Alert type="error" message="附件列表读取失败" />}<Card><List loading={documents.isLoading} dataSource={documents.data || []} locale={{ emptyText: <Empty description="暂无附件" /> }} renderItem={(document) => <List.Item actions={[<Button type="link" onClick={() => void download(document)}>下载</Button>, <Button type="link" onClick={() => void extract(document)}>Mock 提取</Button>, <Button type="link" onClick={() => void createDraft(document)}>生成凭证草稿</Button>]}><List.Item.Meta title={document.fileName} description={`${document.contentType} · ${Math.round(document.sizeBytes / 1024)} KB · ${new Date(document.createdAt).toLocaleString('zh-CN')}`} /><Tag color={document.duplicateWarning ? 'orange' : 'green'}>{document.duplicateWarning ? '重复文件' : document.status}</Tag></List.Item>} /></Card></Space></>
+}

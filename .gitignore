@@ -1,4 +1,8 @@
 target/
+node_modules/
+frontend/dist/
+frontend/playwright-report/
+frontend/test-results/
 data/
 graphify-out/cache/
 .env

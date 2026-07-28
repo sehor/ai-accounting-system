@@ -106,6 +106,10 @@ class Stage3VoucherTest {
         VoucherResponses.Voucher reversal = voucherService.reverse(userId, ledgerId, voucher.id());
         assertThat(reversal.status()).isEqualTo("DRAFT");
         assertThat(reversal.lines().get(0).side()).isNotEqualTo(voucher.lines().get(0).side());
+        assertThat(voucherService.find(userId, ledgerId, voucher.id()).status()).isEqualTo("POSTED");
+
+        voucherService.validate(userId, ledgerId, reversal.id());
+        assertThat(voucherService.post(userId, ledgerId, reversal.id()).status()).isEqualTo("POSTED");
         assertThat(voucherService.find(userId, ledgerId, voucher.id()).status()).isEqualTo("REVERSED");
     }
 
@@ -170,7 +174,17 @@ class Stage3VoucherTest {
                 .isInstanceOf(ApiProblemException.class)
                 .extracting(exception -> ((ApiProblemException) exception).code())
                 .isEqualTo("RESOURCE_VERSION_CONFLICT");
-        assertThat(voucherService.restoreRevision(userId, ledgerId, voucher.id(), 2).status()).isEqualTo("DRAFT");
+        List<VoucherRequests.Line> latestLines = List.of(line(accountId(ledgerId, "1001"), "DEBIT", "2"),
+                line(accountId(ledgerId, "3001"), "CREDIT", "2"));
+        assertThat(voucherService.update(userId, ledgerId, voucher.id(), new VoucherRequests.Update(1L, periodId,
+                voucher.voucherDate(), voucher.voucherType(), voucher.voucherNumber(), "Latest", latestLines)).summary())
+                .isEqualTo("Latest");
+
+        VoucherResponses.Voucher restored = voucherService.restoreRevision(userId, ledgerId, voucher.id(), 2);
+        assertThat(restored.status()).isEqualTo("DRAFT");
+        assertThat(restored.summary()).isEqualTo("After");
+        assertThat(restored.lines()).extracting(VoucherResponses.Line::originalAmount)
+                .containsOnly(new BigDecimal("1.0000"));
     }
 
     private VoucherRequests.Line line(UUID accountId, String side, String amount) {

@@ -1,5 +1,6 @@
 package com.example.accounting.agent;
 
+import com.example.accounting.agent.internal.port.AgentToolAuditRepository;
 import com.example.accounting.identity.CurrentUserResolver;
 import com.example.accounting.ledger.LedgerResponses;
 import com.example.accounting.ledger.LedgerService;
@@ -22,13 +23,14 @@ import java.util.HexFormat;
 import java.util.List;
 import java.util.UUID;
 import java.util.function.Supplier;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.ai.mcp.annotation.McpTool;
 import org.springframework.ai.mcp.annotation.McpToolParam;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
+@Transactional
 public class FinanceMcpTools {
 
     private final CurrentUserResolver currentUserResolver;
@@ -38,12 +40,12 @@ public class FinanceMcpTools {
     private final DocumentService documentService;
     private final ExtractionService extractionService;
     private final JobService jobService;
-    private final JdbcTemplate jdbcTemplate;
+    private final AgentToolAuditRepository audits;
 
     public FinanceMcpTools(CurrentUserResolver currentUserResolver, LedgerService ledgerService,
                            ReportingService reportingService, VoucherService voucherService,
                            DocumentService documentService, ExtractionService extractionService,
-                           JobService jobService, JdbcTemplate jdbcTemplate) {
+                           JobService jobService, AgentToolAuditRepository audits) {
         this.currentUserResolver = currentUserResolver;
         this.ledgerService = ledgerService;
         this.reportingService = reportingService;
@@ -51,14 +53,14 @@ public class FinanceMcpTools {
         this.documentService = documentService;
         this.extractionService = extractionService;
         this.jobService = jobService;
-        this.jdbcTemplate = jdbcTemplate;
+        this.audits = audits;
     }
 
     @McpTool(name = "list_ledgers", description = "List ledgers available to the authenticated user")
     @PreAuthorize("isAuthenticated()")
     public List<LedgerResponses.Ledger> listLedgers() {
         UUID actorId = actor();
-        return audited("list_ledgers", null, "", () -> ledgerService.list(actorId));
+        return audited(actorId, "list_ledgers", null, "", () -> ledgerService.list(actorId));
     }
 
     @McpTool(name = "finance_query", description = "Run one whitelisted finance report query")
@@ -68,7 +70,7 @@ public class FinanceMcpTools {
             @McpToolParam(description = "One of trial_balance, balance_sheet, income_statement, general_ledger, sub_ledger") String report,
             @McpToolParam(description = "Accounting period code, or null for all periods", required = false) String periodCode) {
         UUID actorId = actor();
-        return audited("finance_query", ledgerId, report + ":" + periodCode, () -> switch (report) {
+        return audited(actorId, "finance_query", ledgerId, report + ":" + periodCode, () -> switch (report) {
             case "trial_balance" -> reportingService.trialBalance(actorId, ledgerId, periodCode);
             case "balance_sheet" -> reportingService.balanceSheet(actorId, ledgerId, periodCode);
             case "income_statement" -> reportingService.incomeStatement(actorId, ledgerId, periodCode);
@@ -85,7 +87,7 @@ public class FinanceMcpTools {
             @McpToolParam(description = "Ledger identifier") UUID ledgerId,
             @McpToolParam(description = "Voucher identifier") UUID voucherId) {
         UUID actorId = actor();
-        return audited("get_voucher", ledgerId, voucherId.toString(),
+        return audited(actorId, "get_voucher", ledgerId, voucherId.toString(),
                 () -> voucherService.find(actorId, ledgerId, voucherId));
     }
 
@@ -95,7 +97,7 @@ public class FinanceMcpTools {
             @McpToolParam(description = "Draft voucher payload") VoucherRequests.Create request,
             @McpToolParam(description = "Ledger identifier") UUID ledgerId) {
         UUID actorId = actor();
-        return audited("create_voucher_draft", ledgerId, request.toString(),
+        return audited(actorId, "create_voucher_draft", ledgerId, request.toString(),
                 () -> voucherService.create(actorId, ledgerId, request));
     }
 
@@ -105,7 +107,7 @@ public class FinanceMcpTools {
             @McpToolParam(description = "Ledger identifier") UUID ledgerId,
             @McpToolParam(description = "Voucher identifier") UUID voucherId) {
         UUID actorId = actor();
-        return audited("validate_voucher", ledgerId, voucherId.toString(),
+        return audited(actorId, "validate_voucher", ledgerId, voucherId.toString(),
                 () -> voucherService.validate(actorId, ledgerId, voucherId));
     }
 
@@ -125,7 +127,7 @@ public class FinanceMcpTools {
             throw new ApiProblemException(400, "DOCUMENT_CONTENT_INVALID", "Invalid document content",
                     "The document content must be base64", false);
         }
-        return audited("upload_document", ledgerId, fileName + ":" + content.length,
+        return audited(actorId, "upload_document", ledgerId, fileName + ":" + content.length,
                 () -> documentService.upload(actorId, ledgerId, fileName, contentType, content.length,
                         new ByteArrayInputStream(content)));
     }
@@ -136,7 +138,7 @@ public class FinanceMcpTools {
             @McpToolParam(description = "Ledger identifier") UUID ledgerId,
             @McpToolParam(description = "Document identifier") UUID documentId) {
         UUID actorId = actor();
-        return audited("extract_document", ledgerId, documentId.toString(),
+        return audited(actorId, "extract_document", ledgerId, documentId.toString(),
                 () -> extractionService.extractMock(actorId, ledgerId, documentId));
     }
 
@@ -146,7 +148,7 @@ public class FinanceMcpTools {
             @McpToolParam(description = "Ledger identifier") UUID ledgerId,
             @McpToolParam(description = "Job identifier") UUID jobId) {
         UUID actorId = actor();
-        return audited("get_job_status", ledgerId, jobId.toString(),
+        return audited(actorId, "get_job_status", ledgerId, jobId.toString(),
                 () -> jobService.find(actorId, ledgerId, jobId));
     }
 
@@ -156,7 +158,7 @@ public class FinanceMcpTools {
             @McpToolParam(description = "Ledger identifier") UUID ledgerId,
             @McpToolParam(description = "Document identifier") UUID documentId) {
         UUID actorId = actor();
-        return audited("create_voucher_draft_from_document", ledgerId, documentId.toString(),
+        return audited(actorId, "create_voucher_draft_from_document", ledgerId, documentId.toString(),
                 () -> extractionService.createVoucherDraft(actorId, ledgerId, documentId));
     }
 
@@ -164,13 +166,9 @@ public class FinanceMcpTools {
         return currentUserResolver.resolveAuthenticatedUser();
     }
 
-    private <T> T audited(String toolName, UUID ledgerId, String input, Supplier<T> action) {
-        UUID actorId = actor();
+    private <T> T audited(UUID actorId, String toolName, UUID ledgerId, String input, Supplier<T> action) {
         T result = action.get();
-        jdbcTemplate.update("""
-                insert into agent_tool_audit (id, tool_name, ledger_id, actor_id, trace_id, input_hash, result_hash)
-                values (?, ?, ?, ?, ?, ?, ?)
-                """, UUID.randomUUID(), toolName, ledgerId, actorId, UUID.randomUUID(), hash(input), hash(result));
+        audits.record(toolName, ledgerId, actorId, UUID.randomUUID(), hash(input), hash(result));
         return result;
     }
 

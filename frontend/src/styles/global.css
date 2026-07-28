@@ -1,0 +1,22 @@
+:root {
+  font-family: "Inter", "Microsoft YaHei", "PingFang SC", sans-serif;
+  color: #1f2937;
+  background: #f3f5f7;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; min-width: 320px; background: #f3f5f7; }
+.ant-typography-secondary { color: #595959 !important; }
+button, input, textarea, select { font: inherit; }
+a { color: inherit; }
+.app-content { min-height: calc(100vh - 56px); padding: 24px; }
+.page-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 20px; }
+.page-heading h1 { margin: 0; font-size: 24px; }
+.financial-table .ant-table-thead > tr > th { white-space: nowrap; }
+@media (max-width: 768px) {
+  .app-content { padding: 16px; }
+  .page-heading { align-items: flex-start; flex-direction: column; }
+  .financial-table { overflow-x: auto; }
+}

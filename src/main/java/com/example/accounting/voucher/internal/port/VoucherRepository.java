@@ -1,0 +1,86 @@
+package com.example.accounting.voucher.internal.port;
+
+import com.example.accounting.voucher.VoucherResponses;
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.UUID;
+
+public interface VoucherRepository {
+
+    boolean reserveIdempotency(UUID ledgerId, UUID actorId, String key, String requestHash, UUID voucherId);
+
+    Optional<Idempotency> findIdempotency(UUID ledgerId, UUID actorId, String key);
+
+    Optional<LedgerContext> findLedgerContext(UUID ledgerId, UUID periodId);
+
+    boolean activeAccountExists(UUID ledgerId, UUID accountId);
+
+    void createVoucher(UUID voucherId, UUID ledgerId, UUID periodId, LocalDate voucherDate, String voucherType,
+                       String voucherNumber, String summary, boolean approvalRequired, UUID reversalOfId,
+                       UUID actorId);
+
+    boolean updateDraft(UUID ledgerId, UUID voucherId, UUID periodId, LocalDate voucherDate, String voucherType,
+                        String voucherNumber, String summary, boolean approvalRequired, UUID actorId,
+                        long expectedVersion);
+
+    void deleteLines(UUID ledgerId, UUID voucherId);
+
+    void createLine(UUID lineId, UUID ledgerId, UUID voucherId, int lineNo, UUID accountId, String side,
+                    String currency, BigDecimal originalAmount, BigDecimal exchangeRate, BigDecimal baseAmount,
+                    String summary);
+
+    List<VoucherResponses.Voucher> list(UUID ledgerId, int limit, int offset);
+
+    Optional<VoucherResponses.Voucher> find(UUID ledgerId, UUID voucherId, boolean includeDeleted);
+
+    List<VoucherResponses.Line> lines(UUID ledgerId, UUID voucherId);
+
+    Map<UUID, List<VoucherResponses.Line>> linesByVoucher(UUID ledgerId, List<UUID> voucherIds);
+
+    Optional<VoucherState> findState(UUID ledgerId, UUID voucherId, boolean deletedOnly);
+
+    int lineCount(UUID ledgerId, UUID voucherId);
+
+    BigDecimal total(UUID ledgerId, UUID voucherId, String side);
+
+    boolean changeStatus(UUID ledgerId, UUID voucherId, String expected, String next, UUID actorId);
+
+    boolean post(UUID ledgerId, UUID voucherId, String expectedStatus, UUID actorId);
+
+    void recordApproval(UUID ledgerId, UUID voucherId, String action, String comment, UUID actorId);
+
+    boolean reversalExists(UUID ledgerId, UUID voucherId);
+
+    void markDeleted(UUID ledgerId, UUID voucherId);
+
+    void restoreDeleted(UUID ledgerId, UUID voucherId, UUID actorId);
+
+    List<VoucherResponses.Revision> listRevisions(UUID ledgerId, UUID voucherId);
+
+    Optional<String> findRevisionData(UUID ledgerId, UUID voucherId, int revision);
+
+    void restoreHeader(UUID ledgerId, UUID voucherId, UUID periodId, LocalDate voucherDate, String voucherType,
+                       String voucherNumber, String summary, boolean approvalRequired, UUID actorId);
+
+    int currentRevision(UUID ledgerId, UUID voucherId);
+
+    void recordRevision(UUID ledgerId, UUID voucherId, int revision, String action, UUID actorId, String reason,
+                        String beforeData, String afterData);
+
+    Optional<UUID> reversalOf(UUID ledgerId, UUID voucherId);
+
+    void markReversedBy(UUID ledgerId, UUID voucherId, UUID reversalId, UUID actorId);
+
+    record Idempotency(String requestHash, UUID voucherId) {
+    }
+
+    record LedgerContext(String baseCurrency, boolean approvalRequired, String status,
+                         LocalDate startDate, LocalDate endDate) {
+    }
+
+    record VoucherState(String status, boolean approvalRequired, long version) {
+    }
+}

@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.RequestParam;
 
 @RestController
 @RequestMapping("/v1/ledgers/{ledgerId}/vouchers")
@@ -29,8 +30,10 @@ public class VoucherController {
     }
 
     @GetMapping
-    public List<VoucherResponses.Voucher> list(HttpServletRequest request, @PathVariable UUID ledgerId) {
-        return voucherService.list(user(request), ledgerId);
+    public List<VoucherResponses.Voucher> list(HttpServletRequest request, @PathVariable UUID ledgerId,
+                                                @RequestParam(defaultValue = "100") int limit,
+                                                @RequestParam(defaultValue = "0") int offset) {
+        return voucherService.list(user(request), ledgerId, limit, offset);
     }
 
     @PostMapping

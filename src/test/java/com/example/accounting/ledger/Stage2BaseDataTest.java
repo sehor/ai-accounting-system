@@ -81,6 +81,49 @@ class Stage2BaseDataTest {
     }
 
     @Test
+    void replacesOpeningBalancesInsteadOfMergingThem() {
+        UUID userId = UUID.randomUUID();
+        UUID ledgerId = ledgerService.create(
+                new CurrentUserResolver.ResolvedUser(userId, "test", userId.toString()),
+                createRequest("replace-opening")).id();
+        UUID periodId = ledgerService.periodId(ledgerId, "2026-01");
+        LedgerRequests.OpeningBalanceLine cash = new LedgerRequests.OpeningBalanceLine(
+                ledgerService.accountId(ledgerId, "1001"), periodId, "CNY", "",
+                new BigDecimal("100.00"), BigDecimal.ZERO, BigDecimal.ONE);
+        LedgerRequests.OpeningBalanceLine capital = new LedgerRequests.OpeningBalanceLine(
+                ledgerService.accountId(ledgerId, "3001"), periodId, "CNY", "",
+                BigDecimal.ZERO, new BigDecimal("100.00"), BigDecimal.ONE);
+
+        ledgerService.replaceOpeningBalances(userId, ledgerId, List.of(cash, capital));
+
+        assertThat(ledgerService.replaceOpeningBalances(userId, ledgerId, List.of(cash)))
+                .singleElement()
+                .extracting(LedgerResponses.OpeningBalance::accountId)
+                .isEqualTo(cash.accountId());
+    }
+
+    @Test
+    void keepsAtLeastOneActiveOwner() {
+        UUID firstOwner = UUID.randomUUID();
+        UUID secondOwner = UUID.randomUUID();
+        UUID ledgerId = ledgerService.create(
+                new CurrentUserResolver.ResolvedUser(firstOwner, "test", firstOwner.toString()),
+                createRequest("owner-guard")).id();
+        ledgerService.create(new CurrentUserResolver.ResolvedUser(secondOwner, "test", secondOwner.toString()),
+                createRequest("second-owner-user"));
+        ledgerService.addMember(firstOwner, ledgerId, new LedgerRequests.AddMember(secondOwner, LedgerRole.OWNER));
+
+        ledgerService.updateMember(firstOwner, ledgerId, firstOwner,
+                new LedgerRequests.UpdateMember(LedgerRole.VIEWER, MembershipStatus.ACTIVE));
+
+        assertThatThrownBy(() -> ledgerService.updateMember(secondOwner, ledgerId, secondOwner,
+                new LedgerRequests.UpdateMember(LedgerRole.VIEWER, MembershipStatus.ACTIVE)))
+                .isInstanceOf(ApiProblemException.class)
+                .extracting(exception -> ((ApiProblemException) exception).code())
+                .isEqualTo("LAST_OWNER_REQUIRED");
+    }
+
+    @Test
     void closesAndReopensPeriodsWithAnAuditTrail() {
         UUID userId = UUID.randomUUID();
         UUID ledgerId = ledgerService.create(
