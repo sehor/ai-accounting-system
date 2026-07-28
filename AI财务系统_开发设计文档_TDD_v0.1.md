@@ -34,9 +34,9 @@
 | 数据库迁移 | Flyway |
 | 模块约束 | Spring Modulith |
 | API 文档 | springdoc-openapi 3.0.3 |
-| 对象存储 | AWS SDK for Java v2 S3 Client；开发环境 MinIO |
+| 文件存储 | 本地文件系统，根目录由 `STORAGE_ROOT` 配置 |
 | 异步任务 | PostgreSQL 任务表 |
-| 测试 | JUnit 5、Spring Security Test、Testcontainers |
+| 测试 | JUnit 5、Spring Security Test、本机 PostgreSQL |
 | 构建 | Maven Wrapper |
 | 监控 | Spring Boot Actuator、Micrometer |
 
@@ -73,7 +73,7 @@ Application Services
     │
     ├── JPA：事务写入
     ├── JdbcClient：账簿与报表查询
-    ├── S3：附件对象
+    ├── 本地文件系统：附件对象
     └── PostgreSQL：业务数据、审计、任务队列
 ```
 
@@ -99,7 +99,6 @@ Application Services
 ├── pom.xml
 ├── mvnw
 ├── mvnw.cmd
-├── compose.yaml
 ├── src
 │   ├── main
 │   │   ├── java/com/example/accounting
@@ -130,8 +129,8 @@ Application Services
 - `spring-boot-starter-jdbc`
 - `spring-boot-starter-actuator`
 - `spring-modulith-starter-core`
-- PostgreSQL Driver、Flyway、springdoc、AWS S3 SDK
-- 测试范围的 Testcontainers PostgreSQL 和 MinIO
+- PostgreSQL Driver、Flyway、springdoc
+- 测试直接连接配置的本机 PostgreSQL，附件使用本地文件系统
 
 MCP 阶段再加入 Spring AI MCP Server 依赖；此前不提前引入 Spring AI。
 
@@ -624,7 +623,7 @@ DRAFT → VALIDATED → SUBMITTED → APPROVED → POSTED
 - 最大 20 MB，服务端和反向代理同时限制。
 - 上传时流式计算 SHA-256，禁止一次性载入内存。
 - 对象键使用不可猜测 UUID，不使用原始文件名作为路径。
-- 文件写入 S3/MinIO，数据库保存对象键与元数据。
+- 文件写入本地文件系统，数据库保存对象键与元数据。
 - 替换文件创建新对象，不原位覆盖。
 - 同账套哈希或业务字段疑似重复时返回 `warnings`，仍创建记录。
 
@@ -697,7 +696,7 @@ MCP 使用与 REST 相同的 JWT 身份、`LedgerAccessService` 和应用服务�
 ### 14.1 可观测性
 
 - Actuator 提供 health、readiness、liveness 和 metrics。
-- Micrometer 记录请求耗时、错误数、数据库连接、任务状态、S3 调用和凭证命令耗时。
+- Micrometer 记录请求耗时、错误数、数据库连接、任务状态、文件存储调用和凭证命令耗时。
 - 结构化日志包含 `traceId`、`userId`、`ledgerId` 和业务对象 ID。
 - 日志不得包含 JWT、附件正文、完整财务报表或原始模型输入输出。
 
@@ -710,7 +709,7 @@ MCP 使用与 REST 相同的 JWT 身份、`LedgerAccessService` 和应用服务�
 
 ## 15. 测试策略
 
-不使用 H2。数据库相关测试统一运行 PostgreSQL Testcontainers，附件集成测试使用 MinIO。
+不使用 H2。数据库相关测试直接连接配置的本机 PostgreSQL，附件集成测试使用本地文件系统。
 
 最小测试层次：
 
@@ -719,7 +718,7 @@ MCP 使用与 REST 相同的 JWT 身份、`LedgerAccessService` 和应用服务�
 3. API 集成测试：JWT、角色权限、Problem Details、幂等和乐观锁。
 4. 报表金样测试：固定凭证集对应固定余额表和法定报表结果。
 5. 跨账套安全测试：读取、写入、关联引用全部拒绝。
-6. S3/任务测试：上传、哈希、重复警告、重试和 Mock 提取。
+6. 文件/任务测试：上传、哈希、重复警告、重试和 Mock 提取。
 7. Modulith 校验：禁止越过模块公开边界。
 
 每个业务功能至少包含正常路径、非法状态、权限不足和跨账套四类测试；纯查询功能可省略不适用的状态测试。
@@ -735,16 +734,15 @@ MCP 使用与 REST 相同的 JWT 身份、`LedgerAccessService` 和应用服务�
 1. 创建 Java 21、Spring Boot 4.1 Maven Wrapper 工程。
 2. 加入 Web、Validation、Security、JPA、JDBC、Actuator、Flyway、PostgreSQL 和测试依赖。
 3. 建立模块包、Modulith 边界测试和统一编码格式。
-4. 配置 PostgreSQL、MinIO 的 `compose.yaml`。
+4. 配置本机 PostgreSQL、Flyway 和本地文件存储。
 5. 实现 `ProblemDetail` 异常映射、`traceId` 过滤器和基础审计上下文。
-6. 配置 Testcontainers 基类或共享容器声明。
 
 验收：
 
 - 应用可连接本地 PostgreSQL 启动。
 - Flyway 空基线成功。
 - 健康检查可用。
-- `verify` 可在无本地数据库依赖的情况下通过 Testcontainers 完成。
+- `verify` 在配置的本机 PostgreSQL 上通过。
 
 ### 阶段 1：身份、账套与隔离
 
@@ -825,7 +823,7 @@ MCP 使用与 REST 相同的 JWT 身份、`LedgerAccessService` 和应用服务�
 任务：
 
 1. 创建文档、提取结果和任务表。
-2. 实现 S3/MinIO 流式上传、类型/大小校验和 SHA-256。
+2. 实现本地文件存储流式上传、类型/大小校验和 SHA-256。
 3. 实现重复警告，不设置阻断分支。
 4. 实现 `SKIP LOCKED` 任务领取、状态转换和重试。
 5. 实现 Mock 提取器和结构化结果保存。
@@ -860,9 +858,9 @@ MCP 使用与 REST 相同的 JWT 身份、`LedgerAccessService` 和应用服务�
 
 1. 补齐 OpenAPI 描述、示例和稳定错误码清单。
 2. 完成全部隔离、权限、幂等、并发和恢复测试。
-3. 验证数据库备份恢复、MinIO 对象备份和 Flyway 升级。
+3. 验证数据库备份恢复、本地文件备份和 Flyway 升级。
 4. 运行常用报表与凭证操作的基准测试。
-5. 完成 Docker 自托管配置、环境变量清单和启动检查。
+5. 完成自托管配置、环境变量清单和启动检查。
 
 验收：
 
@@ -877,11 +875,9 @@ MCP 使用与 REST 相同的 JWT 身份、`LedgerAccessService` 和应用服务�
 常用命令：
 
 ```powershell
-docker compose up -d postgres minio
 .\mvnw.cmd spring-boot:run
 .\mvnw.cmd test
 .\mvnw.cmd verify
-docker compose up --build
 ```
 
 Coding Agent 每次实现一个可独立验收的任务：
@@ -912,8 +908,6 @@ Coding Agent 每次实现一个可独立验收的任务：
 - [Spring Security JWT Resource Server](https://docs.spring.io/spring-security/reference/servlet/oauth2/resource-server/jwt.html)
 - [Spring Modulith](https://docs.spring.io/spring-modulith/reference/1.4/fundamentals.html)
 - [Spring JdbcClient](https://docs.spring.io/spring-framework/reference/data-access/jdbc/core.html)
-- [Spring Boot Testcontainers](https://docs.spring.io/spring-boot/reference/testing/testcontainers.html)
 - [Spring Framework Problem Details](https://docs.spring.io/spring-framework/reference/web/webmvc/mvc-ann-rest-exceptions.html)
 - [Spring AI MCP](https://docs.spring.io/spring-ai/reference/api/mcp/mcp-overview.html)
 - [springdoc-openapi](https://springdoc.org/v4/index.html)
-- [AWS SDK for Java v2 S3](https://docs.aws.amazon.com/sdk-for-java/latest/developer-guide/examples-s3.html)

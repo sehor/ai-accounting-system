@@ -1,2 +1,2 @@
-/** 审计与幂等 模块。 */
+/** Audit query and immutable business audit records. */
 package com.example.accounting.audit;

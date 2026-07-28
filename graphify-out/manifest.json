@@ -5,8 +5,8 @@
     "semantic_hash": ""
   },
   "pom.xml": {
-    "mtime": 1785116397.5787258,
-    "ast_hash": "a93f88e65f9c502d82ec0524a085296b",
+    "mtime": 1785135133.0590749,
+    "ast_hash": "3508c13b3637c695ce6c202425b6e964",
     "semantic_hash": ""
   },
   "src/main/java/com/example/accounting/AccountingApplication.java": {
@@ -20,8 +20,8 @@
     "semantic_hash": ""
   },
   "src/main/java/com/example/accounting/audit/package-info.java": {
-    "mtime": 1785115941.599267,
-    "ast_hash": "024e2fd42884a600283d90f5970752b6",
+    "mtime": 1785135795.250898,
+    "ast_hash": "f7a227680cca36ae7cb5f1ee45f0994c",
     "semantic_hash": ""
   },
   "src/main/java/com/example/accounting/documents/package-info.java": {
@@ -70,18 +70,18 @@
     "semantic_hash": ""
   },
   "AI\u8d22\u52a1\u7cfb\u7edf_\u5f00\u53d1\u8bbe\u8ba1\u6587\u6863_TDD_v0.1.md": {
-    "mtime": 1785115165.8971,
-    "ast_hash": "c4fb074ecdaf59ad4bd23444d7f41164",
+    "mtime": 1785118972.0616987,
+    "ast_hash": "5e28cfc936a77a367894d244d0b1fad2",
     "semantic_hash": ""
   },
   "README.md": {
-    "mtime": 1785116401.1549206,
-    "ast_hash": "a035a2605d84d6bc949a9dc0298ca323",
+    "mtime": 1785133183.5359278,
+    "ast_hash": "38f19166880dbd4a771d6d731a777845",
     "semantic_hash": ""
   },
   "src/main/resources/application.yml": {
-    "mtime": 1785115888.409661,
-    "ast_hash": "aab68d14f16186e0fa13a514ac246742",
+    "mtime": 1785135136.1561437,
+    "ast_hash": "6baa201b67f15da2b3e0274fcd1166ec",
     "semantic_hash": ""
   },
   ".codex/hooks.json": {
@@ -92,6 +92,306 @@
   "AGENTS.md": {
     "mtime": 1785116959.8444111,
     "ast_hash": "752aa83aa64361ac32860f882dcff932",
+    "semantic_hash": ""
+  },
+  "src/main/java/com/example/accounting/shared/audit/AuditContext.java": {
+    "mtime": 1785117581.9304879,
+    "ast_hash": "9876490f945744073dda231b7ca28845",
+    "semantic_hash": ""
+  },
+  "src/main/java/com/example/accounting/shared/web/ApiProblemException.java": {
+    "mtime": 1785117589.9410787,
+    "ast_hash": "7d957b382864a82a9620aa4482204f63",
+    "semantic_hash": ""
+  },
+  "src/main/java/com/example/accounting/shared/web/ProblemDetailExceptionHandler.java": {
+    "mtime": 1785117824.8348176,
+    "ast_hash": "035755e2d2123cf95089aaf8acd5d936",
+    "semantic_hash": ""
+  },
+  "src/main/java/com/example/accounting/shared/web/TraceIdFilter.java": {
+    "mtime": 1785117586.785872,
+    "ast_hash": "fcf904e3c324a4847a2dabe8faf1b632",
+    "semantic_hash": ""
+  },
+  "src/test/java/com/example/accounting/shared/web/Stage0HttpSupportTest.java": {
+    "mtime": 1785117486.415542,
+    "ast_hash": "475ff774ad72b61dd7e2911ecd0afd91",
+    "semantic_hash": ""
+  },
+  "src/main/resources/db/migration/V2__identity_and_ledger.sql": {
+    "mtime": 1785119075.782438,
+    "ast_hash": "358cc6e65c015ec42088fcc4dd632b8b",
+    "semantic_hash": ""
+  },
+  "src/test/java/com/example/accounting/ledger/Stage1IdentityLedgerSchemaTest.java": {
+    "mtime": 1785118878.9303577,
+    "ast_hash": "eb3f6434eeadbbc9679c8eb040977d8c",
+    "semantic_hash": ""
+  },
+  "src/main/java/com/example/accounting/identity/CurrentUserResolver.java": {
+    "mtime": 1785135024.74484,
+    "ast_hash": "117dae52f59bf75375e556c96618cadd",
+    "semantic_hash": ""
+  },
+  "src/main/java/com/example/accounting/identity/IdentityController.java": {
+    "mtime": 1785120453.7471983,
+    "ast_hash": "548e782b4af65daafbd74e18d0e9b6ad",
+    "semantic_hash": ""
+  },
+  "src/main/java/com/example/accounting/identity/IdentityService.java": {
+    "mtime": 1785120450.8959668,
+    "ast_hash": "5319a947df409ed9fa281b7e1e47bb48",
+    "semantic_hash": ""
+  },
+  "src/main/java/com/example/accounting/identity/UserResponse.java": {
+    "mtime": 1785120037.6217663,
+    "ast_hash": "035d40e62864a6f5de59f84badf309e5",
+    "semantic_hash": ""
+  },
+  "src/main/java/com/example/accounting/ledger/LedgerController.java": {
+    "mtime": 1785133096.3249114,
+    "ast_hash": "9e1b27e32a2a777b20b6e64b34d40e7a",
+    "semantic_hash": ""
+  },
+  "src/main/java/com/example/accounting/ledger/LedgerRequests.java": {
+    "mtime": 1785132753.535097,
+    "ast_hash": "eafb04ff0dec0212749681c96085ac40",
+    "semantic_hash": ""
+  },
+  "src/main/java/com/example/accounting/ledger/LedgerResponses.java": {
+    "mtime": 1785123843.9271867,
+    "ast_hash": "0e4ade7962cd62b53de495a7f054585d",
+    "semantic_hash": ""
+  },
+  "src/main/java/com/example/accounting/ledger/LedgerRole.java": {
+    "mtime": 1785120040.7019672,
+    "ast_hash": "8c3a3b44cbeb947771f4f31a2902bb20",
+    "semantic_hash": ""
+  },
+  "src/main/java/com/example/accounting/ledger/LedgerService.java": {
+    "mtime": 1785133083.925992,
+    "ast_hash": "64bdd384c042106d37f82c5af7829bb7",
+    "semantic_hash": ""
+  },
+  "src/main/java/com/example/accounting/ledger/MembershipStatus.java": {
+    "mtime": 1785120043.7732668,
+    "ast_hash": "a7df96c04be6b71b5d22890b168fab6c",
+    "semantic_hash": ""
+  },
+  "src/main/java/com/example/accounting/shared/web/SecurityConfiguration.java": {
+    "mtime": 1785134959.3821118,
+    "ast_hash": "fce7acb29b9edab4ebbb6dfecbddebf8",
+    "semantic_hash": ""
+  },
+  "src/main/java/com/example/accounting/shared/web/package-info.java": {
+    "mtime": 1785120176.16218,
+    "ast_hash": "9b376cd88eb5a2adb484f84fd495498a",
+    "semantic_hash": ""
+  },
+  "src/test/java/com/example/accounting/identity/CurrentUserResolverTest.java": {
+    "mtime": 1785119991.776728,
+    "ast_hash": "2aca488a2c607241849d2e802d5e69f5",
+    "semantic_hash": ""
+  },
+  "src/test/java/com/example/accounting/ledger/LedgerControllerTest.java": {
+    "mtime": 1785133146.2844992,
+    "ast_hash": "a3fed617c004c0b620541388bbc57227",
+    "semantic_hash": ""
+  },
+  "src/main/resources/db/migration/V3__accounts_and_periods.sql": {
+    "mtime": 1785122807.9528086,
+    "ast_hash": "bf875ab153ae1447e530407b8111cfff",
+    "semantic_hash": ""
+  },
+  "src/test/java/com/example/accounting/ledger/Stage2LedgerInitializationTest.java": {
+    "mtime": 1785132955.4004774,
+    "ast_hash": "0285be20185dbbaa64fc6efa30965a1e",
+    "semantic_hash": ""
+  },
+  "src/main/resources/db/migration/V4__dimensions.sql": {
+    "mtime": 1785123824.4665098,
+    "ast_hash": "932a5e5074acae146f2a42cd837d55f3",
+    "semantic_hash": ""
+  },
+  "src/main/resources/db/migration/V5__opening_balances.sql": {
+    "mtime": 1785123817.3392403,
+    "ast_hash": "9bf07ba2cf3fa744cbd7d8d3ded29953",
+    "semantic_hash": ""
+  },
+  "src/test/java/com/example/accounting/ledger/Stage2BaseDataTest.java": {
+    "mtime": 1785132947.4435647,
+    "ast_hash": "9f832cf8c8aeab30041f3925c4ab14bd",
+    "semantic_hash": ""
+  },
+  "src/main/java/com/example/accounting/documents/DocumentResponses.java": {
+    "mtime": 1785134287.0503912,
+    "ast_hash": "046b898741b4371ccbb306ab727e7c4b",
+    "semantic_hash": ""
+  },
+  "src/main/java/com/example/accounting/documents/DocumentService.java": {
+    "mtime": 1785134370.9602394,
+    "ast_hash": "fc913bb5a79cc6c659767031a307556a",
+    "semantic_hash": ""
+  },
+  "src/main/java/com/example/accounting/documents/ExtractionResponses.java": {
+    "mtime": 1785134446.6170554,
+    "ast_hash": "42e70fc61bf720883be22a48d643dbee",
+    "semantic_hash": ""
+  },
+  "src/main/java/com/example/accounting/documents/ExtractionService.java": {
+    "mtime": 1785135845.824232,
+    "ast_hash": "839efcbd67f114af4f9a8c57c1765c89",
+    "semantic_hash": ""
+  },
+  "src/main/java/com/example/accounting/documents/JobResponses.java": {
+    "mtime": 1785134289.5544474,
+    "ast_hash": "21e3790f06d136865c273dffc6c4135c",
+    "semantic_hash": ""
+  },
+  "src/main/java/com/example/accounting/documents/JobService.java": {
+    "mtime": 1785134818.5451305,
+    "ast_hash": "122ad824910271e15427117bf3400e9e",
+    "semantic_hash": ""
+  },
+  "src/main/java/com/example/accounting/reporting/ReportController.java": {
+    "mtime": 1785135534.7480085,
+    "ast_hash": "fe5aff48e8460fa7566cc37ddd48aa7d",
+    "semantic_hash": ""
+  },
+  "src/main/java/com/example/accounting/reporting/ReportResponses.java": {
+    "mtime": 1785135511.434863,
+    "ast_hash": "0018331efb3b8fa457f93729a3ac1cb4",
+    "semantic_hash": ""
+  },
+  "src/main/java/com/example/accounting/reporting/ReportingService.java": {
+    "mtime": 1785136122.7980156,
+    "ast_hash": "96e222a30ac1a539b882c761ad665f78",
+    "semantic_hash": ""
+  },
+  "src/main/java/com/example/accounting/voucher/VoucherController.java": {
+    "mtime": 1785135602.4505126,
+    "ast_hash": "b356c67e761c08e5b4f3327872b81368",
+    "semantic_hash": ""
+  },
+  "src/main/java/com/example/accounting/voucher/VoucherRequests.java": {
+    "mtime": 1785135597.0209982,
+    "ast_hash": "aa93767c019ff81acc2f8dbf943052d9",
+    "semantic_hash": ""
+  },
+  "src/main/java/com/example/accounting/voucher/VoucherResponses.java": {
+    "mtime": 1785133799.5511162,
+    "ast_hash": "0484787c62fed7d67b2d3337b144dc79",
+    "semantic_hash": ""
+  },
+  "src/main/java/com/example/accounting/voucher/VoucherService.java": {
+    "mtime": 1785135616.8802793,
+    "ast_hash": "64f2897e66484645fcd4dbcfeb62459c",
+    "semantic_hash": ""
+  },
+  "src/main/resources/db/migration/V10__documents_and_jobs.sql": {
+    "mtime": 1785134277.7753472,
+    "ast_hash": "5e7ce507fafd3e1c670fae1a9a408253",
+    "semantic_hash": ""
+  },
+  "src/main/resources/db/migration/V6__period_action_audit.sql": {
+    "mtime": 1785132756.0745387,
+    "ast_hash": "3ba5799a9eb4fdf9093cfad307b9b788",
+    "semantic_hash": ""
+  },
+  "src/main/resources/db/migration/V7__report_formula_snapshots.sql": {
+    "mtime": 1785132981.5613167,
+    "ast_hash": "61622dc38a91ba644253d18def103995",
+    "semantic_hash": ""
+  },
+  "src/main/resources/db/migration/V8__vouchers.sql": {
+    "mtime": 1785133288.4654553,
+    "ast_hash": "5ad5d238548d4afac30a6203c1351193",
+    "semantic_hash": ""
+  },
+  "src/main/resources/db/migration/V9__audit_revisions.sql": {
+    "mtime": 1785133691.1500893,
+    "ast_hash": "6d1374c302b91ddf3da0ee18946a117e",
+    "semantic_hash": ""
+  },
+  "src/test/java/com/example/accounting/documents/Stage5DocumentTest.java": {
+    "mtime": 1785135727.2398977,
+    "ast_hash": "c8c1482b38ee2d275e09f6812e44cf75",
+    "semantic_hash": ""
+  },
+  "src/test/java/com/example/accounting/reporting/Stage4ReportingTest.java": {
+    "mtime": 1785135716.8709755,
+    "ast_hash": "231cccbc6c68e350f515c5edadc7ce07",
+    "semantic_hash": ""
+  },
+  "src/test/java/com/example/accounting/voucher/Stage3VoucherTest.java": {
+    "mtime": 1785135744.6427722,
+    "ast_hash": "5dd9498915d3d81396638748f24ad891",
+    "semantic_hash": ""
+  },
+  "src/main/java/com/example/accounting/agent/FinanceMcpTools.java": {
+    "mtime": 1785135459.5157218,
+    "ast_hash": "66b285dff24e7196ffebb2ebfda772b9",
+    "semantic_hash": ""
+  },
+  "src/main/java/com/example/accounting/audit/AuditController.java": {
+    "mtime": 1785135785.3928928,
+    "ast_hash": "96f9b6d2b246b8decdc1e96c59dc2569",
+    "semantic_hash": ""
+  },
+  "src/main/java/com/example/accounting/audit/AuditResponses.java": {
+    "mtime": 1785135779.972718,
+    "ast_hash": "b0a6acdcad449b7f14fa9bf0d2431171",
+    "semantic_hash": ""
+  },
+  "src/main/java/com/example/accounting/audit/AuditService.java": {
+    "mtime": 1785135782.6291873,
+    "ast_hash": "cc80964d17cabb89c5572932b9619358",
+    "semantic_hash": ""
+  },
+  "src/main/java/com/example/accounting/documents/DocumentController.java": {
+    "mtime": 1785135396.7577505,
+    "ast_hash": "2f3cc8d7fcc0c1634b39784dfa60bbdf",
+    "semantic_hash": ""
+  },
+  "src/main/java/com/example/accounting/documents/JobController.java": {
+    "mtime": 1785134821.1674118,
+    "ast_hash": "2d0f976719d085a4812c385be1094dc8",
+    "semantic_hash": ""
+  },
+  "src/main/java/com/example/accounting/reporting/FinanceQueryController.java": {
+    "mtime": 1785135537.5814476,
+    "ast_hash": "72d42adcfdd0ac21eac44524115c935f",
+    "semantic_hash": ""
+  },
+  "src/main/java/com/example/accounting/reporting/FinanceQueryRequests.java": {
+    "mtime": 1785135508.8227148,
+    "ast_hash": "14b8e84c53d945d5deed32d8e26d7199",
+    "semantic_hash": ""
+  },
+  "src/main/resources/db/migration/V11__idempotency.sql": {
+    "mtime": 1785135123.0247295,
+    "ast_hash": "dac40c06cc390d5ed650d6507d53b8c5",
+    "semantic_hash": ""
+  },
+  "src/main/resources/db/migration/V12__agent_tool_audit.sql": {
+    "mtime": 1785135456.9471557,
+    "ast_hash": "9fc92086732731d757e516017894a7b5",
+    "semantic_hash": ""
+  },
+  "src/test/java/com/example/accounting/agent/FinanceMcpToolsTest.java": {
+    "mtime": 1785135462.2355614,
+    "ast_hash": "1d5e97a0549e203b32b6e69de7325bb0",
+    "semantic_hash": ""
+  },
+  "RUNBOOK.md": {
+    "mtime": 1785135873.6559474,
+    "ast_hash": "826f6bf52c7b783a9b0c4b27fcc3593e",
+    "semantic_hash": ""
+  },
+  "src/test/java/com/example/accounting/security/Stage7IsolationTest.java": {
+    "mtime": 1785136108.8242965,
+    "ast_hash": "bcc9788156a60f7f4e71e6452fc2d3e1",
     "semantic_hash": ""
   }
 }

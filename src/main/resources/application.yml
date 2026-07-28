@@ -1,8 +1,12 @@
 spring:
   application:
     name: accounting
+  ai:
+    mcp:
+      server:
+        protocol: ${MCP_SERVER_PROTOCOL:STREAMABLE}
   datasource:
-    url: ${DB_URL:jdbc:postgresql://127.0.0.1:5432/accounting}
+    url: ${DB_URL:jdbc:postgresql://127.0.0.1:5432/ai_accounting}
     username: ${DB_USERNAME:postgres}
     password: ${DB_PASSWORD:postgres}
   jpa:
@@ -27,3 +31,12 @@ storage:
   type: local
   local:
     root: ${STORAGE_ROOT:./data/files}
+
+springdoc:
+  api-docs:
+    path: /v1/openapi.json
+
+app:
+  security:
+    # Local-only identity fallback. Set false when an OIDC resource server is configured.
+    local-user-header-enabled: ${LOCAL_USER_HEADER_ENABLED:false}

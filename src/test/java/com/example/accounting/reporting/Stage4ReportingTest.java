@@ -1,0 +1,81 @@
+package com.example.accounting.reporting;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+import com.example.accounting.identity.CurrentUserResolver;
+import com.example.accounting.ledger.LedgerRequests;
+import com.example.accounting.ledger.LedgerService;
+import com.example.accounting.voucher.VoucherRequests;
+import com.example.accounting.voucher.VoucherResponses;
+import com.example.accounting.voucher.VoucherService;
+import com.example.accounting.shared.web.ApiProblemException;
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.util.List;
+import java.util.UUID;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.jdbc.core.JdbcTemplate;
+
+@SpringBootTest
+class Stage4ReportingTest {
+
+    @Autowired
+    private LedgerService ledgerService;
+
+    @Autowired
+    private VoucherService voucherService;
+
+    @Autowired
+    private ReportingService reportingService;
+
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
+
+    @Test
+    void reportsOnlyPostedVoucherAmounts() {
+        UUID userId = UUID.randomUUID();
+        UUID ledgerId = ledgerService.create(new CurrentUserResolver.ResolvedUser(userId, "test", userId.toString()),
+                new LedgerRequests.Create("reporting", "SME", "v1", "CNY", LocalDate.of(2026, 1, 1), false)).id();
+        UUID periodId = id("select id from accounting_period where ledger_id = ? and period_code = '2026-01'", ledgerId);
+        UUID cashId = id("select id from ledger_account where ledger_id = ? and code = '1001'", ledgerId);
+        UUID capitalId = id("select id from ledger_account where ledger_id = ? and code = '3001'", ledgerId);
+        UUID revenueId = id("select id from ledger_account where ledger_id = ? and code = '5001'", ledgerId);
+        VoucherResponses.Voucher voucher = voucherService.create(userId, ledgerId, new VoucherRequests.Create(
+                periodId, LocalDate.of(2026, 1, 15), "记", "1", "Posted",
+                List.of(line(cashId, "DEBIT", "100"), line(capitalId, "CREDIT", "50"),
+                        line(revenueId, "CREDIT", "50"))));
+        assertThat(reportingService.trialBalance(userId, ledgerId, "2026-01")).isEmpty();
+        voucherService.validate(userId, ledgerId, voucher.id());
+        voucherService.post(userId, ledgerId, voucher.id());
+
+        List<ReportResponses.TrialBalanceLine> lines = reportingService.trialBalance(userId, ledgerId, "2026-01");
+        assertThat(lines).hasSize(3);
+        assertThat(lines).extracting(ReportResponses.TrialBalanceLine::debit)
+                .contains(new BigDecimal("100.00"));
+        assertThat(reportingService.balanceSheet(userId, ledgerId, "2026-01").totalLines()).isGreaterThan(0);
+        assertThat(reportingService.incomeStatement(userId, ledgerId, "2026-01").totalLines()).isGreaterThan(0);
+        assertThat(reportingService.generalLedger(userId, ledgerId, "2026-01")).hasSize(3);
+        assertThat(reportingService.subLedger(userId, ledgerId, "2026-01")).hasSize(3);
+        List<ReportResponses.FinanceQueryLine> query = reportingService.financeQuery(userId, ledgerId,
+                new FinanceQueryRequests.Query("NET", "2026-01", "2026-01", List.of("ACCOUNT"),
+                        new FinanceQueryRequests.Filters(List.of("1001"), "CNY")));
+        assertThat(query).singleElement().satisfies(line -> {
+            assertThat(line.groupKey()).isEqualTo("1001");
+            assertThat(line.amount()).isEqualByComparingTo("100.00");
+        });
+        assertThatThrownBy(() -> reportingService.financeQuery(userId, ledgerId,
+                new FinanceQueryRequests.Query("SQL", null, null, List.of("ACCOUNT"), null)))
+                .isInstanceOf(ApiProblemException.class);
+    }
+
+    private VoucherRequests.Line line(UUID accountId, String side, String amount) {
+        return new VoucherRequests.Line(accountId, side, "CNY", new BigDecimal(amount), BigDecimal.ONE, "report");
+    }
+
+    private UUID id(String sql, UUID ledgerId) {
+        return jdbcTemplate.queryForObject(sql, UUID.class, ledgerId);
+    }
+}
