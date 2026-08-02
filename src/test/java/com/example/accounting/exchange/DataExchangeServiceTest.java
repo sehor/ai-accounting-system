@@ -27,6 +27,7 @@ import java.util.List;
 import java.util.UUID;
 import org.apache.poi.ss.usermodel.DataFormatter;
 import org.apache.poi.ss.usermodel.WorkbookFactory;
+import org.apache.poi.hssf.usermodel.HSSFWorkbook;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
@@ -35,6 +36,55 @@ class DataExchangeServiceTest {
     private final LedgerService ledgers = mock(LedgerService.class);
     private final VoucherService vouchers = mock(VoucherService.class);
     private final KingdeeExchange service = new KingdeeExchange(ledgers, vouchers);
+
+    @Test
+    void importsANativeKingdeeVoucherListAndNormalizesNegativeAmounts() throws Exception {
+        UUID actorId = UUID.randomUUID();
+        UUID ledgerId = UUID.randomUUID();
+        UUID periodId = UUID.randomUUID();
+        when(ledgers.periodId(ledgerId, "2026-06")).thenReturn(periodId);
+        when(ledgers.accountId(eq(ledgerId), anyString()))
+                .thenAnswer(call -> UUID.nameUUIDFromBytes(call.<String>getArgument(1).getBytes()));
+        byte[] workbook;
+        try (var source = new HSSFWorkbook(); var output = new ByteArrayOutputStream()) {
+            var sheet = source.createSheet("凭证列表#2018年第1期 至 2026年第6期");
+            sheet.createRow(0).createCell(0).setCellValue("凭证列表");
+            sheet.createRow(1).createCell(0).setCellValue("深圳市聚芯电科技有限公司");
+            var header = sheet.createRow(2);
+            List.of("日期", "凭证字号", "摘要", "科目", "借方金额", "贷方金额", "制单人", "审核人")
+                    .forEach(value -> header.createCell(header.getLastCellNum() < 0 ? 0 : header.getLastCellNum())
+                            .setCellValue(value));
+            var debit = sheet.createRow(3);
+            debit.createCell(0).setCellValue("2026-06-30");
+            debit.createCell(1).setCellValue("记-9");
+            debit.createCell(2).setCellValue("结转本期损益");
+            debit.createCell(3).setCellValue("3103 本年利润");
+            debit.createCell(4).setCellValue(100);
+            var credit = sheet.createRow(4);
+            credit.createCell(2).setCellValue("结转本期损益");
+            credit.createCell(3).setCellValue("54010001 主营业务成本_集成电路销售成本");
+            credit.createCell(5).setCellValue(150);
+            var negativeCredit = sheet.createRow(5);
+            negativeCredit.createCell(2).setCellValue("结转本期损益");
+            negativeCredit.createCell(3).setCellValue("56030002 财务费用_利息");
+            negativeCredit.createCell(5).setCellValue(-50);
+            source.write(output);
+            workbook = output.toByteArray();
+        }
+
+        KingdeeExchange.ImportResult result = service.importKingdee(
+                actorId, ledgerId, "native", workbook.length, new ByteArrayInputStream(workbook));
+
+        assertThat(result).isEqualTo(new KingdeeExchange.ImportResult(1, 3));
+        ArgumentCaptor<VoucherRequests.Create> request = ArgumentCaptor.forClass(VoucherRequests.Create.class);
+        verify(vouchers).create(eq(actorId), eq(ledgerId), request.capture(), eq("native:1"));
+        assertThat(request.getValue().voucherType()).isEqualTo("记");
+        assertThat(request.getValue().voucherNumber()).isEqualTo("9");
+        assertThat(request.getValue().lines()).extracting(VoucherRequests.Line::side)
+                .containsExactly("DEBIT", "CREDIT", "DEBIT");
+        assertThat(request.getValue().lines()).extracting(VoucherRequests.Line::originalAmount)
+                .containsExactly(new BigDecimal("100"), new BigDecimal("150"), new BigDecimal("50"));
+    }
 
     @Test
     void importsTheProvidedKingdeeWorkbookAsGroupedDraftVouchers() throws Exception {

@@ -33,9 +33,10 @@ Vite 将 `/v1` 和 `/actuator` 转发到 `http://127.0.0.1:8080`。本地登录�
 pnpm lint
 pnpm typecheck
 pnpm test
-pnpm build
 pnpm test:e2e
 ```
+
+`pnpm build` is excluded from the default checks because it is slow. Run it only after the user explicitly confirms.
 
 真实后端业务 E2E 和 axe 扫描：
 

@@ -73,13 +73,12 @@ public final class LedgerRequests {
     }
 
     public record AccountCodeRuleUpdate(
-            @NotBlank @Pattern(regexp = "[.-]") String separator,
             @NotNull Integer level2Width,
             @NotNull Integer level3Width,
             @NotNull Integer level4Width) {
 
         public AccountCodeRule toRule() {
-            return new AccountCodeRule(separator, level2Width, level3Width, level4Width);
+            return new AccountCodeRule(level2Width, level3Width, level4Width);
         }
     }
 

@@ -19,8 +19,8 @@ export function LoginPage() {
     setSubmitting(true)
     const session = createLocalSession(username)
     try {
-      await apiFetch<User>('/me', session)
-      signIn(session)
+      const user = await apiFetch<User>('/me', session)
+      signIn({ ...session, localUserId: user.id })
       navigate('/ledgers', { replace: true })
     } catch (cause) {
       setError(cause instanceof ApiError && cause.status === 401

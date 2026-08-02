@@ -1,4 +1,4 @@
-import { Button, Card, Empty, Form, Input, Modal, Select, Table, Tag, Typography, DatePicker, Switch } from 'antd'
+import { Button, Card, Empty, Form, Input, Modal, Select, Space, Table, Tag, Typography, DatePicker, Switch } from 'antd'
 import { PlusOutlined } from '@ant-design/icons'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
@@ -13,7 +13,6 @@ interface CreateLedgerForm {
   standard: string
   startDate: Dayjs
   approvalEnabled?: boolean
-  separator: '.' | '-'
   level2Width: number
   level3Width: number
   level4Width: number
@@ -37,7 +36,6 @@ export function LedgerListPage() {
         startDate: value.startDate.format('YYYY-MM-DD'),
         approvalEnabled: Boolean(value.approvalEnabled),
         accountCodeRule: {
-          separator: value.separator,
           level2Width: value.level2Width,
           level3Width: value.level3Width,
           level4Width: value.level4Width,
@@ -58,8 +56,8 @@ export function LedgerListPage() {
         { title: '状态', dataIndex: 'status', render: (status: string) => <Tag color={status === 'ACTIVE' ? 'green' : 'default'}>{status === 'ACTIVE' ? '正常' : status}</Tag> },
       ]} />
     </Card>
-    <Modal title="新建账套" open={open} footer={null} onCancel={() => setOpen(false)} destroyOnClose>
-      <Form layout="vertical" onFinish={(value) => create.mutate(value as CreateLedgerForm)} initialValues={{ standard: 'SME/2011-17', startDate: dayjs(), approvalEnabled: false, separator: '.', level2Width: 2, level3Width: 2, level4Width: 2 }}>
+    <Modal title="新建账套" open={open} footer={null} onCancel={() => setOpen(false)} destroyOnHidden>
+      <Form layout="vertical" onFinish={(value) => create.mutate(value as CreateLedgerForm)} initialValues={{ standard: 'SME/2011-17', startDate: dayjs(), approvalEnabled: false, level2Width: 2, level3Width: 2, level4Width: 2 }}>
         <Form.Item name="name" label="账套名称" rules={[{ required: true, message: '请输入账套名称' }]}><Input autoFocus /></Form.Item>
         <Form.Item name="standard" label="会计准则版本" rules={[{ required: true }]}>
           <Select loading={standards.isLoading} options={(standards.data || []).map((standard) => ({
@@ -68,13 +66,13 @@ export function LedgerListPage() {
           }))} />
         </Form.Item>
         <Form.Item label="科目编码规则" required>
-          <Input.Group compact>
-            <Form.Item name="separator" noStyle><Select aria-label="科目分隔符" style={{ width: '28%' }} options={[{ value: '.', label: '分隔符 .' }, { value: '-', label: '分隔符 -' }]} /></Form.Item>
+          <Space.Compact block>
             {(['level2Width', 'level3Width', 'level4Width'] as const).map((name, index) =>
               <Form.Item key={name} name={name} noStyle rules={[{ required: true }]}>
-                <Select aria-label={`${index + 2}级科目段宽`} style={{ width: '24%' }} options={[1, 2, 3, 4, 5, 6, 7, 8].map((value) => ({ value, label: `${index + 2}级 ${value} 位` }))} />
+                <Select aria-label={`${index + 2}级科目段宽`} style={{ width: '33.33%' }} options={[1, 2, 3, 4, 5, 6, 7, 8].map((value) => ({ value, label: `${index + 2}级 ${value} 位` }))} />
               </Form.Item>)}
-          </Input.Group>
+          </Space.Compact>
+          <Typography.Text type="secondary">科目编码仅使用连续数字，不含点号或横杠。</Typography.Text>
         </Form.Item>
         <Form.Item label="本位币"><Input value="人民币（CNY）" disabled /></Form.Item>
         <Form.Item name="startDate" label="启用日期" rules={[{ required: true, message: '请选择启用日期' }]}><DatePicker style={{ width: '100%' }} /></Form.Item>

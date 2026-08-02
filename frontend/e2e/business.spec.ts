@@ -21,7 +21,7 @@ test('creates, restores, posts a voucher and verifies report totals', async ({ p
   expect(cash && capital && period).toBeTruthy()
 
   await json(request, `/ledgers/${ledger.id}/accounts`, { method: 'POST', data: {
-    code: '5601.01', name: '管理费用-办公费', category: 'EXPENSE', normalBalance: 'DEBIT',
+    code: '560101', name: '管理费用-办公费', category: 'EXPENSE', normalBalance: 'DEBIT',
     cashFlowRequired: false, quantityEnabled: false, dimensionRequirements: [],
   } })
   await page.goto(`/ledgers/${ledger.id}/settings/accounts`)

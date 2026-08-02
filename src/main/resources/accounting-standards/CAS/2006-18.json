@@ -3,7 +3,7 @@
   "version": "2006-18",
   "name": "企业会计准则应用指南",
   "effectiveDate": "2007-01-01",
-  "accountCodeRule": {"separator": ".", "level2Width": 2, "level3Width": 2, "level4Width": 2},
+  "accountCodeRule": {"level2Width": 2, "level3Width": 2, "level4Width": 2},
   "accounts": [
     {"code":"1001","name":"库存现金","category":"ASSET","normalBalance":"DEBIT","cashFlowRequired":false,"quantityEnabled":false},
     {"code":"1002","name":"银行存款","category":"ASSET","normalBalance":"DEBIT","cashFlowRequired":false,"quantityEnabled":false},

@@ -8,5 +8,7 @@ public interface IdentityRepository {
 
     UserResponse upsert(UUID id, String issuer, String subject, String displayName, String email);
 
+    Optional<UserResponse> findByLocalUsername(String username);
+
     Optional<UserResponse> findByEmail(String email);
 }

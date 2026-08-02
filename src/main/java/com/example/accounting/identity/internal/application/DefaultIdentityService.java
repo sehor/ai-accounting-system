@@ -24,6 +24,12 @@ public class DefaultIdentityService implements IdentityService {
         String fallback = "User " + subject.substring(0, Math.min(8, subject.length()));
         String displayName = actor.displayName() == null || actor.displayName().isBlank()
                 ? fallback : actor.displayName().trim();
+        if ("local".equals(actor.issuer())) {
+            Optional<UserResponse> existing = users.findByLocalUsername(displayName);
+            if (existing.isPresent()) {
+                return existing.get();
+            }
+        }
         return users.upsert(actor.id(), actor.issuer(), subject, displayName, actor.email());
     }
 

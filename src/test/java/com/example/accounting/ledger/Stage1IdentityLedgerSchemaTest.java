@@ -42,6 +42,7 @@ class Stage1IdentityLedgerSchemaTest {
     @Test
     void enforcesIdentityAndMembershipUniqueness() {
         assertThat(constraintExists("app_user", "uk_app_user_issuer_subject")).isTrue();
+        assertThat(indexExists("ux_app_user_local_username_ci")).isTrue();
         assertThat(constraintExists("ledger_membership", "uk_ledger_membership_ledger_user")).isTrue();
         assertThat(indexExists("ix_ledger_membership_user_status")).isTrue();
         assertThat(indexExists("ix_ledger_membership_ledger_status")).isTrue();

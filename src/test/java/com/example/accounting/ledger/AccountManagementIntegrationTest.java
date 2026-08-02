@@ -38,14 +38,14 @@ class AccountManagementIntegrationTest {
                 .filter(account -> account.code().equals("1002")).findFirst().orElseThrow();
         LedgerResponses.Account child = ledgers.createAccount(owner, ledgerId,
                 new LedgerRequests.AccountCreate(
-                        "1002.01", "基本户", "ASSET", "DEBIT", bank.id(),
+                        "100201", "基本户", "ASSET", "DEBIT", bank.id(),
                         false, null, false, null, List.of()));
         assertThat(child.parentId()).isEqualTo(bank.id());
         assertThat(child.level()).isEqualTo(2);
         assertThat(ledgers.findAccount(owner, ledgerId, bank.id()).isLeaf()).isFalse();
 
         assertProblem("ACCOUNT_CODE_RULE_LOCKED", () -> ledgers.updateAccountCodeRule(
-                owner, ledgerId, new LedgerRequests.AccountCodeRuleUpdate("-", 2, 2, 2)));
+                owner, ledgerId, new LedgerRequests.AccountCodeRuleUpdate(2, 2, 2)));
         assertProblem("ACCOUNT_TEMPLATE_LOCKED", () -> ledgers.updateAccount(
                 owner, ledgerId, bank.id(), new LedgerRequests.AccountPatch(
                         bank.version(), "1003", null, null, null, null, null,

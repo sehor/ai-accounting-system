@@ -77,10 +77,14 @@ export interface AccountingStandard {
 }
 
 export interface AccountCodeRule {
-  separator: '.' | '-'
   level2Width: number
   level3Width: number
   level4Width: number
+}
+
+export interface KingdeeImportResult {
+  voucherCount: number
+  rowCount: number
 }
 
 export interface AccountImportRow {

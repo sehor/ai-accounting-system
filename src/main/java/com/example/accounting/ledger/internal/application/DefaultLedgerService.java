@@ -25,6 +25,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
+import java.time.YearMonth;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -663,9 +664,13 @@ public class DefaultLedgerService implements LedgerService {
                         account.quantityEnabled() ? account.unitName() : null));
         accountIds.values().forEach(accountId -> accounts.recordRevision(
                 ledgerId, accountId, "CREATE", actorId, "null", json(requireAccount(ledgerId, accountId))));
-        LocalDate periodStart = startDate.withDayOfMonth(1);
-        for (int month = 0; month < 12; month++) {
-            LocalDate current = periodStart.plusMonths(month);
+        YearMonth periodStart = YearMonth.from(startDate);
+        YearMonth periodEnd = YearMonth.of(YearMonth.now().getYear(), 12);
+        if (periodEnd.isBefore(periodStart.plusMonths(11))) {
+            periodEnd = periodStart.plusMonths(11);
+        }
+        for (YearMonth month = periodStart; !month.isAfter(periodEnd); month = month.plusMonths(1)) {
+            LocalDate current = month.atDay(1);
             ledgers.createPeriod(ledgerId, current.toString().substring(0, 7),
                     current, current.plusMonths(1).minusDays(1));
         }

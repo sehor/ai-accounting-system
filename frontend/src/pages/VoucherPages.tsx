@@ -1,12 +1,12 @@
-import { Alert, App as AntApp, Button, Card, Col, DatePicker, Empty, Form, Input, Modal, Row, Select, Space, Table, Tag, Typography } from 'antd'
+import { Alert, App as AntApp, Button, Card, Col, DatePicker, Empty, Form, Input, Modal, Row, Select, Space, Table, Tag, Typography, Upload } from 'antd'
 import type { FormInstance } from 'antd'
-import { PlusOutlined, ReloadOutlined } from '@ant-design/icons'
+import { PlusOutlined, ReloadOutlined, UploadOutlined } from '@ant-design/icons'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import dayjs, { type Dayjs } from 'dayjs'
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { apiFetch, createIdempotencyKey, jsonBody, ApiError } from '../api/client'
-import type { Account, CashFlowItem, DimensionValue, Period, Voucher, VoucherRevision } from '../api/types'
+import type { Account, CashFlowItem, DimensionValue, KingdeeImportResult, Period, Voucher, VoucherRevision } from '../api/types'
 import { useAuth } from '../auth/AuthProvider'
 import { voucherTotals } from '../features/vouchers/money'
 
@@ -15,11 +15,12 @@ const emptyLines: VoucherForm['lines'] = []
 const decimalRule = { pattern: /^\d+(?:\.\d+)?$/, message: '请输入有效数字' }
 
 export function VoucherListPage() {
-  const { ledgerId = '' } = useParams(); const { session } = useAuth(); const navigate = useNavigate(); const [search, setSearch] = useSearchParams()
+  const { ledgerId = '' } = useParams(); const { session } = useAuth(); const navigate = useNavigate(); const client = useQueryClient(); const { message } = AntApp.useApp(); const [search, setSearch] = useSearchParams()
   const limit = Number(search.get('limit') || 20); const offset = Number(search.get('offset') || 0)
   const query = useQuery({ queryKey: ['vouchers', ledgerId, limit, offset], queryFn: () => apiFetch<Voucher[]>(`/ledgers/${ledgerId}/vouchers?limit=${limit}&offset=${offset}`, session!), enabled: Boolean(session && ledgerId) })
+  const importKingdee = useMutation({ mutationFn: (file: File) => { const body = new FormData(); body.append('file', file); return apiFetch<KingdeeImportResult>(`/ledgers/${ledgerId}/data-exchange/kingdee:import`, session!, { method: 'POST', headers: { 'Idempotency-Key': createIdempotencyKey() }, body }) }, onSuccess: (result) => { message.success(`已导入 ${result.voucherCount} 张凭证、${result.rowCount} 条分录`); void client.invalidateQueries({ queryKey: ['vouchers', ledgerId] }) }, onError: (error) => message.error(error instanceof ApiError ? error.message : '金蝶凭证导入失败') })
   return <Space direction="vertical" size={16} style={{ width: '100%' }}>
-    <div className="page-heading"><div><Typography.Title level={1}>凭证工作台</Typography.Title><Typography.Text type="secondary">录入、校验并推进凭证状态。</Typography.Text></div><Button type="primary" icon={<PlusOutlined />} onClick={() => navigate(`/ledgers/${ledgerId}/vouchers/new`)}>新建凭证</Button></div>
+    <div className="page-heading"><div><Typography.Title level={1}>凭证工作台</Typography.Title><Typography.Text type="secondary">录入、校验并推进凭证状态。</Typography.Text></div><Space><Upload accept=".xls,.xlsx" showUploadList={false} beforeUpload={(file) => { const name = file.name.toLowerCase(); if ((!name.endsWith('.xls') && !name.endsWith('.xlsx')) || file.size > 10 * 1024 * 1024) { message.error('仅支持不超过 10 MiB 的 .xls/.xlsx 文件'); return Upload.LIST_IGNORE } importKingdee.mutate(file); return false }}><Button icon={<UploadOutlined />} loading={importKingdee.isPending}>导入金蝶凭证</Button></Upload><Button type="primary" icon={<PlusOutlined />} onClick={() => navigate(`/ledgers/${ledgerId}/vouchers/new`)}>新建凭证</Button></Space></div>
     {query.isError && <Alert type="error" showIcon message="凭证列表读取失败" action={<Button icon={<ReloadOutlined />} onClick={() => void query.refetch()}>重试</Button>} />}
     <Card><Table rowKey="id" loading={query.isLoading} dataSource={query.data || []} locale={{ emptyText: <Empty description="暂无凭证" /> }} pagination={{ current: Math.floor(offset / limit) + 1, pageSize: limit, total: (offset + (query.data?.length || 0)) + (query.data?.length === limit ? 1 : 0), showSizeChanger: false, onChange: (page) => setSearch({ limit: String(limit), offset: String((page - 1) * limit) }) }} columns={[
       { title: '凭证号', dataIndex: 'voucherNumber', render: (value: string, row: Voucher) => <Link to={`/ledgers/${ledgerId}/vouchers/${row.id}`}>{row.voucherType}-{value}</Link> },

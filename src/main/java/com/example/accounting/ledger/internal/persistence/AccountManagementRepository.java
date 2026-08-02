@@ -54,32 +54,29 @@ public class AccountManagementRepository {
 
     public AccountCodeRule codeRule(UUID ledgerId) {
         return jdbc.queryForObject("""
-                select account_code_separator, account_level2_width,
-                    account_level3_width, account_level4_width
+                select account_level2_width, account_level3_width, account_level4_width
                 from ledger where id = ? and deleted_at is null
                 """, (rs, row) -> new AccountCodeRule(
-                rs.getString(1), rs.getInt(2), rs.getInt(3), rs.getInt(4)), ledgerId);
+                rs.getInt(1), rs.getInt(2), rs.getInt(3)), ledgerId);
     }
 
     public boolean updateCodeRule(UUID ledgerId, AccountCodeRule rule) {
         return jdbc.update("""
                 update ledger
-                set account_code_separator = ?, account_level2_width = ?,
-                    account_level3_width = ?, account_level4_width = ?,
+                set account_level2_width = ?, account_level3_width = ?, account_level4_width = ?,
                     version = version + 1, updated_at = now()
                 where id = ? and not exists (
                     select 1 from ledger_account where ledger_id = ? and level > 1)
-                """, rule.separator(), rule.level2Width(), rule.level3Width(), rule.level4Width(),
+                """, rule.level2Width(), rule.level3Width(), rule.level4Width(),
                 ledgerId, ledgerId) == 1;
     }
 
     public void initializeCodeRule(UUID ledgerId, AccountCodeRule rule) {
         jdbc.update("""
                 update ledger
-                set account_code_separator = ?, account_level2_width = ?,
-                    account_level3_width = ?, account_level4_width = ?
+                set account_level2_width = ?, account_level3_width = ?, account_level4_width = ?
                 where id = ?
-                """, rule.separator(), rule.level2Width(), rule.level3Width(), rule.level4Width(), ledgerId);
+                """, rule.level2Width(), rule.level3Width(), rule.level4Width(), ledgerId);
     }
 
     public List<LedgerResponses.Account> list(UUID ledgerId) {

@@ -58,4 +58,18 @@ class FrontendContractTest {
                 .extracting(user -> user.id()).containsExactly(candidate);
         assertThat(ledgerService.findMemberCandidates(owner, ledgerId, "missing@example.com")).isEmpty();
     }
+
+    @Test
+    void reusesTheExistingLocalUserForTheSameUsername() {
+        String username = "local-" + UUID.randomUUID();
+        UUID firstId = UUID.randomUUID();
+        UUID secondId = UUID.randomUUID();
+
+        identityService.ensureUser(new CurrentUserResolver.ResolvedUser(
+                firstId, "local", firstId.toString(), username, null));
+        var repeated = identityService.ensureUser(new CurrentUserResolver.ResolvedUser(
+                secondId, "local", secondId.toString(), username.toUpperCase(), null));
+
+        assertThat(repeated.id()).isEqualTo(firstId);
+    }
 }

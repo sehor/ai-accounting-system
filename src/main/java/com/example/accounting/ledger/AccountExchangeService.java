@@ -15,6 +15,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.text.Normalizer;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.HexFormat;
@@ -52,6 +53,8 @@ public class AccountExchangeService {
     private static final List<String> KINGDEE_HEADERS = List.of(
             "科目代码", "科目名称", "上级科目代码", "科目类别", "余额方向", "状态",
             "现金流必填", "数量核算", "单位");
+    private static final List<String> NATIVE_KINGDEE_HEADERS = List.of(
+            "编码", "名称", "类别", "余额方向");
 
     private final LedgerService ledgers;
     private final LedgerAccessService access;
@@ -88,17 +91,26 @@ public class AccountExchangeService {
     public Preview preview(UUID actorId, UUID ledgerId, Format format, String filename,
                            long declaredSize, InputStream input) {
         requireWrite(actorId, ledgerId);
-        if (filename == null || !filename.toLowerCase(Locale.ROOT).endsWith(".xlsx")) {
+        String lowerName = filename == null ? "" : filename.toLowerCase(Locale.ROOT);
+        if (!lowerName.endsWith(".xlsx") && (format != Format.KINGDEE || !lowerName.endsWith(".xls"))) {
             throw problem(422, "ACCOUNT_IMPORT_FILE_INVALID", "Invalid account workbook",
-                    "Only .xlsx workbooks are accepted");
+                    format == Format.KINGDEE
+                            ? "Only .xls or .xlsx workbooks are accepted"
+                            : "Only .xlsx workbooks are accepted");
         }
         if (declaredSize < 0 || declaredSize > MAX_BYTES) {
             throw tooLarge();
         }
         byte[] content = readBounded(input);
-        if (content.length < 4 || content[0] != 'P' || content[1] != 'K'
-                || content[2] != 3 || content[3] != 4) {
-            throw workbookProblem("The uploaded file is not an .xlsx ZIP package");
+        boolean xlsx = content.length >= 4 && content[0] == 'P' && content[1] == 'K'
+                && content[2] == 3 && content[3] == 4;
+        boolean xls = content.length >= 8
+                && (content[0] & 0xff) == 0xd0 && (content[1] & 0xff) == 0xcf
+                && (content[2] & 0xff) == 0x11 && (content[3] & 0xff) == 0xe0
+                && (content[4] & 0xff) == 0xa1 && (content[5] & 0xff) == 0xb1
+                && (content[6] & 0xff) == 0x1a && (content[7] & 0xff) == 0xe1;
+        if (!xlsx && (format != Format.KINGDEE || !xls)) {
+            throw workbookProblem("The uploaded file is not a supported Excel workbook");
         }
         String sha256 = sha256(content);
         UUID existing = imports.findByHash(ledgerId, sha256);
@@ -330,7 +342,7 @@ public class AccountExchangeService {
                 List.of("AccountingStandard", ledger.accountingStandardCode()),
                 List.of("AccountingStandardVersion", ledger.accountingStandardVersion()),
                 List.of("AccountCodeRule", "4-" + rule.level2Width() + "-" + rule.level3Width()
-                        + "-" + rule.level4Width() + " " + rule.separator()));
+                        + "-" + rule.level4Width()));
         for (int index = 0; index < values.size(); index++) {
             values(sheet.createRow(index + 1), values.get(index));
         }
@@ -382,10 +394,16 @@ public class AccountExchangeService {
         ZipSecureFile.setMinInflateRatio(0.01);
         try (Workbook workbook = WorkbookFactory.create(new ByteArrayInputStream(content))) {
             Sheet sheet = workbook.getSheet(format == Format.STANDARD ? "Accounts" : "科目");
+            boolean nativeKingdee = false;
+            if (sheet == null && format == Format.KINGDEE) {
+                sheet = workbook.getSheet("科目列表");
+                nativeKingdee = sheet != null;
+            }
             if (sheet == null) {
                 throw workbookProblem("Required account sheet is missing");
             }
-            List<String> headers = format == Format.STANDARD ? STANDARD_HEADERS : KINGDEE_HEADERS;
+            List<String> headers = format == Format.STANDARD ? STANDARD_HEADERS
+                    : nativeKingdee ? NATIVE_KINGDEE_HEADERS : KINGDEE_HEADERS;
             requireHeaders(sheet, headers);
             DataFormatter formatter = new DataFormatter(Locale.ROOT);
             List<ParsedAccount> rows = new ArrayList<>();
@@ -411,7 +429,21 @@ public class AccountExchangeService {
                     }
                     cells.add(value);
                 }
-                rows.add(parsed(format, headers, cells, rule));
+                rows.add(nativeKingdee ? nativeKingdee(headers, cells, rule)
+                        : parsed(format, headers, cells, rule));
+            }
+            if (nativeKingdee) {
+                Map<String, ParsedAccount> byCode = rows.stream()
+                        .collect(Collectors.toMap(ParsedAccount::code, row -> row));
+                rows.stream().sorted(Comparator.comparingInt(row -> row.code().length())).forEach(row -> {
+                    ParsedAccount parent = byCode.get(row.cleaned().get("parentCode"));
+                    if (parent != null && !parent.issues().contains("ERROR:INVALID_CATEGORY")
+                            && !parent.issues().contains("ERROR:INVALID_NORMAL_BALANCE")) {
+                        row.cleaned().put("category", parent.cleaned().get("category"));
+                        row.cleaned().put("normalBalance", parent.cleaned().get("normalBalance"));
+                        row.issues().removeAll(List.of("ERROR:INVALID_CATEGORY", "ERROR:INVALID_NORMAL_BALANCE"));
+                    }
+                });
             }
             if (format == Format.STANDARD) {
                 standardControls(workbook, rows, rule);
@@ -422,6 +454,32 @@ public class AccountExchangeService {
         } catch (Exception exception) {
             throw workbookProblem("The workbook is damaged or not a supported .xlsx file");
         }
+    }
+
+    private ParsedAccount nativeKingdee(List<String> headers, List<String> cells, AccountCodeRule rule) {
+        String category = switch (clean(cells.get(2))) {
+            case "流动资产", "非流动资产" -> "ASSET";
+            case "流动负债", "非流动负债" -> "LIABILITY";
+            case "所有者权益" -> "EQUITY";
+            case "成本" -> "COST";
+            case "营业收入", "其他收益" -> "REVENUE";
+            case "营业成本及税金", "其他损失", "期间费用", "所得税", "以前年度损益调整" -> "EXPENSE";
+            default -> "";
+        };
+        String normal = switch (clean(cells.get(3))) {
+            case "借" -> "DEBIT";
+            case "贷" -> "CREDIT";
+            default -> "";
+        };
+        String code = cleanCode(cells.get(0), rule);
+        List<String> adapted = List.of(code, clean(cells.get(1)), rule.parentCode(code).orElse(""),
+                category, normal, "ACTIVE", "FALSE", "FALSE", "");
+        ParsedAccount parsed = parsed(Format.KINGDEE, KINGDEE_HEADERS, adapted, rule);
+        Map<String, String> raw = new LinkedHashMap<>();
+        for (int index = 0; index < headers.size(); index++) {
+            raw.put(headers.get(index), cells.get(index));
+        }
+        return new ParsedAccount(parsed.code(), raw, parsed.cleaned(), parsed.issues());
     }
 
     private ParsedAccount parsed(Format format, List<String> headers, List<String> cells, AccountCodeRule rule) {
@@ -629,11 +687,7 @@ public class AccountExchangeService {
     }
 
     private String cleanCode(String value, AccountCodeRule rule) {
-        String cleaned = clean(value).replace(" ", "");
-        if (".".equals(rule.separator())) {
-            return cleaned.replace('-', '.');
-        }
-        return cleaned.replace('.', '-');
+        return clean(value).replace(" ", "").replace(".", "").replace("-", "");
     }
 
     private boolean bool(String value) {

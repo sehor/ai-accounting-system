@@ -39,6 +39,8 @@ public class KingdeeExchange {
             "日期", "凭证字", "凭证号", "附件数", "分录序号", "摘要", "科目代码", "科目名称",
             "借方金额", "贷方金额", "客户", "供应商", "职员", "项目", "部门", "存货", "是否限定",
             "自定义辅助核算类别", "自定义辅助核算编码", "数量", "单价", "原币金额", "币别", "汇率");
+    private static final List<String> NATIVE_HEADERS = List.of(
+            "日期", "凭证字号", "摘要", "科目", "借方金额", "贷方金额", "制单人", "审核人");
 
     private final LedgerService ledgers;
     private final VoucherService vouchers;
@@ -129,7 +131,12 @@ public class KingdeeExchange {
         try (Workbook workbook = WorkbookFactory.create(input)) {
             Sheet sheet = workbook.getSheet("AccountEntries");
             if (sheet == null) {
-                throw invalid("Missing AccountEntries worksheet");
+                for (Sheet candidate : workbook) {
+                    if (matchesHeader(candidate.getRow(2), NATIVE_HEADERS)) {
+                        return parseNative(ledgerId, candidate);
+                    }
+                }
+                throw invalid("Missing AccountEntries or native voucher-list worksheet");
             }
             validateHeader(sheet.getRow(0));
             Map<VoucherKey, List<ImportedLine>> grouped = new LinkedHashMap<>();
@@ -154,6 +161,83 @@ public class KingdeeExchange {
         } catch (Exception exception) {
             throw invalid("The workbook is not a readable Kingdee Excel file");
         }
+    }
+
+    private ParsedWorkbook parseNative(UUID ledgerId, Sheet sheet) {
+        Map<VoucherKey, List<ImportedLine>> grouped = new LinkedHashMap<>();
+        VoucherKey current = null;
+        int rowCount = 0;
+        for (int index = 3; index <= sheet.getLastRowNum(); index++) {
+            Row row = sheet.getRow(index);
+            if (row == null || blank(row, NATIVE_HEADERS.size())) {
+                continue;
+            }
+            String date = nativeText(row, 0, index + 1);
+            String label = nativeText(row, 1, index + 1);
+            if (!date.isBlank() || !label.isBlank()) {
+                if (date.isBlank() || label.isBlank()) {
+                    throw nativeRowProblem(index + 1, "日期/凭证字号", "must both be present");
+                }
+                int separator = label.lastIndexOf('-');
+                if (separator < 1 || separator == label.length() - 1) {
+                    throw nativeRowProblem(index + 1, "凭证字号", "must use type-number");
+                }
+                current = new VoucherKey(date(row, index + 1), label.substring(0, separator).trim(),
+                        label.substring(separator + 1).trim());
+            }
+            if (current == null) {
+                throw nativeRowProblem(index + 1, "日期/凭证字号", "is missing");
+            }
+            ImportedLine line = parseNativeLine(ledgerId, current, row, index + 1, rowCount + 1);
+            grouped.computeIfAbsent(current, ignored -> new ArrayList<>()).add(line);
+            rowCount++;
+        }
+        if (rowCount == 0) {
+            throw invalid("The workbook contains no voucher rows");
+        }
+        List<VoucherRequests.Create> requests = grouped.entrySet().stream()
+                .map(entry -> request(ledgerId, entry.getKey(), entry.getValue())).toList();
+        return new ParsedWorkbook(requests, rowCount);
+    }
+
+    private ImportedLine parseNativeLine(
+            UUID ledgerId, VoucherKey key, Row row, int rowNumber, int lineNumber) {
+        BigDecimal debit = nativeDecimal(row, 4, rowNumber);
+        BigDecimal credit = nativeDecimal(row, 5, rowNumber);
+        boolean hasDebit = debit != null && debit.signum() != 0;
+        boolean hasCredit = credit != null && credit.signum() != 0;
+        if (hasDebit == hasCredit) {
+            throw nativeRowProblem(rowNumber, "借方金额/贷方金额", "exactly one amount must be non-zero");
+        }
+        BigDecimal signed = hasDebit ? debit : credit;
+        String side = hasDebit == (signed.signum() > 0) ? "DEBIT" : "CREDIT";
+        BigDecimal amount = signed.abs();
+        String account = nativeText(row, 3, rowNumber);
+        String code = account.split("\\s+", 2)[0];
+        if (account.isBlank() || !code.matches("\\d+")) {
+            throw nativeRowProblem(rowNumber, "科目", "must start with a numeric account code");
+        }
+        return new ImportedLine(key, lineNumber, ledgers.accountId(ledgerId, code), side, "CNY",
+                amount, BigDecimal.ONE, nativeText(row, 2, rowNumber), amount);
+    }
+
+    private BigDecimal nativeDecimal(Row row, int column, int rowNumber) {
+        String value = nativeText(row, column, rowNumber).replace(",", "");
+        if (value.isBlank()) {
+            return null;
+        }
+        try {
+            return new BigDecimal(value);
+        } catch (NumberFormatException exception) {
+            throw nativeRowProblem(rowNumber, NATIVE_HEADERS.get(column), "must be numeric");
+        }
+    }
+
+    private String nativeText(Row row, int column, int rowNumber) {
+        if (cell(row, column).getCellType() == CellType.FORMULA) {
+            throw nativeRowProblem(rowNumber, NATIVE_HEADERS.get(column), "must not contain a formula");
+        }
+        return text(row, column);
     }
 
     private ImportedLine parseLine(UUID ledgerId, Row row, int rowNumber) {
@@ -240,6 +324,18 @@ public class KingdeeExchange {
         }
     }
 
+    private boolean matchesHeader(Row row, List<String> headers) {
+        if (row == null) {
+            return false;
+        }
+        for (int index = 0; index < headers.size(); index++) {
+            if (!headers.get(index).equals(text(row, index))) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     private void write(Row row, VoucherResponses.Voucher voucher, VoucherResponses.Line line,
                        LedgerResponses.Account account) {
         for (int index = 0; index < HEADERS.size(); index++) {
@@ -321,7 +417,11 @@ public class KingdeeExchange {
     }
 
     private boolean blank(Row row) {
-        for (int index = 0; index < HEADERS.size(); index++) {
+        return blank(row, HEADERS.size());
+    }
+
+    private boolean blank(Row row, int columns) {
+        for (int index = 0; index < columns; index++) {
             if (!text(row, index).isBlank()) {
                 return false;
             }
@@ -347,6 +447,11 @@ public class KingdeeExchange {
     }
 
     private ApiProblemException rowProblem(int row, String field, String detail) {
+        return problem(422, "KINGDEE_ROW_INVALID", "Invalid Kingdee row",
+                "Row " + row + " field " + field + " " + detail);
+    }
+
+    private ApiProblemException nativeRowProblem(int row, String field, String detail) {
         return problem(422, "KINGDEE_ROW_INVALID", "Invalid Kingdee row",
                 "Row " + row + " field " + field + " " + detail);
     }

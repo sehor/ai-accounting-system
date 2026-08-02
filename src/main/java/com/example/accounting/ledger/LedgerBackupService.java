@@ -255,7 +255,7 @@ public class LedgerBackupService {
         repository.createLedger(ledgerId, actorId, name, requiredText(source, "accounting_standard_code"),
                 requiredText(source, "accounting_standard_version"), requiredText(source, "base_currency"),
                 LocalDate.parse(requiredText(source, "start_date")), source.path("approval_enabled").asBoolean(),
-                requiredText(source, "account_code_separator"),
+                "",
                 source.path("account_level2_width").asInt(), source.path("account_level3_width").asInt(),
                 source.path("account_level4_width").asInt());
     }
@@ -315,6 +315,9 @@ public class LedgerBackupService {
                 throw invalid("A backup table contains a non-object row: " + table);
             }
             ObjectNode row = (ObjectNode) value;
+            if ("ledger_account".equals(table) && row.hasNonNull("code")) {
+                row.put("code", row.path("code").asText().replace(".", "").replace("-", ""));
+            }
             Set<String> supplied = new HashSet<>();
             row.fieldNames().forEachRemaining(supplied::add);
             if (!available.keySet().containsAll(supplied)) {

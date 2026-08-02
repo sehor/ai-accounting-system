@@ -45,6 +45,25 @@ export function AccountsTab({ ledgerId, session, accounts, dimensionTypes, loadi
       initializedLedger.current = ledgerId
     }
   }, [accounts, ledgerId])
+  useEffect(() => {
+    if (!formOpen) return
+    if (editing) {
+      form.setFieldsValue({
+        ...editing,
+        defaultCashFlowItemId: editing.defaultCashFlowItemId || undefined,
+        unitName: editing.unitName || undefined,
+        dimensionTypeIds: editing.dimensionRequirements.map((item) => item.dimensionTypeId),
+        requiredDimensionTypeIds: editing.dimensionRequirements
+          .filter((item) => item.required).map((item) => item.dimensionTypeId),
+      })
+      return
+    }
+    form.resetFields()
+    form.setFieldsValue(parent ? {
+      category: parent.category,
+      normalBalance: parent.normalBalance,
+    } : { cashFlowRequired: false, quantityEnabled: false })
+  }, [editing, form, formOpen, parent])
   const cashFlowItems = useQuery({
     queryKey: ['cash-flow-items', ledgerId],
     queryFn: () => apiFetch<CashFlowItem[]>(`/ledgers/${ledgerId}/cash-flow-items`, session),
@@ -140,25 +159,12 @@ export function AccountsTab({ ledgerId, session, accounts, dimensionTypes, loadi
   const openCreate = (parentAccount: Account | null) => {
     setEditing(null)
     setParent(parentAccount)
-    form.resetFields()
-    form.setFieldsValue(parentAccount ? {
-      category: parentAccount.category,
-      normalBalance: parentAccount.normalBalance,
-    } : { cashFlowRequired: false, quantityEnabled: false })
     setFormOpen(true)
   }
 
   const openEdit = (account: Account) => {
     setEditing(account)
     setParent(null)
-    form.setFieldsValue({
-      ...account,
-      defaultCashFlowItemId: account.defaultCashFlowItemId || undefined,
-      unitName: account.unitName || undefined,
-      dimensionTypeIds: account.dimensionRequirements.map((item) => item.dimensionTypeId),
-      requiredDimensionTypeIds: account.dimensionRequirements
-        .filter((item) => item.required).map((item) => item.dimensionTypeId),
-    })
     setFormOpen(true)
   }
 
@@ -187,9 +193,10 @@ export function AccountsTab({ ledgerId, session, accounts, dimensionTypes, loadi
           options={[{ value: 'STANDARD', label: '标准格式' }, { value: 'KINGDEE', label: '金蝶格式' }]} />
         <Button icon={<DownloadOutlined />} onClick={() => void download('account-import-template')}>下载模板</Button>
         <Button icon={<DownloadOutlined />} onClick={() => void download('account-export')}>导出</Button>
-        {writable && <Upload accept=".xlsx" showUploadList={false} beforeUpload={(file) => {
-          if (!file.name.toLowerCase().endsWith('.xlsx') || file.size > 10 * 1024 * 1024) {
-            message.error('仅支持不超过 10 MiB 的 .xlsx 文件')
+        {writable && <Upload accept={format === 'KINGDEE' ? '.xls,.xlsx' : '.xlsx'} showUploadList={false} beforeUpload={(file) => {
+          const name = file.name.toLowerCase()
+          if ((!name.endsWith('.xlsx') && (format !== 'KINGDEE' || !name.endsWith('.xls'))) || file.size > 10 * 1024 * 1024) {
+            message.error(format === 'KINGDEE' ? '仅支持不超过 10 MiB 的 .xls/.xlsx 文件' : '仅支持不超过 10 MiB 的 .xlsx 文件')
             return Upload.LIST_IGNORE
           }
           upload.mutate(file)
@@ -243,7 +250,7 @@ export function AccountsTab({ ledgerId, session, accounts, dimensionTypes, loadi
     />
     <Modal title={editing ? `编辑 ${editing.code}` : parent ? `新增 ${parent.code} 的子科目` : '新增一级科目'}
       open={formOpen} onCancel={() => setFormOpen(false)} onOk={() => form.submit()}
-      confirmLoading={save.isPending} destroyOnClose>
+      confirmLoading={save.isPending} destroyOnHidden>
       <Form form={form} layout="vertical" onFinish={(value) => save.mutate(value)}>
         {editing?.coreLocked && <Alert type="info" showIcon message="已有已记账凭证或已确认期初余额，仅名称和状态可修改。" />}
         <Form.Item name="code" label="科目编码" rules={[{ required: true }, { max: 32 }]}>

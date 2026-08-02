@@ -28,9 +28,16 @@ public class JdbcIdentityRepository implements IdentityRepository {
         return jdbc.queryForObject("""
                 select id, issuer, subject, display_name, email, status
                 from app_user where id = ? and deleted_at is null
-                """, (rs, rowNum) -> new UserResponse(rs.getObject("id", UUID.class), rs.getString("issuer"),
-                rs.getString("subject"), rs.getString("display_name"), rs.getString("email"), rs.getString("status")),
-                id);
+                """, this::mapUser, id);
+    }
+
+    @Override
+    public Optional<UserResponse> findByLocalUsername(String username) {
+        return Optional.ofNullable(jdbc.query("""
+                select id, issuer, subject, display_name, email, status
+                from app_user
+                where issuer = 'local' and lower(display_name) = lower(?) and deleted_at is null
+                """, rs -> rs.next() ? mapUser(rs, 0) : null, username));
     }
 
     @Override
@@ -38,8 +45,12 @@ public class JdbcIdentityRepository implements IdentityRepository {
         return Optional.ofNullable(jdbc.query("""
                 select id, issuer, subject, display_name, email, status
                 from app_user where lower(email) = ? and status = 'ACTIVE' and deleted_at is null
-                """, rs -> rs.next() ? new UserResponse(rs.getObject("id", UUID.class),
-                rs.getString("issuer"), rs.getString("subject"), rs.getString("display_name"),
-                rs.getString("email"), rs.getString("status")) : null, email));
+                """, rs -> rs.next() ? mapUser(rs, 0) : null, email));
+    }
+
+    private UserResponse mapUser(java.sql.ResultSet rs, int rowNum) throws java.sql.SQLException {
+        return new UserResponse(rs.getObject("id", UUID.class), rs.getString("issuer"),
+                rs.getString("subject"), rs.getString("display_name"), rs.getString("email"),
+                rs.getString("status"));
     }
 }

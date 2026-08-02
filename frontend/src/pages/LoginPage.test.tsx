@@ -42,12 +42,24 @@ describe('local login', () => {
   })
 
   it('creates the session only after the backend accepts the username', async () => {
-    vi.mocked(apiFetch).mockResolvedValue(undefined as never)
+    const canonicalUserId = '00000000-0000-4000-8000-000000000123'
+    vi.mocked(apiFetch).mockResolvedValue({
+      id: canonicalUserId,
+      issuer: 'local',
+      subject: 'admin',
+      displayName: 'admin',
+      email: null,
+      status: 'ACTIVE',
+    })
     render(<MemoryRouter><AuthProvider><LoginPage /></AuthProvider></MemoryRouter>)
 
     fireEvent.click(screen.getByRole('button', { name: '进入本地工作台' }))
 
     await waitFor(() => expect(sessionStorage.getItem('ai-accounting.session')).not.toBeNull())
     expect(apiFetch).toHaveBeenCalledWith('/me', expect.objectContaining({ localUserName: 'admin' }))
+    expect(JSON.parse(sessionStorage.getItem('ai-accounting.session')!)).toMatchObject({
+      localUserId: canonicalUserId,
+      localUserName: 'admin',
+    })
   })
 })

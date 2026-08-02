@@ -11,6 +11,7 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 import org.apache.poi.ss.usermodel.WorkbookFactory;
+import org.apache.poi.hssf.usermodel.HSSFWorkbook;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -23,6 +24,57 @@ class AccountExchangeIntegrationTest {
 
     @Autowired
     private AccountExchangeService exchange;
+
+    @Test
+    void previewsAndCommitsANativeKingdeeAccountList() throws Exception {
+        UUID owner = UUID.randomUUID();
+        UUID ledgerId = ledgers.create(user(owner), new LedgerRequests.Create(
+                "kingdee-native-accounts", "SME", "2011-17", "CNY",
+                LocalDate.of(2018, 1, 1), false, new AccountCodeRule(4, 3, 3))).id();
+        byte[] workbook;
+        try (var source = new HSSFWorkbook(); var output = new ByteArrayOutputStream()) {
+            var sheet = source.createSheet("科目列表");
+            var header = sheet.createRow(0);
+            List.of("编码", "名称", "类别", "余额方向")
+                    .forEach(value -> header.createCell(header.getLastCellNum() < 0 ? 0 : header.getLastCellNum())
+                            .setCellValue(value));
+            var parent = sheet.createRow(1);
+            parent.createCell(0).setCellValue("1002");
+            parent.createCell(1).setCellValue("银行存款");
+            parent.createCell(2).setCellValue("流动资产");
+            parent.createCell(3).setCellValue("借");
+            var child = sheet.createRow(2);
+            child.createCell(0).setCellValue("10020001");
+            child.createCell(1).setCellValue("基本户");
+            child.createCell(2).setCellValue("营业收入");
+            child.createCell(3).setCellValue("贷");
+            source.write(output);
+            workbook = output.toByteArray();
+        }
+
+        AccountExchangeService.Preview preview = exchange.preview(owner, ledgerId,
+                AccountExchangeService.Format.KINGDEE, "accounts.xls", workbook.length,
+                new ByteArrayInputStream(workbook));
+
+        assertThat(preview.rows()).hasSize(2);
+        assertThat(preview.rows()).allMatch(row -> row.issues().isEmpty());
+        for (AccountExchangeService.PreviewRow row : preview.rows()) {
+            exchange.decide(owner, ledgerId, preview.id(), row.rowNo(),
+                    new AccountExchangeService.Decision(
+                            row.targetAccountId() == null ? "CREATE" : "MAP", row.targetAccountId(), null));
+        }
+        exchange.commit(owner, ledgerId, preview.id());
+
+        List<LedgerResponses.Account> accounts = ledgers.listAccounts(owner, ledgerId);
+        UUID parentId = accounts.stream().filter(account -> account.code().equals("1002"))
+                .findFirst().orElseThrow().id();
+        assertThat(accounts).filteredOn(account -> account.code().equals("10020001"))
+                .singleElement().satisfies(account -> {
+                    assertThat(account.parentId()).isEqualTo(parentId);
+                    assertThat(account.category()).isEqualTo("ASSET");
+                    assertThat(account.normalBalance()).isEqualTo("DEBIT");
+                });
+    }
 
     @Test
     void exportsPreviewsAndMapsAStandardWorkbookWithoutChangingAccounts() throws Exception {
@@ -107,7 +159,7 @@ class AccountExchangeIntegrationTest {
         UUID operating = ledgers.listCashFlowItems(owner, source).stream()
                 .filter(item -> item.code().equals("OPERATING")).findFirst().orElseThrow().id();
         ledgers.createAccount(owner, source, new LedgerRequests.AccountCreate(
-                "1001.01", "区域现金", "ASSET", "DEBIT", null, true, operating,
+                "100101", "区域现金", "ASSET", "DEBIT", null, true, operating,
                 false, null, List.of(new LedgerRequests.DimensionRequirement(region.id(), true))));
         byte[] exported = exchange.export(owner, source, AccountExchangeService.Format.STANDARD);
 
@@ -124,7 +176,7 @@ class AccountExchangeIntegrationTest {
         exchange.commit(owner, target, preview.id());
 
         LedgerResponses.Account imported = ledgers.listAccounts(owner, target).stream()
-                .filter(account -> account.code().equals("1001.01")).findFirst().orElseThrow();
+                .filter(account -> account.code().equals("100101")).findFirst().orElseThrow();
         assertThat(imported.cashFlowRequired()).isTrue();
         assertThat(ledgers.listCashFlowItems(owner, target)).filteredOn(item ->
                         item.id().equals(imported.defaultCashFlowItemId()))
