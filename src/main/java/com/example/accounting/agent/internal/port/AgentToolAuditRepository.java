@@ -4,5 +4,9 @@ import java.util.UUID;
 
 public interface AgentToolAuditRepository {
 
-    void record(String toolName, UUID ledgerId, UUID actorId, UUID traceId, String inputHash, String resultHash);
+    void recordSuccess(
+            String toolName, UUID ledgerId, UUID actorId, String traceId, String inputHash, String resultHash);
+
+    void recordFailure(String toolName, UUID ledgerId, UUID actorId, String traceId,
+                       String inputHash, String errorCode, String errorHash);
 }

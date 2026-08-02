@@ -5,6 +5,7 @@ import com.example.accounting.identity.UserResponse;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import org.springframework.http.MediaType;
 import org.springframework.http.HttpStatus;
@@ -53,6 +54,11 @@ public class LedgerController {
         return ledgerService.findLedger(user(request), ledgerId);
     }
 
+    @GetMapping("/{ledgerId}/role")
+    public Map<String, String> role(HttpServletRequest request, @PathVariable UUID ledgerId) {
+        return Map.of("role", ledgerService.role(user(request), ledgerId).name());
+    }
+
     @GetMapping("/{ledgerId}/members")
     public List<Member> listMembers(HttpServletRequest request, @PathVariable UUID ledgerId) {
         return ledgerService.listMembers(user(request), ledgerId);
@@ -67,6 +73,45 @@ public class LedgerController {
     @GetMapping("/{ledgerId}/accounts")
     public List<LedgerResponses.Account> listAccounts(HttpServletRequest request, @PathVariable UUID ledgerId) {
         return ledgerService.listAccounts(user(request), ledgerId);
+    }
+
+    @GetMapping("/{ledgerId}/accounts/{accountId}")
+    public LedgerResponses.Account getAccount(HttpServletRequest request, @PathVariable UUID ledgerId,
+                                               @PathVariable UUID accountId) {
+        return ledgerService.findAccount(user(request), ledgerId, accountId);
+    }
+
+    @PostMapping("/{ledgerId}/accounts")
+    @ResponseStatus(HttpStatus.CREATED)
+    public LedgerResponses.Account createAccount(HttpServletRequest request, @PathVariable UUID ledgerId,
+                                                  @Valid @RequestBody LedgerRequests.AccountCreate body) {
+        return ledgerService.createAccount(user(request), ledgerId, body);
+    }
+
+    @PatchMapping("/{ledgerId}/accounts/{accountId}")
+    public LedgerResponses.Account updateAccount(HttpServletRequest request, @PathVariable UUID ledgerId,
+                                                  @PathVariable UUID accountId,
+                                                  @Valid @RequestBody LedgerRequests.AccountPatch body) {
+        return ledgerService.updateAccount(user(request), ledgerId, accountId, body);
+    }
+
+    @DeleteMapping("/{ledgerId}/accounts/{accountId}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void deleteAccount(HttpServletRequest request, @PathVariable UUID ledgerId,
+                              @PathVariable UUID accountId, @RequestParam long expectedVersion) {
+        ledgerService.deleteAccount(user(request), ledgerId, accountId, expectedVersion);
+    }
+
+    @PutMapping("/{ledgerId}/account-code-rule")
+    public AccountCodeRule updateAccountCodeRule(HttpServletRequest request, @PathVariable UUID ledgerId,
+                                                  @Valid @RequestBody LedgerRequests.AccountCodeRuleUpdate body) {
+        return ledgerService.updateAccountCodeRule(user(request), ledgerId, body);
+    }
+
+    @GetMapping("/{ledgerId}/cash-flow-items")
+    public List<LedgerResponses.CashFlowItem> listCashFlowItems(
+            HttpServletRequest request, @PathVariable UUID ledgerId) {
+        return ledgerService.listCashFlowItems(user(request), ledgerId);
     }
 
     @GetMapping("/{ledgerId}/periods")

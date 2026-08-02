@@ -39,7 +39,7 @@ public class DocumentController {
     public DocumentResponses.Document upload(HttpServletRequest request, @PathVariable UUID ledgerId,
                                              @RequestPart("file") MultipartFile file) throws IOException {
         return documentService.upload(user(request), ledgerId, file.getOriginalFilename(), file.getContentType(),
-                file.getSize(), file.getInputStream());
+                file.getSize(), file.getInputStream(), request.getHeader("Idempotency-Key"));
     }
 
     @GetMapping("/{documentId}")
@@ -66,9 +66,9 @@ public class DocumentController {
     }
 
     @PostMapping("/{documentId}:extract")
-    public ExtractionResponses.Extraction extractMock(HttpServletRequest request, @PathVariable UUID ledgerId,
-                                                       @PathVariable UUID documentId) {
-        return extractionService.extractMock(user(request), ledgerId, documentId);
+    public ExtractionResponses.Extraction extract(HttpServletRequest request, @PathVariable UUID ledgerId,
+                                                   @PathVariable UUID documentId) {
+        return extractionService.extract(user(request), ledgerId, documentId);
     }
 
     @GetMapping("/{documentId}/extractions")

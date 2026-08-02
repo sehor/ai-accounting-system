@@ -5,7 +5,7 @@ import { Outlet, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { apiFetch } from '../api/client'
 import type { Ledger, User } from '../api/types'
 import { useAuth } from '../auth/AuthProvider'
-import { clearSession, logoutOidc, isOidcConfigured } from '../auth/session'
+import { logoutOidc, isOidcConfigured } from '../auth/session'
 
 const { Header, Sider, Content } = Layout
 
@@ -38,11 +38,10 @@ export function AppShell() {
             : 'overview'
 
   const handleLogout = async () => {
+    signOut()
     if (isOidcConfigured()) {
-      await logoutOidc().catch(() => undefined)
+      await logoutOidc().catch(() => navigate('/login', { replace: true }))
     } else {
-      clearSession()
-      signOut()
       navigate('/login', { replace: true })
     }
   }

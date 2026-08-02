@@ -2,6 +2,7 @@ package com.example.accounting.documents.internal.persistence;
 
 import com.example.accounting.documents.ExtractionResponses;
 import com.example.accounting.documents.internal.port.ExtractionRepository;
+import com.example.accounting.documents.internal.port.DocumentExtractor;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
@@ -19,13 +20,14 @@ public class JdbcExtractionRepository implements ExtractionRepository {
     }
 
     @Override
-    public void create(UUID extractionId, UUID ledgerId, UUID documentId, String result,
+    public void create(UUID extractionId, UUID ledgerId, UUID documentId, DocumentExtractor.Result result,
                        String inputHash, String outputHash) {
         jdbc.update("""
                 insert into document_extraction (id, ledger_id, document_id, provider, provider_version,
                     structured_result, source_references, input_hash, output_hash)
-                values (?, ?, ?, 'mock', 'v1', ?::jsonb, ?::jsonb, ?, ?)
-                """, extractionId, ledgerId, documentId, result, "{}", inputHash, outputHash);
+                values (?, ?, ?, ?, ?, ?::jsonb, ?::jsonb, ?, ?)
+                """, extractionId, ledgerId, documentId, result.provider(), result.providerVersion(),
+                result.structuredResult(), result.sourceReferences(), inputHash, outputHash);
     }
 
     @Override

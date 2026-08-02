@@ -45,6 +45,13 @@ public class DefaultDocumentService implements DocumentService {
     @Transactional
     public DocumentResponses.Document upload(UUID actorId, UUID ledgerId, String fileName, String contentType,
                                              long declaredSize, InputStream input) {
+        return upload(actorId, ledgerId, fileName, contentType, declaredSize, input, null);
+    }
+
+    @Override
+    @Transactional
+    public DocumentResponses.Document upload(UUID actorId, UUID ledgerId, String fileName, String contentType,
+                                             long declaredSize, InputStream input, String idempotencyKey) {
         requireWriteRole(actorId, ledgerId);
         if (!CONTENT_TYPES.contains(contentType) || fileName == null || fileName.isBlank()) {
             throw problem(415, "UNSUPPORTED_DOCUMENT_TYPE", "Unsupported document type",
@@ -52,6 +59,11 @@ public class DefaultDocumentService implements DocumentService {
         }
         if (declaredSize < 0 || declaredSize > MAX_SIZE) {
             throw problem(413, "DOCUMENT_TOO_LARGE", "Document is too large", "The maximum document size is 20 MB");
+        }
+        String key = idempotencyKey == null || idempotencyKey.isBlank() ? null : idempotencyKey.trim();
+        if (key != null && key.length() > 128) {
+            throw problem(400, "IDEMPOTENCY_KEY_INVALID", "Invalid idempotency key",
+                    "The idempotency key is too long");
         }
         String objectKey = UUID.randomUUID().toString();
         Path root = storageRoot.toAbsolutePath().normalize();
@@ -80,6 +92,19 @@ public class DefaultDocumentService implements DocumentService {
             String sha256 = HexFormat.of().formatHex(digest.digest());
             boolean duplicate = documents.existsByHash(ledgerId, sha256);
             UUID id = UUID.randomUUID();
+            if (key != null) {
+                String requestHash = hash(fileName + "\0" + contentType + "\0" + size + "\0" + sha256);
+                if (!documents.reserveIdempotency(ledgerId, actorId, key, requestHash, id)) {
+                    DocumentRepository.DocumentIdempotency existing =
+                            documents.findIdempotency(ledgerId, actorId, key).orElseThrow();
+                    if (!requestHash.equals(existing.requestHash())) {
+                        throw problem(409, "IDEMPOTENCY_KEY_REUSED", "Idempotency key reused",
+                                "The idempotency key was used with a different request");
+                    }
+                    deleteQuietly(target);
+                    return documents.find(ledgerId, existing.documentId()).orElseThrow();
+                }
+            }
             DocumentResponses.Document document = new DocumentResponses.Document(
                     id, ledgerId, objectKey, fileName, contentType, size, sha256, "UPLOADED", duplicate,
                     java.time.OffsetDateTime.now());
@@ -155,6 +180,11 @@ public class DefaultDocumentService implements DocumentService {
             Files.deleteIfExists(target);
         } catch (IOException ignored) {
         }
+    }
+
+    private String hash(String value) throws NoSuchAlgorithmException {
+        return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
+                .digest(value.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
     }
 
     private void deleteFileIfTransactionRollsBack(Path target) {

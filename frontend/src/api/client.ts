@@ -1,4 +1,5 @@
 import type { ProblemDetails } from './types'
+import { clearSession } from '../auth/session'
 
 export interface ApiAuth {
   accessToken?: string
@@ -26,7 +27,10 @@ export async function apiFetch<T>(path: string, auth: ApiAuth, init: RequestInit
   if (auth.localUserId) headers.set('X-User-Id', auth.localUserId)
 
   const response = await fetch(`${baseUrl}${path}`, { ...init, headers })
-  if (response.status === 401 && window.location.pathname !== '/login') window.location.assign('/login')
+  if (response.status === 401) {
+    clearSession()
+    if (window.location.pathname !== '/login') window.location.assign('/login')
+  }
   if (!response.ok) {
     let problem: ProblemDetails = {}
     try {

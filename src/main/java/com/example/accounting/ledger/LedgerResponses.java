@@ -2,6 +2,7 @@ package com.example.accounting.ledger;
 
 import java.time.LocalDate;
 import java.math.BigDecimal;
+import java.util.List;
 import java.util.UUID;
 
 public final class LedgerResponses {
@@ -17,8 +18,40 @@ public final class LedgerResponses {
                          String displayName, String email) {
     }
 
-    public record Account(UUID id, UUID ledgerId, String code, String name, String category,
-                          String normalBalance, String status) {
+    public record Account(
+            UUID id,
+            UUID ledgerId,
+            String code,
+            String name,
+            String category,
+            String normalBalance,
+            String status,
+            UUID parentId,
+            int level,
+            boolean isLeaf,
+            boolean isTemplate,
+            boolean hasBusinessUsage,
+            boolean coreLocked,
+            boolean legacyCode,
+            long version,
+            boolean cashFlowRequired,
+            UUID defaultCashFlowItemId,
+            boolean quantityEnabled,
+            String unitName,
+            List<DimensionRequirement> dimensionRequirements) {
+
+        public Account(UUID id, UUID ledgerId, String code, String name, String category,
+                       String normalBalance, String status) {
+            this(id, ledgerId, code, name, category, normalBalance, status, null, 1,
+                    true, false, false, false, false, 0, false, null, false, null, List.of());
+        }
+    }
+
+    public record DimensionRequirement(UUID dimensionTypeId, String code, String name, boolean required) {
+    }
+
+    public record CashFlowItem(UUID id, UUID ledgerId, String code, String name, String status,
+                               boolean template) {
     }
 
     public record Period(UUID id, UUID ledgerId, String periodCode, LocalDate startDate,

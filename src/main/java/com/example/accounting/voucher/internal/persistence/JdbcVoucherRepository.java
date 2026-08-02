@@ -55,8 +55,51 @@ public class JdbcVoucherRepository implements VoucherRepository {
     @Override
     public boolean activeAccountExists(UUID ledgerId, UUID accountId) {
         return Boolean.TRUE.equals(jdbcTemplate.queryForObject(
-                "select exists (select 1 from ledger_account where ledger_id = ? and id = ? and status = 'ACTIVE')",
+                """
+                select exists (
+                    select 1 from ledger_account account
+                    where account.ledger_id = ? and account.id = ? and account.status = 'ACTIVE'
+                      and not exists (
+                          select 1 from ledger_account child
+                          where child.ledger_id = account.ledger_id and child.parent_id = account.id))
+                """,
                 Boolean.class, ledgerId, accountId));
+    }
+
+    @Override
+    public Optional<AccountControls> accountControls(UUID ledgerId, UUID accountId) {
+        return Optional.ofNullable(jdbcTemplate.query("""
+                select cash_flow_required, default_cash_flow_item_id, quantity_enabled, unit_name
+                from ledger_account where ledger_id = ? and id = ?
+                """, rs -> rs.next() ? new AccountControls(
+                rs.getBoolean("cash_flow_required"),
+                rs.getObject("default_cash_flow_item_id", UUID.class),
+                rs.getBoolean("quantity_enabled"),
+                rs.getString("unit_name"), jdbcTemplate.queryForList("""
+                        select dimension_type_id from ledger_account_dimension
+                        where ledger_id = ? and account_id = ?
+                        """, UUID.class, ledgerId, accountId)) : null, ledgerId, accountId));
+    }
+
+    @Override
+    public boolean validCashFlowItem(UUID ledgerId, UUID cashFlowItemId) {
+        if (cashFlowItemId == null) {
+            return true;
+        }
+        return Boolean.TRUE.equals(jdbcTemplate.queryForObject("""
+                select exists (
+                    select 1 from cash_flow_item
+                    where ledger_id = ? and id = ? and status = 'ACTIVE')
+                """, Boolean.class, ledgerId, cashFlowItemId));
+    }
+
+    @Override
+    public boolean validDimensionValue(UUID ledgerId, UUID dimensionTypeId, UUID dimensionValueId) {
+        return Boolean.TRUE.equals(jdbcTemplate.queryForObject("""
+                select exists (
+                    select 1 from dimension_value
+                    where ledger_id = ? and dimension_type_id = ? and id = ? and status = 'ACTIVE')
+                """, Boolean.class, ledgerId, dimensionTypeId, dimensionValueId));
     }
 
     @Override
@@ -92,13 +135,77 @@ public class JdbcVoucherRepository implements VoucherRepository {
     @Override
     public void createLine(UUID lineId, UUID ledgerId, UUID voucherId, int lineNo, UUID accountId, String side,
                            String currency, BigDecimal originalAmount, BigDecimal exchangeRate,
-                           BigDecimal baseAmount, String summary) {
+                           BigDecimal baseAmount, String summary, UUID cashFlowItemId,
+                           BigDecimal quantity, BigDecimal unitPrice) {
         jdbcTemplate.update("""
                 insert into voucher_line (id, ledger_id, voucher_id, line_no, account_id, side, currency,
-                    original_amount, exchange_rate, base_amount, summary)
-                values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    original_amount, exchange_rate, base_amount, summary, cash_flow_item_id, quantity, unit_price)
+                values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, lineId, ledgerId, voucherId, lineNo, accountId, side, currency, originalAmount, exchangeRate,
-                baseAmount, summary);
+                baseAmount, summary, cashFlowItemId, quantity, unitPrice);
+    }
+
+    @Override
+    public void createLineDimensions(
+            UUID lineId, UUID ledgerId, List<com.example.accounting.voucher.VoucherRequests.Dimension> dimensions) {
+        for (com.example.accounting.voucher.VoucherRequests.Dimension dimension : dimensions) {
+            jdbcTemplate.update("""
+                    insert into voucher_line_dimension (
+                        voucher_line_id, ledger_id, dimension_type_id, dimension_value_id)
+                    values (?, ?, ?, ?)
+                    """, lineId, ledgerId, dimension.dimensionTypeId(), dimension.dimensionValueId());
+        }
+    }
+
+    @Override
+    public boolean controlsComplete(UUID ledgerId, UUID voucherId) {
+        return Boolean.TRUE.equals(jdbcTemplate.queryForObject("""
+                select not exists (
+                    select 1
+                    from voucher_line line
+                    join ledger_account account
+                      on account.ledger_id = line.ledger_id and account.id = line.account_id
+                    where line.ledger_id = ? and line.voucher_id = ?
+                      and (
+                        account.status <> 'ACTIVE'
+                        or exists (
+                            select 1 from ledger_account child
+                            where child.ledger_id = account.ledger_id and child.parent_id = account.id)
+                        or (account.cash_flow_required and line.cash_flow_item_id is null)
+                        or (line.cash_flow_item_id is not null and not exists (
+                            select 1 from cash_flow_item item
+                            where item.ledger_id = line.ledger_id
+                              and item.id = line.cash_flow_item_id and item.status = 'ACTIVE'))
+                        or (account.quantity_enabled and (
+                            line.quantity is null or line.unit_price is null
+                            or round(line.quantity * line.unit_price, 4) <> line.original_amount))
+                        or (not account.quantity_enabled
+                            and (line.quantity is not null or line.unit_price is not null))
+                        or exists (
+                            select 1 from ledger_account_dimension required
+                            where required.ledger_id = account.ledger_id
+                              and required.account_id = account.id and required.required
+                              and not exists (
+                                  select 1 from voucher_line_dimension actual
+                                  where actual.voucher_line_id = line.id
+                                    and actual.dimension_type_id = required.dimension_type_id))
+                        or exists (
+                            select 1 from voucher_line_dimension actual
+                            where actual.voucher_line_id = line.id
+                              and (
+                                not exists (
+                                    select 1 from ledger_account_dimension allowed
+                                    where allowed.ledger_id = line.ledger_id
+                                      and allowed.account_id = account.id
+                                      and allowed.dimension_type_id = actual.dimension_type_id)
+                                or not exists (
+                                    select 1 from dimension_value value
+                                    where value.ledger_id = line.ledger_id
+                                      and value.dimension_type_id = actual.dimension_type_id
+                                      and value.id = actual.dimension_value_id
+                                      and value.status = 'ACTIVE')))
+                      ))
+                """, Boolean.class, ledgerId, voucherId));
     }
 
     @Override
@@ -134,12 +241,15 @@ public class JdbcVoucherRepository implements VoucherRepository {
     @Override
     public List<VoucherResponses.Line> lines(UUID ledgerId, UUID voucherId) {
         return jdbcTemplate.query("""
-                select id, line_no, account_id, side, currency, original_amount, exchange_rate, base_amount, summary
+                select id, line_no, account_id, side, currency, original_amount, exchange_rate, base_amount,
+                    summary, cash_flow_item_id, quantity, unit_price
                 from voucher_line where ledger_id = ? and voucher_id = ? order by line_no
                 """, (rs, rowNum) -> line(rs.getObject("id", UUID.class), rs.getInt("line_no"),
                 rs.getObject("account_id", UUID.class), rs.getString("side"), rs.getString("currency"),
                 rs.getBigDecimal("original_amount"), rs.getBigDecimal("exchange_rate"),
-                rs.getBigDecimal("base_amount"), rs.getString("summary")), ledgerId, voucherId);
+                rs.getBigDecimal("base_amount"), rs.getString("summary"),
+                rs.getObject("cash_flow_item_id", UUID.class), rs.getBigDecimal("quantity"),
+                rs.getBigDecimal("unit_price")), ledgerId, voucherId);
     }
 
     @Override
@@ -153,7 +263,7 @@ public class JdbcVoucherRepository implements VoucherRepository {
         arguments.addAll(voucherIds);
         return jdbcTemplate.query("""
                 select voucher_id, id, line_no, account_id, side, currency, original_amount, exchange_rate,
-                    base_amount, summary
+                    base_amount, summary, cash_flow_item_id, quantity, unit_price
                 from voucher_line where ledger_id = ? and voucher_id in (%s)
                 order by voucher_id, line_no
                 """.formatted(placeholders), rs -> {
@@ -164,7 +274,9 @@ public class JdbcVoucherRepository implements VoucherRepository {
                         rs.getObject("id", UUID.class), rs.getInt("line_no"),
                         rs.getObject("account_id", UUID.class), rs.getString("side"), rs.getString("currency"),
                         rs.getBigDecimal("original_amount"), rs.getBigDecimal("exchange_rate"),
-                        rs.getBigDecimal("base_amount"), rs.getString("summary")));
+                        rs.getBigDecimal("base_amount"), rs.getString("summary"),
+                        rs.getObject("cash_flow_item_id", UUID.class), rs.getBigDecimal("quantity"),
+                        rs.getBigDecimal("unit_price")));
             }
             return result;
         }, arguments.toArray());
@@ -318,8 +430,19 @@ public class JdbcVoucherRepository implements VoucherRepository {
 
     private VoucherResponses.Line line(UUID id, int lineNo, UUID accountId, String side, String currency,
                                         BigDecimal originalAmount, BigDecimal exchangeRate, BigDecimal baseAmount,
-                                        String summary) {
+                                        String summary, UUID cashFlowItemId,
+                                        BigDecimal quantity, BigDecimal unitPrice) {
         return new VoucherResponses.Line(id, lineNo, accountId, side, currency, originalAmount, exchangeRate,
-                baseAmount, summary);
+                baseAmount, summary, cashFlowItemId, quantity, unitPrice, dimensions(id));
+    }
+
+    private List<VoucherResponses.Dimension> dimensions(UUID lineId) {
+        // ponytail: one small lookup per line; batch it if voucher-list profiling shows this dominates.
+        return jdbcTemplate.query("""
+                select dimension_type_id, dimension_value_id
+                from voucher_line_dimension where voucher_line_id = ? order by dimension_type_id
+                """, (rs, row) -> new VoucherResponses.Dimension(
+                rs.getObject("dimension_type_id", UUID.class),
+                rs.getObject("dimension_value_id", UUID.class)), lineId);
     }
 }

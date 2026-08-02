@@ -18,6 +18,8 @@ public interface LedgerRepository {
 
     void createAccount(UUID ledgerId, String code, String name, String category, String normalBalance);
 
+    boolean createAccountIfAbsent(UUID ledgerId, String code, String name, String category, String normalBalance);
+
     void createPeriod(UUID ledgerId, String periodCode, LocalDate startDate, LocalDate endDate);
 
     void createFormula(UUID ledgerId, String code, String name, String json);
@@ -29,6 +31,8 @@ public interface LedgerRepository {
     List<LedgerResponses.Member> listMembers(UUID ledgerId);
 
     List<LedgerResponses.Account> listAccounts(UUID ledgerId);
+
+    Optional<LedgerResponses.Account> findAccount(UUID ledgerId, String code);
 
     List<LedgerResponses.Period> listPeriods(UUID ledgerId);
 

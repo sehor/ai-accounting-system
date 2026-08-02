@@ -7,6 +7,9 @@ public interface ReportingService {
 
     List<ReportResponses.TrialBalanceLine> trialBalance(UUID actorId, UUID ledgerId, String periodCode);
 
+    List<ReportResponses.TrialBalanceLine> trialBalance(
+            UUID actorId, UUID ledgerId, String periodCode, boolean includeParents);
+
     ReportResponses.Statement balanceSheet(UUID actorId, UUID ledgerId, String periodCode);
 
     ReportResponses.Statement incomeStatement(UUID actorId, UUID ledgerId, String periodCode);

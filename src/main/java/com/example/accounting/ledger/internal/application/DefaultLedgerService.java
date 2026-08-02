@@ -1,14 +1,20 @@
 package com.example.accounting.ledger.internal.application;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.example.accounting.identity.CurrentUserResolver;
 import com.example.accounting.identity.IdentityService;
 import com.example.accounting.identity.UserResponse;
+import com.example.accounting.ledger.AccountCodeRule;
+import com.example.accounting.ledger.AccountingStandard;
+import com.example.accounting.ledger.AccountingStandardCatalog;
 import com.example.accounting.ledger.LedgerAccessService;
 import com.example.accounting.ledger.LedgerRequests;
 import com.example.accounting.ledger.LedgerResponses;
 import com.example.accounting.ledger.LedgerRole;
 import com.example.accounting.ledger.LedgerService;
 import com.example.accounting.ledger.MembershipStatus;
+import com.example.accounting.ledger.internal.persistence.AccountManagementRepository;
 import com.example.accounting.ledger.internal.port.LedgerRepository;
 import com.example.accounting.shared.web.ApiProblemException;
 import java.io.BufferedReader;
@@ -22,8 +28,12 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Function;
+import java.util.stream.Collectors;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -35,42 +45,27 @@ public class DefaultLedgerService implements LedgerService {
     private static final Set<LedgerRole> MEMBER_VIEW_ROLES = Set.of(
             LedgerRole.OWNER, LedgerRole.EDITOR, LedgerRole.REVIEWER, LedgerRole.VIEWER);
     private static final Set<LedgerRole> WRITE_ROLES = Set.of(LedgerRole.OWNER, LedgerRole.EDITOR);
+    private static final Set<LedgerRole> AGENT_ACCOUNT_ROLES = Set.of(
+            LedgerRole.OWNER, LedgerRole.EDITOR, LedgerRole.AGENT);
     private static final Set<LedgerRole> OWNER_ROLE = Set.of(LedgerRole.OWNER);
-
-    private static final List<AccountTemplate> SME_ACCOUNTS = List.of(
-            new AccountTemplate("1001", "库存现金", "ASSET", "DEBIT"),
-            new AccountTemplate("1002", "银行存款", "ASSET", "DEBIT"),
-            new AccountTemplate("1122", "应收账款", "ASSET", "DEBIT"),
-            new AccountTemplate("1403", "原材料", "ASSET", "DEBIT"),
-            new AccountTemplate("1601", "固定资产", "ASSET", "DEBIT"),
-            new AccountTemplate("1701", "无形资产", "ASSET", "DEBIT"),
-            new AccountTemplate("2001", "短期借款", "LIABILITY", "CREDIT"),
-            new AccountTemplate("2202", "应付账款", "LIABILITY", "CREDIT"),
-            new AccountTemplate("2241", "其他应付款", "LIABILITY", "CREDIT"),
-            new AccountTemplate("3001", "实收资本", "EQUITY", "CREDIT"),
-            new AccountTemplate("3103", "本年利润", "EQUITY", "CREDIT"),
-            new AccountTemplate("4001", "生产成本", "COST", "DEBIT"),
-            new AccountTemplate("5001", "主营业务收入", "REVENUE", "CREDIT"),
-            new AccountTemplate("5401", "主营业务成本", "EXPENSE", "DEBIT"),
-            new AccountTemplate("5601", "管理费用", "EXPENSE", "DEBIT"));
-
-    private static final List<FormulaTemplate> SME_FORMULAS = List.of(
-            new FormulaTemplate("BALANCE_SHEET", "Balance Sheet",
-                    "{\"type\":\"balance-sheet\",\"debitCategories\":[\"ASSET\"],"
-                            + "\"creditCategories\":[\"LIABILITY\",\"EQUITY\"]}"),
-            new FormulaTemplate("INCOME_STATEMENT", "Income Statement",
-                    "{\"type\":\"income-statement\",\"revenueCategories\":[\"REVENUE\"],"
-                            + "\"expenseCategories\":[\"COST\",\"EXPENSE\"]}"));
+    private static final Set<String> ACCOUNT_CATEGORIES = Set.of(
+            "ASSET", "LIABILITY", "EQUITY", "COST", "REVENUE", "EXPENSE");
 
     private final LedgerRepository ledgers;
+    private final AccountManagementRepository accounts;
     private final LedgerAccessService ledgerAccess;
     private final IdentityService identityService;
+    private final AccountingStandardCatalog standards;
+    private final ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
 
-    public DefaultLedgerService(LedgerRepository ledgers, LedgerAccessService ledgerAccess,
-                                IdentityService identityService) {
+    public DefaultLedgerService(LedgerRepository ledgers, AccountManagementRepository accounts,
+                                LedgerAccessService ledgerAccess, IdentityService identityService,
+                                AccountingStandardCatalog standards) {
         this.ledgers = ledgers;
+        this.accounts = accounts;
         this.ledgerAccess = ledgerAccess;
         this.identityService = identityService;
+        this.standards = standards;
     }
 
     @Override
@@ -78,12 +73,17 @@ public class DefaultLedgerService implements LedgerService {
     public LedgerResponses.Ledger create(CurrentUserResolver.ResolvedUser actor, LedgerRequests.Create request) {
         UUID actorId = actor.id();
         identityService.ensureUser(actor);
+        AccountingStandard.Package standard = requireStandard(
+                request.accountingStandardCode().trim(), request.accountingStandardVersion().trim());
+        AccountCodeRule rule = request.accountCodeRule() == null
+                ? standard.accountCodeRule() : request.accountCodeRule();
         UUID ledgerId = UUID.randomUUID();
         ledgers.createLedger(ledgerId, request.name().trim(), request.accountingStandardCode().trim(),
                 request.accountingStandardVersion().trim(), request.baseCurrency(), request.startDate(),
                 Boolean.TRUE.equals(request.approvalEnabled()), actorId);
         ledgers.createOwner(ledgerId, actorId);
-        initializeLedger(ledgerId, request.startDate());
+        accounts.initializeCodeRule(ledgerId, rule);
+        initializeLedger(ledgerId, request.startDate(), standard, actorId);
         return requireLedger(ledgerId);
     }
 
@@ -98,6 +98,12 @@ public class DefaultLedgerService implements LedgerService {
     public LedgerResponses.Ledger findLedger(UUID actorId, UUID ledgerId) {
         requireRole(actorId, ledgerId, VIEW_ROLES);
         return requireLedger(ledgerId);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public LedgerRole role(UUID actorId, UUID ledgerId) {
+        return ledgerAccess.requireMembership(actorId, ledgerId);
     }
 
     @Override
@@ -121,7 +127,160 @@ public class DefaultLedgerService implements LedgerService {
     @Transactional(readOnly = true)
     public List<LedgerResponses.Account> listAccounts(UUID actorId, UUID ledgerId) {
         requireRole(actorId, ledgerId, VIEW_ROLES);
-        return ledgers.listAccounts(ledgerId);
+        return accounts.list(ledgerId);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public LedgerResponses.Account findAccount(UUID actorId, UUID ledgerId, UUID accountId) {
+        requireRole(actorId, ledgerId, VIEW_ROLES);
+        return requireAccount(ledgerId, accountId);
+    }
+
+    @Override
+    @Transactional
+    public LedgerResponses.Account createAccount(
+            UUID actorId, UUID ledgerId, LedgerRequests.AccountCreate request) {
+        requireRole(actorId, ledgerId, WRITE_ROLES);
+        return createAccount(actorId, ledgerId, request, false);
+    }
+
+    @Override
+    @Transactional
+    public LedgerResponses.Account updateAccount(
+            UUID actorId, UUID ledgerId, UUID accountId, LedgerRequests.AccountPatch request) {
+        requireRole(actorId, ledgerId, WRITE_ROLES);
+        LedgerResponses.Account before = requireAccount(ledgerId, accountId);
+        String code = text(request.code(), before.code()).trim();
+        String name = text(request.name(), before.name()).trim();
+        String category = text(request.category(), before.category()).toUpperCase(Locale.ROOT);
+        String normalBalance = text(request.normalBalance(), before.normalBalance()).toUpperCase(Locale.ROOT);
+        String status = text(request.status(), before.status()).toUpperCase(Locale.ROOT);
+        boolean cashFlowRequired = request.cashFlowRequired() == null
+                ? before.cashFlowRequired() : request.cashFlowRequired();
+        UUID defaultCashFlowItemId = request.defaultCashFlowItemId() == null
+                ? before.defaultCashFlowItemId() : request.defaultCashFlowItemId();
+        boolean quantityEnabled = request.quantityEnabled() == null
+                ? before.quantityEnabled() : request.quantityEnabled();
+        String unitSource = text(request.unitName(), before.unitName());
+        String unitName = quantityEnabled && unitSource != null ? unitSource.trim() : null;
+        ParentResolution parent = resolveParent(ledgerId, accountId, code,
+                request.parentId() == null ? before.parentId() : request.parentId(),
+                category, normalBalance);
+        category = parent.category();
+        normalBalance = parent.normalBalance();
+
+        validateAccountValues(ledgerId, code, name, category, normalBalance, cashFlowRequired,
+                defaultCashFlowItemId, quantityEnabled, unitName, request.dimensionRequirements());
+        if (!Set.of("ACTIVE", "INACTIVE").contains(status)) {
+            throw accountInvalid("Status must be ACTIVE or INACTIVE");
+        }
+        boolean structuralChange = !code.equals(before.code())
+                || !java.util.Objects.equals(parent.parentId(), before.parentId())
+                || !category.equals(before.category()) || !normalBalance.equals(before.normalBalance());
+        boolean coreChange = structuralChange
+                || cashFlowRequired != before.cashFlowRequired()
+                || !java.util.Objects.equals(defaultCashFlowItemId, before.defaultCashFlowItemId())
+                || quantityEnabled != before.quantityEnabled()
+                || !java.util.Objects.equals(unitName, before.unitName())
+                || request.dimensionRequirements() != null;
+        if (before.isTemplate() && structuralChange) {
+            throw problem(409, "ACCOUNT_TEMPLATE_LOCKED", "Template account is locked",
+                    "Template account code, parent, category, and normal balance cannot be changed");
+        }
+        if (before.coreLocked() && coreChange) {
+            throw problem(409, "ACCOUNT_CORE_LOCKED", "Account core attributes are locked",
+                    "Posted vouchers or confirmed opening balances lock core account attributes");
+        }
+        if (!before.isLeaf() && structuralChange) {
+            throw problem(409, "ACCOUNT_HAS_CHILDREN", "Account has children",
+                    "A parent account cannot change its structural attributes");
+        }
+        if ("INACTIVE".equals(status) && !"INACTIVE".equals(before.status())
+                && accounts.hasActiveDescendants(ledgerId, accountId)) {
+            throw problem(409, "ACCOUNT_DESCENDANTS_ACTIVE", "Account descendants are active",
+                    "Disable every descendant before disabling its parent");
+        }
+        if ("ACTIVE".equals(status) && !"ACTIVE".equals(before.status())
+                && accounts.hasInactiveAncestors(ledgerId, accountId)) {
+            throw problem(409, "ACCOUNT_ANCESTOR_INACTIVE", "Account ancestor is inactive",
+                    "Enable every ancestor before enabling this account");
+        }
+        try {
+            if (!accounts.update(ledgerId, accountId, request.expectedVersion(), code, name, category,
+                    normalBalance, status, parent.parentId(), parent.level(), cashFlowRequired,
+                    defaultCashFlowItemId, quantityEnabled, unitName)) {
+                throw versionConflict();
+            }
+            if (request.dimensionRequirements() != null) {
+                accounts.replaceDimensions(ledgerId, accountId, request.dimensionRequirements());
+            }
+        } catch (DataIntegrityViolationException exception) {
+            throw problem(409, "ACCOUNT_CODE_CONFLICT", "Account code conflict",
+                    "The account code already exists or a referenced control item is invalid");
+        }
+        LedgerResponses.Account after = requireAccount(ledgerId, accountId);
+        accounts.recordRevision(ledgerId, accountId, "UPDATE", actorId, json(before), json(after));
+        return after;
+    }
+
+    @Override
+    @Transactional
+    public void deleteAccount(UUID actorId, UUID ledgerId, UUID accountId, long expectedVersion) {
+        requireRole(actorId, ledgerId, WRITE_ROLES);
+        LedgerResponses.Account before = requireAccount(ledgerId, accountId);
+        if (!accounts.delete(ledgerId, accountId, expectedVersion)) {
+            if (before.version() != expectedVersion) {
+                throw versionConflict();
+            }
+            throw problem(409, "ACCOUNT_DELETE_FORBIDDEN", "Account cannot be deleted",
+                    "Only an unused custom leaf account can be deleted; disable other accounts instead");
+        }
+        accounts.recordRevision(ledgerId, accountId, "DELETE", actorId, json(before), "null");
+    }
+
+    @Override
+    @Transactional
+    public AccountCodeRule updateAccountCodeRule(
+            UUID actorId, UUID ledgerId, LedgerRequests.AccountCodeRuleUpdate request) {
+        requireRole(actorId, ledgerId, WRITE_ROLES);
+        AccountCodeRule rule;
+        try {
+            rule = request.toRule();
+        } catch (IllegalArgumentException exception) {
+            throw accountInvalid(exception.getMessage());
+        }
+        if (!accounts.updateCodeRule(ledgerId, rule)) {
+            throw problem(409, "ACCOUNT_CODE_RULE_LOCKED", "Account code rule is locked",
+                    "The account code rule cannot change after a subaccount exists");
+        }
+        return rule;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<LedgerResponses.CashFlowItem> listCashFlowItems(UUID actorId, UUID ledgerId) {
+        requireRole(actorId, ledgerId, VIEW_ROLES);
+        return accounts.cashFlowItems(ledgerId);
+    }
+
+    @Override
+    @Transactional
+    public LedgerResponses.Account ensureAgentAccount(
+            UUID actorId, UUID ledgerId, LedgerRequests.AccountCreate request) {
+        requireRole(actorId, ledgerId, AGENT_ACCOUNT_ROLES);
+        String code = request.code().trim();
+        String name = request.name().trim();
+        String category = request.category().trim().toUpperCase(Locale.ROOT);
+        String normalBalance = request.normalBalance().trim().toUpperCase(Locale.ROOT);
+        LedgerResponses.Account account = accounts.findByCode(ledgerId, code)
+                .orElseGet(() -> createAccount(actorId, ledgerId, request, true));
+        if (!account.name().equals(name) || !account.category().equals(category)
+                || !account.normalBalance().equals(normalBalance)) {
+            throw problem(409, "ACCOUNT_CODE_CONFLICT", "Account code conflict",
+                    "The account code already exists with different attributes");
+        }
+        return account;
     }
 
     @Override
@@ -377,17 +536,142 @@ public class DefaultLedgerService implements LedgerService {
         }
     }
 
-    private void initializeLedger(UUID ledgerId, LocalDate startDate) {
-        SME_ACCOUNTS.forEach(account -> ledgers.createAccount(
-                ledgerId, account.code(), account.name(), account.category(), account.normalBalance()));
+    private LedgerResponses.Account createAccount(
+            UUID actorId, UUID ledgerId, LedgerRequests.AccountCreate request, boolean idempotent) {
+        String code = request.code() == null ? "" : request.code().trim();
+        String name = request.name() == null ? "" : request.name().trim();
+        String category = request.category() == null
+                ? "" : request.category().trim().toUpperCase(Locale.ROOT);
+        String normalBalance = request.normalBalance() == null
+                ? "" : request.normalBalance().trim().toUpperCase(Locale.ROOT);
+        boolean cashFlowRequired = Boolean.TRUE.equals(request.cashFlowRequired());
+        boolean quantityEnabled = Boolean.TRUE.equals(request.quantityEnabled());
+        String unitName = request.unitName() == null ? null : request.unitName().trim();
+        ParentResolution parent = resolveParent(
+                ledgerId, null, code, request.parentId(), category, normalBalance);
+        category = parent.category();
+        normalBalance = parent.normalBalance();
+        validateAccountValues(ledgerId, code, name, category, normalBalance, cashFlowRequired,
+                request.defaultCashFlowItemId(), quantityEnabled, unitName,
+                request.dimensionRequirements());
+        if (parent.parentId() != null) {
+            LedgerResponses.Account parentAccount = requireAccount(ledgerId, parent.parentId());
+            if (parentAccount.hasBusinessUsage()) {
+                throw problem(409, "ACCOUNT_PARENT_HAS_BUSINESS_USAGE", "Parent account has business usage",
+                        "An account used by a voucher or opening balance cannot become a parent");
+            }
+            if (!"ACTIVE".equals(parentAccount.status())) {
+                throw problem(409, "ACCOUNT_ANCESTOR_INACTIVE", "Account ancestor is inactive",
+                        "Enable the parent before creating an active child");
+            }
+        }
+        UUID accountId = UUID.randomUUID();
+        try {
+            if (idempotent) {
+                boolean inserted = accounts.createIfAbsent(
+                        accountId, ledgerId, code, name, category, normalBalance,
+                        parent.parentId(), parent.level());
+                if (!inserted) {
+                    return accounts.findByCode(ledgerId, code).orElseThrow();
+                }
+            } else {
+                if (accounts.findByCode(ledgerId, code).isPresent()) {
+                    throw problem(409, "ACCOUNT_CODE_CONFLICT", "Account code conflict",
+                            "The account code already exists");
+                }
+                accounts.create(accountId, ledgerId, code, name, category, normalBalance,
+                        parent.parentId(), parent.level(), false, cashFlowRequired,
+                        request.defaultCashFlowItemId(), quantityEnabled,
+                        quantityEnabled ? unitName : null);
+            }
+            accounts.replaceDimensions(ledgerId, accountId, request.dimensionRequirements());
+        } catch (DataIntegrityViolationException exception) {
+            throw problem(409, "ACCOUNT_CODE_CONFLICT", "Account code conflict",
+                    "The account code already exists or a referenced control item is invalid");
+        }
+        LedgerResponses.Account created = requireAccount(ledgerId, accountId);
+        accounts.recordRevision(ledgerId, accountId, "CREATE", actorId, "null", json(created));
+        return created;
+    }
+
+    private ParentResolution resolveParent(
+            UUID ledgerId, UUID accountId, String code, UUID requestedParentId,
+            String category, String normalBalance) {
+        AccountCodeRule rule = accounts.codeRule(ledgerId);
+        int level = rule.levelOf(code);
+        if (level == 0) {
+            throw accountInvalid("The code does not match this ledger's account code rule");
+        }
+        if (level == 1) {
+            if (requestedParentId != null) {
+                throw accountInvalid("A level-one account cannot have a parent");
+            }
+            return new ParentResolution(null, 1, category, normalBalance);
+        }
+        String parentCode = rule.parentCode(code).orElseThrow();
+        LedgerResponses.Account parent = accounts.findByCode(ledgerId, parentCode).orElseThrow(() ->
+                problem(422, "ACCOUNT_PARENT_NOT_FOUND", "Account parent not found",
+                        "Create the parent account before creating its child"));
+        if ((requestedParentId != null && !requestedParentId.equals(parent.id()))
+                || (accountId != null && accountId.equals(parent.id()))
+                || parent.level() + 1 != level) {
+            throw accountInvalid("The parent does not match the account code");
+        }
+        if (!category.equals(parent.category()) || !normalBalance.equals(parent.normalBalance())) {
+            throw accountInvalid("A child must inherit category and normal balance from its parent");
+        }
+        return new ParentResolution(parent.id(), level, parent.category(), parent.normalBalance());
+    }
+
+    private void validateAccountValues(
+            UUID ledgerId, String code, String name, String category, String normalBalance,
+            boolean cashFlowRequired, UUID defaultCashFlowItemId, boolean quantityEnabled,
+            String unitName, List<LedgerRequests.DimensionRequirement> dimensions) {
+        if (code.length() > 32 || name.isBlank() || name.length() > 200
+                || !ACCOUNT_CATEGORIES.contains(category)
+                || !Set.of("DEBIT", "CREDIT").contains(normalBalance)) {
+            throw accountInvalid("Code, name, category, and normal balance are invalid");
+        }
+        if (quantityEnabled && (unitName == null || unitName.isBlank() || unitName.length() > 64)) {
+            throw accountInvalid("A quantity account requires a unit name");
+        }
+        if (!accounts.activeCashFlowItem(ledgerId, defaultCashFlowItemId)) {
+            throw accountInvalid("The default cash-flow item is not active in this ledger");
+        }
+        if (!accounts.validDimensionTypes(ledgerId, dimensions)) {
+            throw accountInvalid("Dimension requirements must be unique active types in this ledger");
+        }
+    }
+
+    private void initializeLedger(
+            UUID ledgerId, LocalDate startDate, AccountingStandard.Package standard, UUID actorId) {
+        standard.cashFlowItems().forEach(item -> accounts.createCashFlowItem(
+                UUID.randomUUID(), ledgerId, item.code(), item.name(), true));
+        standard.dimensionTypes().forEach(type -> ledgers.createDimensionType(
+                UUID.randomUUID(), ledgerId, type.code(), type.name(), type.required()));
+        Map<String, UUID> accountIds = standard.accounts().stream().collect(Collectors.toMap(
+                AccountingStandard.Account::code, ignored -> UUID.randomUUID()));
+        standard.accounts().stream()
+                .sorted(java.util.Comparator.comparingInt(
+                        account -> standard.accountCodeRule().levelOf(account.code())))
+                .forEach(account -> accounts.create(
+                        accountIds.get(account.code()), ledgerId, account.code(), account.name(),
+                        account.category(), account.normalBalance(),
+                        account.parentCode() == null ? null : accountIds.get(account.parentCode()),
+                        standard.accountCodeRule().levelOf(account.code()), true,
+                        account.cashFlowRequired(), null, account.quantityEnabled(),
+                        account.quantityEnabled() ? account.unitName() : null));
+        accountIds.values().forEach(accountId -> accounts.recordRevision(
+                ledgerId, accountId, "CREATE", actorId, "null", json(requireAccount(ledgerId, accountId))));
         LocalDate periodStart = startDate.withDayOfMonth(1);
         for (int month = 0; month < 12; month++) {
             LocalDate current = periodStart.plusMonths(month);
             ledgers.createPeriod(ledgerId, current.toString().substring(0, 7),
                     current, current.plusMonths(1).minusDays(1));
         }
-        SME_FORMULAS.forEach(formula ->
-                ledgers.createFormula(ledgerId, formula.code(), formula.name(), formula.json()));
+        standard.formulas().forEach(formula ->
+                ledgers.createFormula(ledgerId, formula.code(), formula.name(),
+                        formula.definition().toString()));
     }
 
     private UUID lookupAccount(UUID ledgerId, String code, int rowNumber) {
@@ -416,6 +700,43 @@ public class DefaultLedgerService implements LedgerService {
         return ledgers.findLedger(ledgerId).orElseThrow(() ->
                 problem(404, "LEDGER_NOT_FOUND", "Ledger not found",
                         "The ledger is not available to this user"));
+    }
+
+    private AccountingStandard.Package requireStandard(String code, String version) {
+        return standards.find(code, version)
+                .or(() -> "SME".equals(code) && "v1".equals(version)
+                        ? standards.find("SME", "2011-17") : java.util.Optional.empty())
+                .orElseThrow(() -> problem(422, "ACCOUNTING_STANDARD_NOT_FOUND",
+                        "Accounting standard not found",
+                        "The requested accounting standard version is not installed"));
+    }
+
+    private LedgerResponses.Account requireAccount(UUID ledgerId, UUID accountId) {
+        return accounts.find(ledgerId, accountId).orElseThrow(() ->
+                problem(404, "ACCOUNT_NOT_FOUND", "Account not found",
+                        "The account is not available to this ledger"));
+    }
+
+    private String text(String provided, String fallback) {
+        return provided == null ? fallback : provided;
+    }
+
+    private String json(Object value) {
+        try {
+            return objectMapper.writeValueAsString(value);
+        } catch (JsonProcessingException exception) {
+            throw problem(500, "ACCOUNT_AUDIT_FAILED", "Account audit failed",
+                    "The account change could not be serialized for audit");
+        }
+    }
+
+    private ApiProblemException accountInvalid(String detail) {
+        return problem(422, "ACCOUNT_INVALID", "Invalid account", detail);
+    }
+
+    private ApiProblemException versionConflict() {
+        return problem(409, "ACCOUNT_VERSION_CONFLICT", "Account version conflict",
+                "Reload the account and retry with its current version");
     }
 
     private LedgerResponses.Member requireMember(UUID ledgerId, UUID userId) {
@@ -448,9 +769,7 @@ public class DefaultLedgerService implements LedgerService {
         return new ApiProblemException(status, code, title, detail, false);
     }
 
-    private record AccountTemplate(String code, String name, String category, String normalBalance) {
-    }
-
-    private record FormulaTemplate(String code, String name, String json) {
+    private record ParentResolution(
+            UUID parentId, int level, String category, String normalBalance) {
     }
 }

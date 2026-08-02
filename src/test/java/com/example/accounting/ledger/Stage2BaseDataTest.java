@@ -31,12 +31,12 @@ class Stage2BaseDataTest {
                 userId, "test", userId.toString());
         UUID ledgerId = ledgerService.create(actor, createRequest("dimensions")).id();
 
-        LedgerResponses.DimensionType type = ledgerService.createDimensionType(userId, ledgerId,
-                new LedgerRequests.DimensionTypeCreate("CUSTOMER", "Customer", true));
+        LedgerResponses.DimensionType type = ledgerService.listDimensionTypes(userId, ledgerId).stream()
+                .filter(item -> item.code().equals("CUSTOMER")).findFirst().orElseThrow();
         LedgerResponses.DimensionValue value = ledgerService.createDimensionValue(userId, ledgerId, type.id(),
                 new LedgerRequests.DimensionValueCreate("C001", "Acme"));
 
-        assertThat(ledgerService.listDimensionTypes(userId, ledgerId)).extracting("code").containsExactly("CUSTOMER");
+        assertThat(ledgerService.listDimensionTypes(userId, ledgerId)).extracting("code").contains("CUSTOMER");
         assertThat(ledgerService.listDimensionValues(userId, ledgerId, type.id())).extracting("id")
                 .containsExactly(value.id());
         assertThatThrownBy(() -> ledgerService.listDimensionValues(userId, UUID.randomUUID(), type.id()))

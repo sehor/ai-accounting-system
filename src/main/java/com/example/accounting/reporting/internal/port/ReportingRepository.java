@@ -9,6 +9,8 @@ public interface ReportingRepository {
 
     List<ReportResponses.TrialBalanceLine> trialBalance(UUID ledgerId, String periodCode);
 
+    List<ReportResponses.TrialBalanceLine> trialBalanceWithParents(UUID ledgerId, String periodCode);
+
     List<ReportResponses.LedgerLine> ledgerLines(UUID ledgerId, String periodCode);
 
     Set<String> formulaCategories(UUID ledgerId, String formulaCode, String field);

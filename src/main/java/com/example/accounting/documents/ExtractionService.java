@@ -6,9 +6,11 @@ import java.util.UUID;
 
 public interface ExtractionService {
 
-    ExtractionResponses.Extraction extractMock(UUID actorId, UUID ledgerId, UUID documentId);
+    ExtractionResponses.Extraction extract(UUID actorId, UUID ledgerId, UUID documentId);
 
     List<ExtractionResponses.Extraction> list(UUID actorId, UUID ledgerId, UUID documentId);
 
     VoucherResponses.Voucher createVoucherDraft(UUID actorId, UUID ledgerId, UUID documentId);
+
+    VoucherResponses.Voucher createAgentVoucherDraft(UUID actorId, UUID ledgerId, UUID documentId);
 }

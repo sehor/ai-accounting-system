@@ -19,6 +19,7 @@ import java.time.LocalDate;
 import java.security.MessageDigest;
 import java.util.List;
 import java.util.Map;
+import java.util.HashSet;
 import java.util.Set;
 import java.util.UUID;
 import java.util.HexFormat;
@@ -47,7 +48,20 @@ public class DefaultVoucherService implements VoucherService {
     @Override
     public VoucherResponses.Voucher create(UUID actorId, UUID ledgerId, VoucherRequests.Create request,
                                            String idempotencyKey) {
-        requireRole(actorId, ledgerId, Set.of(LedgerRole.OWNER, LedgerRole.EDITOR));
+        return create(actorId, ledgerId, request, idempotencyKey, Set.of(LedgerRole.OWNER, LedgerRole.EDITOR));
+    }
+
+    @Transactional
+    @Override
+    public VoucherResponses.Voucher createAgentDraft(UUID actorId, UUID ledgerId, VoucherRequests.Create request,
+                                                     String idempotencyKey) {
+        return create(actorId, ledgerId, request, idempotencyKey,
+                Set.of(LedgerRole.OWNER, LedgerRole.EDITOR, LedgerRole.AGENT));
+    }
+
+    private VoucherResponses.Voucher create(UUID actorId, UUID ledgerId, VoucherRequests.Create request,
+                                             String idempotencyKey, Set<LedgerRole> roles) {
+        requireRole(actorId, ledgerId, roles);
         String key = idempotencyKey == null || idempotencyKey.isBlank() ? null : idempotencyKey.trim();
         UUID voucherId = UUID.randomUUID();
         if (key != null) {
@@ -111,9 +125,52 @@ public class DefaultVoucherService implements VoucherService {
                         "The base currency exchange rate must be 1");
             }
             ensureAccount(ledgerId, line.accountId());
-            vouchers.createLine(UUID.randomUUID(), ledgerId, voucherId, lineNo++, line.accountId(), line.side(),
+            VoucherRepository.AccountControls controls = vouchers.accountControls(ledgerId, line.accountId())
+                    .orElseThrow();
+            UUID cashFlowItemId = line.cashFlowItemId() == null
+                    ? controls.defaultCashFlowItemId() : line.cashFlowItemId();
+            List<VoucherRequests.Dimension> dimensions =
+                    line.dimensions() == null ? List.of() : line.dimensions();
+            validateLineControls(ledgerId, line, original, cashFlowItemId, controls, dimensions);
+            UUID lineId = UUID.randomUUID();
+            vouchers.createLine(lineId, ledgerId, voucherId, lineNo++, line.accountId(), line.side(),
                     line.currency(), original, rate, original.multiply(rate).setScale(2, RoundingMode.HALF_UP),
-                    line.summary());
+                    line.summary(), cashFlowItemId, line.quantity(), line.unitPrice());
+            vouchers.createLineDimensions(lineId, ledgerId, dimensions);
+        }
+    }
+
+    private void validateLineControls(
+            UUID ledgerId, VoucherRequests.Line line, BigDecimal original,
+            UUID cashFlowItemId, VoucherRepository.AccountControls controls,
+            List<VoucherRequests.Dimension> dimensions) {
+        if (!vouchers.validCashFlowItem(ledgerId, cashFlowItemId)) {
+            throw problem(422, "INVALID_CASH_FLOW_ITEM", "Invalid cash-flow item",
+                    "The cash-flow item must be active in this ledger");
+        }
+        if (controls.quantityEnabled()) {
+            boolean bothMissing = line.quantity() == null && line.unitPrice() == null;
+            boolean bothValid = line.quantity() != null && line.unitPrice() != null
+                    && line.quantity().signum() > 0 && line.unitPrice().signum() > 0
+                    && line.quantity().multiply(line.unitPrice()).setScale(4, RoundingMode.HALF_UP)
+                    .compareTo(original) == 0;
+            if (!bothMissing && !bothValid) {
+                throw problem(422, "INVALID_QUANTITY_AMOUNT", "Invalid quantity amount",
+                        "Quantity and unit price must be positive and multiply to the line amount");
+            }
+        } else if (line.quantity() != null || line.unitPrice() != null) {
+            throw problem(422, "QUANTITY_ACCOUNT_REQUIRED", "Quantity accounting is not enabled",
+                    "Quantity and unit price are only accepted for quantity-enabled accounts");
+        }
+        Set<UUID> seen = new HashSet<>();
+        for (VoucherRequests.Dimension dimension : dimensions) {
+            if (!seen.add(dimension.dimensionTypeId())
+                    || !controls.dimensionTypeIds().contains(dimension.dimensionTypeId())
+                    || !vouchers.validDimensionValue(
+                    ledgerId, dimension.dimensionTypeId(), dimension.dimensionValueId())) {
+                throw problem(422, "INVALID_VOUCHER_DIMENSION", "Invalid voucher dimension",
+                        "Dimensions must be unique bindings with active values in this ledger");
+            }
         }
     }
 
@@ -166,12 +223,24 @@ public class DefaultVoucherService implements VoucherService {
     @Transactional
     @Override
     public VoucherResponses.Voucher validate(UUID actorId, UUID ledgerId, UUID voucherId) {
-        requireRole(actorId, ledgerId, Set.of(LedgerRole.OWNER, LedgerRole.EDITOR));
+        return validate(actorId, ledgerId, voucherId, Set.of(LedgerRole.OWNER, LedgerRole.EDITOR));
+    }
+
+    @Transactional
+    @Override
+    public VoucherResponses.Voucher validateAgentDraft(UUID actorId, UUID ledgerId, UUID voucherId) {
+        return validate(actorId, ledgerId, voucherId,
+                Set.of(LedgerRole.OWNER, LedgerRole.EDITOR, LedgerRole.AGENT));
+    }
+
+    private VoucherResponses.Voucher validate(UUID actorId, UUID ledgerId, UUID voucherId, Set<LedgerRole> roles) {
+        requireRole(actorId, ledgerId, roles);
         VoucherState state = state(ledgerId, voucherId);
         if (!"DRAFT".equals(state.status())) {
             throw problem(409, "VOUCHER_STATE_INVALID", "Invalid voucher state",
                     "Only draft vouchers can be validated");
         }
+        ensureControlsComplete(ledgerId, voucherId);
         int lineCount = vouchers.lineCount(ledgerId, voucherId);
         BigDecimal debit = total(ledgerId, voucherId, "DEBIT");
         BigDecimal credit = total(ledgerId, voucherId, "CREDIT");
@@ -194,6 +263,7 @@ public class DefaultVoucherService implements VoucherService {
             throw problem(409, "VOUCHER_STATE_INVALID", "Invalid voucher state",
                     "Only validated vouchers with approval enabled can be submitted");
         }
+        ensureControlsComplete(ledgerId, voucherId);
         VoucherSnapshot before = snapshot(ledgerId, voucherId);
         changeStatus(ledgerId, voucherId, "VALIDATED", "SUBMITTED", actorId);
         approval(ledgerId, voucherId, "SUBMIT", null, actorId);
@@ -228,13 +298,29 @@ public class DefaultVoucherService implements VoucherService {
     @Transactional
     @Override
     public VoucherResponses.Voucher post(UUID actorId, UUID ledgerId, UUID voucherId) {
-        requireRole(actorId, ledgerId, Set.of(LedgerRole.OWNER, LedgerRole.EDITOR));
+        return post(actorId, ledgerId, voucherId, Set.of(LedgerRole.OWNER, LedgerRole.EDITOR), false);
+    }
+
+    @Transactional
+    @Override
+    public VoucherResponses.Voucher postAgentVoucher(UUID actorId, UUID ledgerId, UUID voucherId) {
+        return post(actorId, ledgerId, voucherId,
+                Set.of(LedgerRole.OWNER, LedgerRole.EDITOR, LedgerRole.AGENT), true);
+    }
+
+    private VoucherResponses.Voucher post(
+            UUID actorId, UUID ledgerId, UUID voucherId, Set<LedgerRole> roles, boolean idempotent) {
+        requireRole(actorId, ledgerId, roles);
         VoucherState state = state(ledgerId, voucherId);
+        if (idempotent && "POSTED".equals(state.status())) {
+            return find(actorId, ledgerId, voucherId);
+        }
         String requiredStatus = state.approvalRequired() ? "APPROVED" : "VALIDATED";
         if (!requiredStatus.equals(state.status())) {
             throw problem(409, "VOUCHER_STATE_INVALID", "Invalid voucher state",
                     "The voucher must be " + requiredStatus + " before posting");
         }
+        ensureControlsComplete(ledgerId, voucherId);
         VoucherSnapshot before = snapshot(ledgerId, voucherId);
         if (!vouchers.post(ledgerId, voucherId, requiredStatus, actorId)) {
             throw problem(409, "VOUCHER_STATE_INVALID", "Invalid voucher state", "The voucher state has changed");
@@ -277,9 +363,15 @@ public class DefaultVoucherService implements VoucherService {
         vouchers.createVoucher(reversalId, ledgerId, periodId, original.voucherDate(), original.voucherType(),
                 number, "Reversal of " + original.voucherNumber(), original.approvalRequired(), voucherId, actorId);
         for (VoucherResponses.Line line : original.lines()) {
-            vouchers.createLine(UUID.randomUUID(), ledgerId, reversalId, line.lineNo(), line.accountId(),
+            UUID lineId = UUID.randomUUID();
+            vouchers.createLine(lineId, ledgerId, reversalId, line.lineNo(), line.accountId(),
                     "DEBIT".equals(line.side()) ? "CREDIT" : "DEBIT", line.currency(), line.originalAmount(),
-                    line.exchangeRate(), line.baseAmount(), "Reversal of " + line.summary());
+                    line.exchangeRate(), line.baseAmount(), "Reversal of " + line.summary(),
+                    line.cashFlowItemId(), line.quantity(), line.unitPrice());
+            vouchers.createLineDimensions(lineId, ledgerId, line.dimensions().stream()
+                    .map(dimension -> new VoucherRequests.Dimension(
+                            dimension.dimensionTypeId(), dimension.dimensionValueId()))
+                    .toList());
         }
         audit(ledgerId, reversalId, "CREATE_REVERSAL", actorId, "reversal-of:" + voucherId,
                 null, snapshot(ledgerId, reversalId));
@@ -393,8 +485,14 @@ public class DefaultVoucherService implements VoucherService {
 
     private void insertSnapshotLines(UUID ledgerId, UUID voucherId, List<VoucherLineSnapshot> lines) {
         for (VoucherLineSnapshot line : lines) {
-            vouchers.createLine(UUID.randomUUID(), ledgerId, voucherId, line.lineNo(), line.accountId(), line.side(),
-                    line.currency(), line.originalAmount(), line.exchangeRate(), line.baseAmount(), line.summary());
+            UUID lineId = UUID.randomUUID();
+            vouchers.createLine(lineId, ledgerId, voucherId, line.lineNo(), line.accountId(), line.side(),
+                    line.currency(), line.originalAmount(), line.exchangeRate(), line.baseAmount(), line.summary(),
+                    line.cashFlowItemId(), line.quantity(), line.unitPrice());
+            vouchers.createLineDimensions(lineId, ledgerId, line.dimensions().stream()
+                    .map(dimension -> new VoucherRequests.Dimension(
+                            dimension.dimensionTypeId(), dimension.dimensionValueId()))
+                    .toList());
         }
     }
 
@@ -450,7 +548,14 @@ public class DefaultVoucherService implements VoucherService {
     private void ensureAccount(UUID ledgerId, UUID accountId) {
         if (!vouchers.activeAccountExists(ledgerId, accountId)) {
             throw problem(422, "INVALID_VOUCHER_ACCOUNT", "Invalid voucher account",
-                    "The account must belong to this ledger and be active");
+                    "The account must be an active leaf in this ledger");
+        }
+    }
+
+    private void ensureControlsComplete(UUID ledgerId, UUID voucherId) {
+        if (!vouchers.controlsComplete(ledgerId, voucherId)) {
+            throw problem(422, "VOUCHER_CONTROL_INCOMPLETE", "Voucher controls are incomplete",
+                    "Complete required cash flow, quantity, and account dimensions before validation");
         }
     }
 
@@ -480,10 +585,12 @@ public class DefaultVoucherService implements VoucherService {
 
     private record VoucherLineSnapshot(int lineNo, UUID accountId, String side, String currency,
                                        BigDecimal originalAmount, BigDecimal exchangeRate, BigDecimal baseAmount,
-                                       String summary) {
+                                       String summary, UUID cashFlowItemId, BigDecimal quantity,
+                                       BigDecimal unitPrice, List<VoucherResponses.Dimension> dimensions) {
         private static VoucherLineSnapshot from(VoucherResponses.Line line) {
             return new VoucherLineSnapshot(line.lineNo(), line.accountId(), line.side(), line.currency(),
-                    line.originalAmount(), line.exchangeRate(), line.baseAmount(), line.summary());
+                    line.originalAmount(), line.exchangeRate(), line.baseAmount(), line.summary(),
+                    line.cashFlowItemId(), line.quantity(), line.unitPrice(), line.dimensions());
         }
     }
 }

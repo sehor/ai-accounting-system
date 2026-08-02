@@ -33,8 +33,17 @@ public class DefaultReportingService implements ReportingService {
     @Override
     @Transactional(readOnly = true)
     public List<ReportResponses.TrialBalanceLine> trialBalance(UUID actorId, UUID ledgerId, String periodCode) {
+        return trialBalance(actorId, ledgerId, periodCode, false);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<ReportResponses.TrialBalanceLine> trialBalance(
+            UUID actorId, UUID ledgerId, String periodCode, boolean includeParents) {
         requireView(actorId, ledgerId);
-        return reports.trialBalance(ledgerId, periodCode);
+        return includeParents
+                ? reports.trialBalanceWithParents(ledgerId, periodCode)
+                : reports.trialBalance(ledgerId, periodCode);
     }
 
     @Override

@@ -99,6 +99,32 @@ class Stage4ReportingTest {
                 .allSatisfy(line -> assertThat(line.balance()).isEqualByComparingTo(BigDecimal.ZERO));
     }
 
+    @Test
+    void optionallyRollsLeafAmountsIntoParentsWithoutChangingDirectTotals() {
+        UUID userId = UUID.randomUUID();
+        UUID ledgerId = ledgerService.create(new CurrentUserResolver.ResolvedUser(userId, "test", userId.toString()),
+                new LedgerRequests.Create("parent reporting", "SME", "v1", "CNY",
+                        LocalDate.of(2026, 1, 1), false)).id();
+        UUID periodId = id("select id from accounting_period where ledger_id = ? and period_code = '2026-01'", ledgerId);
+        UUID cash = ledgerService.createAccount(userId, ledgerId,
+                new LedgerRequests.AccountCreate("1001.01", "库存现金-人民币", "ASSET", "DEBIT")).id();
+        UUID capital = id("select id from ledger_account where ledger_id = ? and code = '3001'", ledgerId);
+        VoucherResponses.Voucher voucher = voucherService.create(userId, ledgerId, new VoucherRequests.Create(
+                periodId, LocalDate.of(2026, 1, 15), "记", "2", "Parent rollup",
+                List.of(line(cash, "DEBIT", "100"), line(capital, "CREDIT", "100"))));
+        voucherService.validate(userId, ledgerId, voucher.id());
+        voucherService.post(userId, ledgerId, voucher.id());
+
+        assertThat(reportingService.trialBalance(userId, ledgerId, "2026-01"))
+                .extracting(ReportResponses.TrialBalanceLine::code)
+                .containsExactlyInAnyOrder("1001.01", "3001");
+        assertThat(reportingService.trialBalance(userId, ledgerId, "2026-01", true))
+                .filteredOn(line -> line.code().equals("1001"))
+                .singleElement()
+                .extracting(ReportResponses.TrialBalanceLine::debit)
+                .isEqualTo(new BigDecimal("100.00"));
+    }
+
     private VoucherRequests.Line line(UUID accountId, String side, String amount) {
         return new VoucherRequests.Line(accountId, side, "CNY", new BigDecimal(amount), BigDecimal.ONE, "report");
     }

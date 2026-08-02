@@ -20,7 +20,8 @@ class FinanceMcpToolsTest {
 
         assertThat(names).containsExactlyInAnyOrder("list_ledgers", "finance_query", "get_voucher",
                 "create_voucher_draft", "validate_voucher", "upload_document", "extract_document",
-                "get_job_status", "create_voucher_draft_from_document");
-        assertThat(names).noneMatch(name -> name.matches(".*(post|approve|close|reopen|member).*"));
+                "get_job_status", "create_voucher_draft_from_document", "post_voucher",
+                "ensure_account", "list_periods");
+        assertThat(names).noneMatch(name -> name.matches(".*(unpost|approve|close|reopen|member).*"));
     }
 }

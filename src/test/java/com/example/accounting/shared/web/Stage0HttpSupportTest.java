@@ -7,10 +7,13 @@ import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockFilterChain;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
+import org.springframework.security.core.context.SecurityContextHolder;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class Stage0HttpSupportTest {
@@ -18,6 +21,7 @@ class Stage0HttpSupportTest {
     @AfterEach
     void clearAuditContext() {
         AuditContext.clear();
+        SecurityContextHolder.clearContext();
     }
 
     @Test
@@ -65,5 +69,40 @@ class Stage0HttpSupportTest {
         assertEquals("VOUCHER_UNBALANCED", response.getBody().getProperties().get("code"));
         assertEquals("trace-123", response.getBody().getProperties().get("traceId"));
         assertEquals(false, response.getBody().getProperties().get("retryable"));
+    }
+
+    @Test
+    void localUserHeaderAuthenticatesMcpRequestsOnlyWhenEnabled() throws Exception {
+        var userId = java.util.UUID.randomUUID();
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.addHeader("X-User-Id", userId.toString());
+
+        new LocalUserHeaderAuthenticationFilter(true).doFilter(
+                request, new MockHttpServletResponse(), new MockFilterChain() {
+                    @Override
+                    public void doFilter(jakarta.servlet.ServletRequest servletRequest,
+                                         jakarta.servlet.ServletResponse servletResponse) {
+                        assertEquals(userId.toString(),
+                                SecurityContextHolder.getContext().getAuthentication().getName());
+                    }
+                });
+
+        assertTrue(SecurityContextHolder.getContext().getAuthentication() == null);
+    }
+
+    @Test
+    void localAuthenticationDoesNotRepeatARequestWhenDownstreamFails() {
+        var calls = new AtomicInteger();
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.addHeader("X-User-Id", java.util.UUID.randomUUID().toString());
+
+        assertThrows(IllegalArgumentException.class, () ->
+                new LocalUserHeaderAuthenticationFilter(true).doFilter(
+                        request, new MockHttpServletResponse(), (servletRequest, servletResponse) -> {
+                            calls.incrementAndGet();
+                            throw new IllegalArgumentException("downstream");
+                        }));
+
+        assertEquals(1, calls.get());
     }
 }

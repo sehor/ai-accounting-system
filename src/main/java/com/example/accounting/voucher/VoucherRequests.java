@@ -37,7 +37,20 @@ public final class VoucherRequests {
                        @NotBlank @Pattern(regexp = "[A-Z]{3}") String currency,
                        @NotNull BigDecimal originalAmount,
                        @NotNull BigDecimal exchangeRate,
-                       String summary) {
+                       String summary,
+                       UUID cashFlowItemId,
+                       BigDecimal quantity,
+                       BigDecimal unitPrice,
+                       List<@Valid Dimension> dimensions) {
+
+        public Line(UUID accountId, String side, String currency, BigDecimal originalAmount,
+                    BigDecimal exchangeRate, String summary) {
+            this(accountId, side, currency, originalAmount, exchangeRate, summary,
+                    null, null, null, List.of());
+        }
+    }
+
+    public record Dimension(@NotNull UUID dimensionTypeId, @NotNull UUID dimensionValueId) {
     }
 
     public record Comment(@NotBlank String comment) {

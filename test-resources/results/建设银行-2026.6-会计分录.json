@@ -1,0 +1,427 @@
+[
+  {
+    "id": "1",
+    "date": "2026-06-01",
+    "brief": "收货款",
+    "entries": [
+      {
+        "direction": "debit",
+        "account": "银行存款-建设银行",
+        "amount": 2850.0
+      },
+      {
+        "direction": "credit",
+        "account": "应收账款-深圳市创卓成微电子有限公司",
+        "amount": 2850.0
+      }
+    ]
+  },
+  {
+    "id": "2",
+    "date": "2026-06-05",
+    "brief": "收货款",
+    "entries": [
+      {
+        "direction": "debit",
+        "account": "银行存款-建设银行",
+        "amount": 3450.0
+      },
+      {
+        "direction": "credit",
+        "account": "应收账款-深圳腾煜科技有限公司",
+        "amount": 3450.0
+      }
+    ]
+  },
+  {
+    "id": "3",
+    "date": "2026-06-05",
+    "brief": "付货款",
+    "entries": [
+      {
+        "direction": "debit",
+        "account": "应付账款-深圳市固德微电子有限公司",
+        "amount": 129600.0
+      },
+      {
+        "direction": "credit",
+        "account": "银行存款-建设银行",
+        "amount": 129600.0
+      }
+    ]
+  },
+  {
+    "id": "4",
+    "date": "2026-06-05",
+    "brief": "付货款",
+    "entries": [
+      {
+        "direction": "debit",
+        "account": "应付账款-深圳市晶晟微电子科技有限公司",
+        "amount": 64365.0
+      },
+      {
+        "direction": "credit",
+        "account": "银行存款-建设银行",
+        "amount": 64365.0
+      }
+    ]
+  },
+  {
+    "id": "5",
+    "date": "2026-06-05",
+    "brief": "发工资",
+    "entries": [
+      {
+        "direction": "debit",
+        "account": "其他应付款-深圳市环智卓雅企业管理有限公司",
+        "amount": 33397.1
+      },
+      {
+        "direction": "credit",
+        "account": "银行存款-建设银行",
+        "amount": 33397.1
+      }
+    ]
+  },
+  {
+    "id": "6",
+    "date": "2026-06-05",
+    "brief": "支付往来款",
+    "entries": [
+      {
+        "direction": "debit",
+        "account": "应付职工薪酬-工资",
+        "amount": 38208.08
+      },
+      {
+        "direction": "credit",
+        "account": "银行存款-建设银行",
+        "amount": 38208.08
+      }
+    ]
+  },
+  {
+    "id": "7",
+    "date": "2026-06-05",
+    "brief": "发工资",
+    "entries": [
+      {
+        "direction": "debit",
+        "account": "应付职工薪酬-工资",
+        "amount": 2101.79
+      },
+      {
+        "direction": "credit",
+        "account": "银行存款-建设银行",
+        "amount": 2101.79
+      }
+    ]
+  },
+  {
+    "id": "8",
+    "date": "2026-06-05",
+    "brief": "发工资",
+    "entries": [
+      {
+        "direction": "debit",
+        "account": "应付职工薪酬-工资",
+        "amount": 2034.81
+      },
+      {
+        "direction": "credit",
+        "account": "银行存款-建设银行",
+        "amount": 2034.81
+      }
+    ]
+  },
+  {
+    "id": "9",
+    "date": "2026-06-05",
+    "brief": "发工资",
+    "entries": [
+      {
+        "direction": "debit",
+        "account": "应付职工薪酬-工资",
+        "amount": 2360.0
+      },
+      {
+        "direction": "credit",
+        "account": "银行存款-建设银行",
+        "amount": 2360.0
+      }
+    ]
+  },
+  {
+    "id": "10",
+    "date": "2026-06-05",
+    "brief": "发工资",
+    "entries": [
+      {
+        "direction": "debit",
+        "account": "应付职工薪酬-工资",
+        "amount": 13994.66
+      },
+      {
+        "direction": "credit",
+        "account": "银行存款-建设银行",
+        "amount": 13994.66
+      }
+    ]
+  },
+  {
+    "id": "11",
+    "date": "2026-06-05",
+    "brief": "发工资",
+    "entries": [
+      {
+        "direction": "debit",
+        "account": "应付职工薪酬-工资",
+        "amount": 14339.29
+      },
+      {
+        "direction": "credit",
+        "account": "银行存款-建设银行",
+        "amount": 14339.29
+      }
+    ]
+  },
+  {
+    "id": "12",
+    "date": "2026-06-05",
+    "brief": "发工资",
+    "entries": [
+      {
+        "direction": "debit",
+        "account": "应付职工薪酬-工资",
+        "amount": 896.6
+      },
+      {
+        "direction": "credit",
+        "account": "银行存款-建设银行",
+        "amount": 896.6
+      }
+    ]
+  },
+  {
+    "id": "13",
+    "date": "2026-06-05",
+    "brief": "发工资",
+    "entries": [
+      {
+        "direction": "debit",
+        "account": "应付职工薪酬-工资",
+        "amount": 3756.22
+      },
+      {
+        "direction": "credit",
+        "account": "银行存款-建设银行",
+        "amount": 3756.22
+      }
+    ]
+  },
+  {
+    "id": "14",
+    "date": "2026-06-06",
+    "brief": "银行费用",
+    "entries": [
+      {
+        "direction": "debit",
+        "account": "财务费用-手续费",
+        "amount": 0.8
+      },
+      {
+        "direction": "credit",
+        "account": "银行存款-建设银行",
+        "amount": 0.8
+      }
+    ]
+  },
+  {
+    "id": "15",
+    "date": "2026-06-06",
+    "brief": "银行费用",
+    "entries": [
+      {
+        "direction": "debit",
+        "account": "财务费用-手续费",
+        "amount": 2.0
+      },
+      {
+        "direction": "credit",
+        "account": "银行存款-建设银行",
+        "amount": 2.0
+      }
+    ]
+  },
+  {
+    "id": "16",
+    "date": "2026-06-08",
+    "brief": "收货款",
+    "entries": [
+      {
+        "direction": "debit",
+        "account": "银行存款-建设银行",
+        "amount": 5700.0
+      },
+      {
+        "direction": "credit",
+        "account": "应收账款-深圳市创卓成微电子有限公司",
+        "amount": 5700.0
+      }
+    ]
+  },
+  {
+    "id": "17",
+    "date": "2026-06-08",
+    "brief": "支付往来款",
+    "entries": [
+      {
+        "direction": "debit",
+        "account": "其他应付款-中国电信股份有限公司深圳分公司",
+        "amount": 425.0
+      },
+      {
+        "direction": "credit",
+        "account": "银行存款-建设银行",
+        "amount": 425.0
+      }
+    ]
+  },
+  {
+    "id": "18",
+    "date": "2026-06-09",
+    "brief": "收货款",
+    "entries": [
+      {
+        "direction": "debit",
+        "account": "银行存款-建设银行",
+        "amount": 2310.0
+      },
+      {
+        "direction": "credit",
+        "account": "应收账款-中山祥和安全电器科技有限公司",
+        "amount": 2310.0
+      }
+    ]
+  },
+  {
+    "id": "19",
+    "date": "2026-06-18",
+    "brief": "收货款",
+    "entries": [
+      {
+        "direction": "debit",
+        "account": "银行存款-建设银行",
+        "amount": 8400.0
+      },
+      {
+        "direction": "credit",
+        "account": "应收账款-深圳市顺合汇电子有限公司",
+        "amount": 8400.0
+      }
+    ]
+  },
+  {
+    "id": "20",
+    "date": "2026-06-18",
+    "brief": "收货款",
+    "entries": [
+      {
+        "direction": "debit",
+        "account": "银行存款-建设银行",
+        "amount": 17550.0
+      },
+      {
+        "direction": "credit",
+        "account": "应收账款-深圳市金博源电子有限公司",
+        "amount": 17550.0
+      }
+    ]
+  },
+  {
+    "id": "21",
+    "date": "2026-06-21",
+    "brief": "利息收入",
+    "entries": [
+      {
+        "direction": "debit",
+        "account": "银行存款-建设银行",
+        "amount": 78.15
+      },
+      {
+        "direction": "credit",
+        "account": "财务费用-利息收入",
+        "amount": 78.15
+      }
+    ]
+  },
+  {
+    "id": "22",
+    "date": "2026-06-21",
+    "brief": "贷款利息",
+    "entries": [
+      {
+        "direction": "debit",
+        "account": "财务费用-利息费用",
+        "amount": 2195.83
+      },
+      {
+        "direction": "credit",
+        "account": "银行存款-建设银行",
+        "amount": 2195.83
+      }
+    ]
+  },
+  {
+    "id": "23",
+    "date": "2026-06-23",
+    "brief": "收货款",
+    "entries": [
+      {
+        "direction": "debit",
+        "account": "银行存款-建设银行",
+        "amount": 9450.0
+      },
+      {
+        "direction": "credit",
+        "account": "应收账款-深圳市创卓成微电子有限公司",
+        "amount": 9450.0
+      }
+    ]
+  },
+  {
+    "id": "24",
+    "date": "2026-06-23",
+    "brief": "收货款",
+    "entries": [
+      {
+        "direction": "debit",
+        "account": "银行存款-建设银行",
+        "amount": 850.0
+      },
+      {
+        "direction": "credit",
+        "account": "应收账款-惠州市巨蜂智能科技有限公司",
+        "amount": 850.0
+      }
+    ]
+  },
+  {
+    "id": "25",
+    "date": "2026-06-23",
+    "brief": "收货款",
+    "entries": [
+      {
+        "direction": "debit",
+        "account": "银行存款-建设银行",
+        "amount": 3720.0
+      },
+      {
+        "direction": "credit",
+        "account": "应收账款-深圳市灿昇科技有限公司",
+        "amount": 3720.0
+      }
+    ]
+  }
+]

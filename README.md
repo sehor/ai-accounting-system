@@ -4,17 +4,20 @@
 
 ## 当前本地环境决策
 
-- 数据库使用本机 PostgreSQL，项目数据库为 `ai_accounting`。
+- 数据库使用本机 PostgreSQL，项目数据库为 `ai-accounting`。
 - 附件使用本地文件系统，根目录由 `STORAGE_ROOT` 配置。
 - 当前附件使用本地文件系统，暂不接入外部对象存储；后续如有部署需要再单独增加适配器。
 
 ## 启动前准备
 
 1. 安装并启用 Java 21 和 PostgreSQL。
-2. 创建数据库 `ai_accounting`。
+2. 创建数据库 `ai-accounting`。
 3. 按需设置 `DB_URL`、`DB_USERNAME`、`DB_PASSWORD`、`STORAGE_ROOT`。
 
-默认连接：`jdbc:postgresql://127.0.0.1:5432/ai_accounting`，用户名和密码均为 `postgres`。
+真实票据提取需设置 `APP_DOCUMENTS_EXTRACTOR_URL`（HTTPS）和可选的
+`APP_DOCUMENTS_EXTRACTOR_API_KEY`。未配置时提取接口返回明确错误，不生成模拟数据。
+
+默认连接：`jdbc:postgresql://127.0.0.1:5432/ai-accounting`，用户名和密码均为 `postgres`。
 
 ## 常用命令
 
@@ -50,4 +53,6 @@
 本地联调可设置 `LOCAL_USER_HEADER_ENABLED=true`，然后在请求中传入 `X-User-Id: <UUID>`。
 启用 OIDC 时设置 `spring.security.oauth2.resourceserver.jwt.issuer-uri`，接口使用标准 Bearer JWT。
 
-你提供的 `postgresql+asyncpg://...` 是 Python 异步客户端格式；本项目 Spring JDBC 对应使用 `DB_URL=jdbc:postgresql://localhost:5432/ai_accounting`。
+MCP 使用 `POST /mcp`。本地联调启用上述开关后，`X-User-Id` 同时建立 MCP 认证身份；Agent 可查询账套和期间、创建或复用科目、创建/校验/过账凭证并生成报表，但不能审批、关账、重新开账、反记账或管理成员。
+
+你提供的 `postgresql+asyncpg://...` 是 Python 异步客户端格式；本项目 Spring JDBC 对应使用 `DB_URL=jdbc:postgresql://localhost:5432/ai-accounting`。

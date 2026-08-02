@@ -1,0 +1,816 @@
+{
+  "ledger": {
+    "id": "e154e2bf-ba5e-4703-9ce6-5a8e51776ab2",
+    "name": "AI Agent银行流水测试账套-20260731-152031",
+    "accountingStandardCode": "SME",
+    "accountingStandardVersion": "v1",
+    "baseCurrency": "CNY",
+    "startDate": "2026-01-01",
+    "approvalEnabled": false,
+    "status": "ACTIVE"
+  },
+  "ownerId": "7a56e3cb-9bd7-4083-af8c-a02a97b2c720",
+  "agentId": "32956335-7420-4a37-ad2d-6c99c9d5f1f0",
+  "periodId": "626ce9e5-efc1-48ba-a218-c50394ec3fb7",
+  "tools": [
+    "create_voucher_draft",
+    "create_voucher_draft_from_document",
+    "ensure_account",
+    "extract_document",
+    "finance_query",
+    "get_job_status",
+    "get_voucher",
+    "list_ledgers",
+    "list_periods",
+    "post_voucher",
+    "upload_document",
+    "validate_voucher"
+  ],
+  "accountCount": 16,
+  "accounts": {
+    "其他应付款-中国电信股份有限公司深圳分公司": "4263c777-2301-4c29-a8a0-5a9338c72e1c",
+    "其他应付款-深圳市环智卓雅企业管理有限公司": "1cb8fc6e-0e5d-4e3d-b0f5-75c2179bd023",
+    "应付职工薪酬-工资": "97f7b33c-caba-400c-a721-5ce1adeeefef",
+    "应付账款-深圳市固德微电子有限公司": "64f3e099-72bc-4454-92a2-44fa8e08afe4",
+    "应付账款-深圳市晶晟微电子科技有限公司": "7db4ee2a-26b7-4413-9930-f074baf615d5",
+    "应收账款-中山祥和安全电器科技有限公司": "9ff65032-9940-4a9e-90b2-73ba26a0108d",
+    "应收账款-惠州市巨蜂智能科技有限公司": "6d5f0809-49e1-40d0-a1d7-8d20ac7bafdb",
+    "应收账款-深圳市创卓成微电子有限公司": "3964ec03-3066-4fe2-a5bb-ad9945c1effb",
+    "应收账款-深圳市灿昇科技有限公司": "78a14fc1-16a3-4939-833e-fca7ebb50a17",
+    "应收账款-深圳市金博源电子有限公司": "3756c3cf-137d-4bf0-bb22-755f0005406b",
+    "应收账款-深圳市顺合汇电子有限公司": "9ca9ac54-7123-4562-9e66-1d586664af7d",
+    "应收账款-深圳腾煜科技有限公司": "18646c00-5e40-4103-a2cf-71c92061af96",
+    "财务费用-利息收入": "ac4d2938-0c0d-47ec-bd61-74a582a48e03",
+    "财务费用-利息费用": "77af0a51-a9c4-4477-b19c-fd3e4674485c",
+    "财务费用-手续费": "5e7b76af-cc47-4710-895a-898746ed289f",
+    "银行存款-建设银行": "66ba304e-0c8a-4ff7-b4e2-e89f9c8fc65d"
+  },
+  "voucherCount": 25,
+  "voucherIds": [
+    "33aa3dd6-d1d1-4ccd-bf3e-060d02e63b98",
+    "40feaef7-b42e-4ab9-bdb5-2cf40367d41d",
+    "029232fd-7ee7-4f86-a974-114952c43c07",
+    "47c668b4-0689-4be6-bdef-587f9e0d9736",
+    "17a1561e-caf3-41b9-8b18-8ebfef73a9c3",
+    "0eef0e6f-5801-494c-8f28-c5671e824042",
+    "318034dc-af47-4f4c-a558-50cfc585f6ff",
+    "0fe277de-0fa0-48b0-9476-cd3a5a623d2f",
+    "d70a59a7-86a9-45a1-b310-45bbeb625cfc",
+    "75d4f2ef-7f40-411a-ad16-a6f440db6f14",
+    "ecfc2702-fdca-44ae-8332-023cbba1279b",
+    "d9f61896-5e7c-432b-b7c8-4e083dfff53d",
+    "33529583-711b-481c-bf45-ae6b7d486e92",
+    "269e1755-eff2-4727-9c55-d444a62710d8",
+    "69dc284d-f311-436f-9ddb-75fa09b708c3",
+    "b4434bdd-352f-41ae-bdb1-0f35dcd3ff75",
+    "96d8e910-b84c-4c05-9eba-67b53a4ce69e",
+    "73b38350-8fc8-47cd-9ec9-8bbe8bbe2b50",
+    "cfa630aa-a84f-483d-9cec-8262745e59c1",
+    "4260beda-d986-488a-a1e2-c996ea6e22cf",
+    "83d71e5e-e9fe-4dbb-bb83-be041fb665a6",
+    "bd868016-e99f-4de7-832a-fca834655b1c",
+    "c2b5a85b-4d28-406b-afc6-c6e6d1f39b09",
+    "b90586e1-8fe8-45f4-90eb-503e6df3f48d",
+    "f0d88573-e39d-44d6-b22b-42417609f4e2"
+  ],
+  "reports": {
+    "trial_balance": [
+      {
+        "accountId": "66ba304e-0c8a-4ff7-b4e2-e89f9c8fc65d",
+        "code": "1002.01",
+        "name": "银行存款-建设银行",
+        "category": "ASSET",
+        "debit": 54358.15,
+        "credit": 307677.18,
+        "balance": -253319.03
+      },
+      {
+        "accountId": "9ff65032-9940-4a9e-90b2-73ba26a0108d",
+        "code": "1122.01",
+        "name": "应收账款-中山祥和安全电器科技有限公司",
+        "category": "ASSET",
+        "debit": 0,
+        "credit": 2310.0,
+        "balance": -2310.0
+      },
+      {
+        "accountId": "6d5f0809-49e1-40d0-a1d7-8d20ac7bafdb",
+        "code": "1122.02",
+        "name": "应收账款-惠州市巨蜂智能科技有限公司",
+        "category": "ASSET",
+        "debit": 0,
+        "credit": 850.0,
+        "balance": -850.0
+      },
+      {
+        "accountId": "3964ec03-3066-4fe2-a5bb-ad9945c1effb",
+        "code": "1122.03",
+        "name": "应收账款-深圳市创卓成微电子有限公司",
+        "category": "ASSET",
+        "debit": 0,
+        "credit": 18000.0,
+        "balance": -18000.0
+      },
+      {
+        "accountId": "78a14fc1-16a3-4939-833e-fca7ebb50a17",
+        "code": "1122.04",
+        "name": "应收账款-深圳市灿昇科技有限公司",
+        "category": "ASSET",
+        "debit": 0,
+        "credit": 3720.0,
+        "balance": -3720.0
+      },
+      {
+        "accountId": "3756c3cf-137d-4bf0-bb22-755f0005406b",
+        "code": "1122.05",
+        "name": "应收账款-深圳市金博源电子有限公司",
+        "category": "ASSET",
+        "debit": 0,
+        "credit": 17550.0,
+        "balance": -17550.0
+      },
+      {
+        "accountId": "9ca9ac54-7123-4562-9e66-1d586664af7d",
+        "code": "1122.06",
+        "name": "应收账款-深圳市顺合汇电子有限公司",
+        "category": "ASSET",
+        "debit": 0,
+        "credit": 8400.0,
+        "balance": -8400.0
+      },
+      {
+        "accountId": "18646c00-5e40-4103-a2cf-71c92061af96",
+        "code": "1122.07",
+        "name": "应收账款-深圳腾煜科技有限公司",
+        "category": "ASSET",
+        "debit": 0,
+        "credit": 3450.0,
+        "balance": -3450.0
+      },
+      {
+        "accountId": "64f3e099-72bc-4454-92a2-44fa8e08afe4",
+        "code": "2202.01",
+        "name": "应付账款-深圳市固德微电子有限公司",
+        "category": "LIABILITY",
+        "debit": 129600.0,
+        "credit": 0,
+        "balance": 129600.0
+      },
+      {
+        "accountId": "7db4ee2a-26b7-4413-9930-f074baf615d5",
+        "code": "2202.02",
+        "name": "应付账款-深圳市晶晟微电子科技有限公司",
+        "category": "LIABILITY",
+        "debit": 64365.0,
+        "credit": 0,
+        "balance": 64365.0
+      },
+      {
+        "accountId": "97f7b33c-caba-400c-a721-5ce1adeeefef",
+        "code": "2211.01",
+        "name": "应付职工薪酬-工资",
+        "category": "LIABILITY",
+        "debit": 77691.45,
+        "credit": 0,
+        "balance": 77691.45
+      },
+      {
+        "accountId": "4263c777-2301-4c29-a8a0-5a9338c72e1c",
+        "code": "2241.01",
+        "name": "其他应付款-中国电信股份有限公司深圳分公司",
+        "category": "LIABILITY",
+        "debit": 425.0,
+        "credit": 0,
+        "balance": 425.0
+      },
+      {
+        "accountId": "1cb8fc6e-0e5d-4e3d-b0f5-75c2179bd023",
+        "code": "2241.02",
+        "name": "其他应付款-深圳市环智卓雅企业管理有限公司",
+        "category": "LIABILITY",
+        "debit": 33397.1,
+        "credit": 0,
+        "balance": 33397.1
+      },
+      {
+        "accountId": "5e7b76af-cc47-4710-895a-898746ed289f",
+        "code": "6603.01",
+        "name": "财务费用-手续费",
+        "category": "EXPENSE",
+        "debit": 2.8,
+        "credit": 0,
+        "balance": 2.8
+      },
+      {
+        "accountId": "ac4d2938-0c0d-47ec-bd61-74a582a48e03",
+        "code": "6603.02",
+        "name": "财务费用-利息收入",
+        "category": "EXPENSE",
+        "debit": 0,
+        "credit": 78.15,
+        "balance": -78.15
+      },
+      {
+        "accountId": "77af0a51-a9c4-4477-b19c-fd3e4674485c",
+        "code": "6603.03",
+        "name": "财务费用-利息费用",
+        "category": "EXPENSE",
+        "debit": 2195.83,
+        "credit": 0,
+        "balance": 2195.83
+      }
+    ],
+    "general_ledger": [
+      {
+        "voucherId": "33aa3dd6-d1d1-4ccd-bf3e-060d02e63b98",
+        "voucherNumber": "BANK-202606-001",
+        "voucherDate": "2026-06-01",
+        "accountCode": "1002.01",
+        "accountName": "银行存款-建设银行",
+        "side": "DEBIT",
+        "amount": 2850.0,
+        "dimensionKey": null
+      },
+      {
+        "voucherId": "33aa3dd6-d1d1-4ccd-bf3e-060d02e63b98",
+        "voucherNumber": "BANK-202606-001",
+        "voucherDate": "2026-06-01",
+        "accountCode": "1122.03",
+        "accountName": "应收账款-深圳市创卓成微电子有限公司",
+        "side": "CREDIT",
+        "amount": 2850.0,
+        "dimensionKey": null
+      },
+      {
+        "voucherId": "40feaef7-b42e-4ab9-bdb5-2cf40367d41d",
+        "voucherNumber": "BANK-202606-002",
+        "voucherDate": "2026-06-05",
+        "accountCode": "1002.01",
+        "accountName": "银行存款-建设银行",
+        "side": "DEBIT",
+        "amount": 3450.0,
+        "dimensionKey": null
+      },
+      {
+        "voucherId": "40feaef7-b42e-4ab9-bdb5-2cf40367d41d",
+        "voucherNumber": "BANK-202606-002",
+        "voucherDate": "2026-06-05",
+        "accountCode": "1122.07",
+        "accountName": "应收账款-深圳腾煜科技有限公司",
+        "side": "CREDIT",
+        "amount": 3450.0,
+        "dimensionKey": null
+      },
+      {
+        "voucherId": "029232fd-7ee7-4f86-a974-114952c43c07",
+        "voucherNumber": "BANK-202606-003",
+        "voucherDate": "2026-06-05",
+        "accountCode": "2202.01",
+        "accountName": "应付账款-深圳市固德微电子有限公司",
+        "side": "DEBIT",
+        "amount": 129600.0,
+        "dimensionKey": null
+      },
+      {
+        "voucherId": "029232fd-7ee7-4f86-a974-114952c43c07",
+        "voucherNumber": "BANK-202606-003",
+        "voucherDate": "2026-06-05",
+        "accountCode": "1002.01",
+        "accountName": "银行存款-建设银行",
+        "side": "CREDIT",
+        "amount": 129600.0,
+        "dimensionKey": null
+      },
+      {
+        "voucherId": "47c668b4-0689-4be6-bdef-587f9e0d9736",
+        "voucherNumber": "BANK-202606-004",
+        "voucherDate": "2026-06-05",
+        "accountCode": "2202.02",
+        "accountName": "应付账款-深圳市晶晟微电子科技有限公司",
+        "side": "DEBIT",
+        "amount": 64365.0,
+        "dimensionKey": null
+      },
+      {
+        "voucherId": "47c668b4-0689-4be6-bdef-587f9e0d9736",
+        "voucherNumber": "BANK-202606-004",
+        "voucherDate": "2026-06-05",
+        "accountCode": "1002.01",
+        "accountName": "银行存款-建设银行",
+        "side": "CREDIT",
+        "amount": 64365.0,
+        "dimensionKey": null
+      },
+      {
+        "voucherId": "17a1561e-caf3-41b9-8b18-8ebfef73a9c3",
+        "voucherNumber": "BANK-202606-005",
+        "voucherDate": "2026-06-05",
+        "accountCode": "2241.02",
+        "accountName": "其他应付款-深圳市环智卓雅企业管理有限公司",
+        "side": "DEBIT",
+        "amount": 33397.1,
+        "dimensionKey": null
+      },
+      {
+        "voucherId": "17a1561e-caf3-41b9-8b18-8ebfef73a9c3",
+        "voucherNumber": "BANK-202606-005",
+        "voucherDate": "2026-06-05",
+        "accountCode": "1002.01",
+        "accountName": "银行存款-建设银行",
+        "side": "CREDIT",
+        "amount": 33397.1,
+        "dimensionKey": null
+      },
+      {
+        "voucherId": "0eef0e6f-5801-494c-8f28-c5671e824042",
+        "voucherNumber": "BANK-202606-006",
+        "voucherDate": "2026-06-05",
+        "accountCode": "2211.01",
+        "accountName": "应付职工薪酬-工资",
+        "side": "DEBIT",
+        "amount": 38208.08,
+        "dimensionKey": null
+      },
+      {
+        "voucherId": "0eef0e6f-5801-494c-8f28-c5671e824042",
+        "voucherNumber": "BANK-202606-006",
+        "voucherDate": "2026-06-05",
+        "accountCode": "1002.01",
+        "accountName": "银行存款-建设银行",
+        "side": "CREDIT",
+        "amount": 38208.08,
+        "dimensionKey": null
+      },
+      {
+        "voucherId": "318034dc-af47-4f4c-a558-50cfc585f6ff",
+        "voucherNumber": "BANK-202606-007",
+        "voucherDate": "2026-06-05",
+        "accountCode": "2211.01",
+        "accountName": "应付职工薪酬-工资",
+        "side": "DEBIT",
+        "amount": 2101.79,
+        "dimensionKey": null
+      },
+      {
+        "voucherId": "318034dc-af47-4f4c-a558-50cfc585f6ff",
+        "voucherNumber": "BANK-202606-007",
+        "voucherDate": "2026-06-05",
+        "accountCode": "1002.01",
+        "accountName": "银行存款-建设银行",
+        "side": "CREDIT",
+        "amount": 2101.79,
+        "dimensionKey": null
+      },
+      {
+        "voucherId": "0fe277de-0fa0-48b0-9476-cd3a5a623d2f",
+        "voucherNumber": "BANK-202606-008",
+        "voucherDate": "2026-06-05",
+        "accountCode": "2211.01",
+        "accountName": "应付职工薪酬-工资",
+        "side": "DEBIT",
+        "amount": 2034.81,
+        "dimensionKey": null
+      },
+      {
+        "voucherId": "0fe277de-0fa0-48b0-9476-cd3a5a623d2f",
+        "voucherNumber": "BANK-202606-008",
+        "voucherDate": "2026-06-05",
+        "accountCode": "1002.01",
+        "accountName": "银行存款-建设银行",
+        "side": "CREDIT",
+        "amount": 2034.81,
+        "dimensionKey": null
+      },
+      {
+        "voucherId": "d70a59a7-86a9-45a1-b310-45bbeb625cfc",
+        "voucherNumber": "BANK-202606-009",
+        "voucherDate": "2026-06-05",
+        "accountCode": "2211.01",
+        "accountName": "应付职工薪酬-工资",
+        "side": "DEBIT",
+        "amount": 2360.0,
+        "dimensionKey": null
+      },
+      {
+        "voucherId": "d70a59a7-86a9-45a1-b310-45bbeb625cfc",
+        "voucherNumber": "BANK-202606-009",
+        "voucherDate": "2026-06-05",
+        "accountCode": "1002.01",
+        "accountName": "银行存款-建设银行",
+        "side": "CREDIT",
+        "amount": 2360.0,
+        "dimensionKey": null
+      },
+      {
+        "voucherId": "75d4f2ef-7f40-411a-ad16-a6f440db6f14",
+        "voucherNumber": "BANK-202606-010",
+        "voucherDate": "2026-06-05",
+        "accountCode": "2211.01",
+        "accountName": "应付职工薪酬-工资",
+        "side": "DEBIT",
+        "amount": 13994.66,
+        "dimensionKey": null
+      },
+      {
+        "voucherId": "75d4f2ef-7f40-411a-ad16-a6f440db6f14",
+        "voucherNumber": "BANK-202606-010",
+        "voucherDate": "2026-06-05",
+        "accountCode": "1002.01",
+        "accountName": "银行存款-建设银行",
+        "side": "CREDIT",
+        "amount": 13994.66,
+        "dimensionKey": null
+      },
+      {
+        "voucherId": "ecfc2702-fdca-44ae-8332-023cbba1279b",
+        "voucherNumber": "BANK-202606-011",
+        "voucherDate": "2026-06-05",
+        "accountCode": "2211.01",
+        "accountName": "应付职工薪酬-工资",
+        "side": "DEBIT",
+        "amount": 14339.29,
+        "dimensionKey": null
+      },
+      {
+        "voucherId": "ecfc2702-fdca-44ae-8332-023cbba1279b",
+        "voucherNumber": "BANK-202606-011",
+        "voucherDate": "2026-06-05",
+        "accountCode": "1002.01",
+        "accountName": "银行存款-建设银行",
+        "side": "CREDIT",
+        "amount": 14339.29,
+        "dimensionKey": null
+      },
+      {
+        "voucherId": "d9f61896-5e7c-432b-b7c8-4e083dfff53d",
+        "voucherNumber": "BANK-202606-012",
+        "voucherDate": "2026-06-05",
+        "accountCode": "2211.01",
+        "accountName": "应付职工薪酬-工资",
+        "side": "DEBIT",
+        "amount": 896.6,
+        "dimensionKey": null
+      },
+      {
+        "voucherId": "d9f61896-5e7c-432b-b7c8-4e083dfff53d",
+        "voucherNumber": "BANK-202606-012",
+        "voucherDate": "2026-06-05",
+        "accountCode": "1002.01",
+        "accountName": "银行存款-建设银行",
+        "side": "CREDIT",
+        "amount": 896.6,
+        "dimensionKey": null
+      },
+      {
+        "voucherId": "33529583-711b-481c-bf45-ae6b7d486e92",
+        "voucherNumber": "BANK-202606-013",
+        "voucherDate": "2026-06-05",
+        "accountCode": "2211.01",
+        "accountName": "应付职工薪酬-工资",
+        "side": "DEBIT",
+        "amount": 3756.22,
+        "dimensionKey": null
+      },
+      {
+        "voucherId": "33529583-711b-481c-bf45-ae6b7d486e92",
+        "voucherNumber": "BANK-202606-013",
+        "voucherDate": "2026-06-05",
+        "accountCode": "1002.01",
+        "accountName": "银行存款-建设银行",
+        "side": "CREDIT",
+        "amount": 3756.22,
+        "dimensionKey": null
+      },
+      {
+        "voucherId": "269e1755-eff2-4727-9c55-d444a62710d8",
+        "voucherNumber": "BANK-202606-014",
+        "voucherDate": "2026-06-06",
+        "accountCode": "6603.01",
+        "accountName": "财务费用-手续费",
+        "side": "DEBIT",
+        "amount": 0.8,
+        "dimensionKey": null
+      },
+      {
+        "voucherId": "269e1755-eff2-4727-9c55-d444a62710d8",
+        "voucherNumber": "BANK-202606-014",
+        "voucherDate": "2026-06-06",
+        "accountCode": "1002.01",
+        "accountName": "银行存款-建设银行",
+        "side": "CREDIT",
+        "amount": 0.8,
+        "dimensionKey": null
+      },
+      {
+        "voucherId": "69dc284d-f311-436f-9ddb-75fa09b708c3",
+        "voucherNumber": "BANK-202606-015",
+        "voucherDate": "2026-06-06",
+        "accountCode": "6603.01",
+        "accountName": "财务费用-手续费",
+        "side": "DEBIT",
+        "amount": 2.0,
+        "dimensionKey": null
+      },
+      {
+        "voucherId": "69dc284d-f311-436f-9ddb-75fa09b708c3",
+        "voucherNumber": "BANK-202606-015",
+        "voucherDate": "2026-06-06",
+        "accountCode": "1002.01",
+        "accountName": "银行存款-建设银行",
+        "side": "CREDIT",
+        "amount": 2.0,
+        "dimensionKey": null
+      },
+      {
+        "voucherId": "b4434bdd-352f-41ae-bdb1-0f35dcd3ff75",
+        "voucherNumber": "BANK-202606-016",
+        "voucherDate": "2026-06-08",
+        "accountCode": "1002.01",
+        "accountName": "银行存款-建设银行",
+        "side": "DEBIT",
+        "amount": 5700.0,
+        "dimensionKey": null
+      },
+      {
+        "voucherId": "b4434bdd-352f-41ae-bdb1-0f35dcd3ff75",
+        "voucherNumber": "BANK-202606-016",
+        "voucherDate": "2026-06-08",
+        "accountCode": "1122.03",
+        "accountName": "应收账款-深圳市创卓成微电子有限公司",
+        "side": "CREDIT",
+        "amount": 5700.0,
+        "dimensionKey": null
+      },
+      {
+        "voucherId": "96d8e910-b84c-4c05-9eba-67b53a4ce69e",
+        "voucherNumber": "BANK-202606-017",
+        "voucherDate": "2026-06-08",
+        "accountCode": "2241.01",
+        "accountName": "其他应付款-中国电信股份有限公司深圳分公司",
+        "side": "DEBIT",
+        "amount": 425.0,
+        "dimensionKey": null
+      },
+      {
+        "voucherId": "96d8e910-b84c-4c05-9eba-67b53a4ce69e",
+        "voucherNumber": "BANK-202606-017",
+        "voucherDate": "2026-06-08",
+        "accountCode": "1002.01",
+        "accountName": "银行存款-建设银行",
+        "side": "CREDIT",
+        "amount": 425.0,
+        "dimensionKey": null
+      },
+      {
+        "voucherId": "73b38350-8fc8-47cd-9ec9-8bbe8bbe2b50",
+        "voucherNumber": "BANK-202606-018",
+        "voucherDate": "2026-06-09",
+        "accountCode": "1002.01",
+        "accountName": "银行存款-建设银行",
+        "side": "DEBIT",
+        "amount": 2310.0,
+        "dimensionKey": null
+      },
+      {
+        "voucherId": "73b38350-8fc8-47cd-9ec9-8bbe8bbe2b50",
+        "voucherNumber": "BANK-202606-018",
+        "voucherDate": "2026-06-09",
+        "accountCode": "1122.01",
+        "accountName": "应收账款-中山祥和安全电器科技有限公司",
+        "side": "CREDIT",
+        "amount": 2310.0,
+        "dimensionKey": null
+      },
+      {
+        "voucherId": "cfa630aa-a84f-483d-9cec-8262745e59c1",
+        "voucherNumber": "BANK-202606-019",
+        "voucherDate": "2026-06-18",
+        "accountCode": "1002.01",
+        "accountName": "银行存款-建设银行",
+        "side": "DEBIT",
+        "amount": 8400.0,
+        "dimensionKey": null
+      },
+      {
+        "voucherId": "cfa630aa-a84f-483d-9cec-8262745e59c1",
+        "voucherNumber": "BANK-202606-019",
+        "voucherDate": "2026-06-18",
+        "accountCode": "1122.06",
+        "accountName": "应收账款-深圳市顺合汇电子有限公司",
+        "side": "CREDIT",
+        "amount": 8400.0,
+        "dimensionKey": null
+      },
+      {
+        "voucherId": "4260beda-d986-488a-a1e2-c996ea6e22cf",
+        "voucherNumber": "BANK-202606-020",
+        "voucherDate": "2026-06-18",
+        "accountCode": "1002.01",
+        "accountName": "银行存款-建设银行",
+        "side": "DEBIT",
+        "amount": 17550.0,
+        "dimensionKey": null
+      },
+      {
+        "voucherId": "4260beda-d986-488a-a1e2-c996ea6e22cf",
+        "voucherNumber": "BANK-202606-020",
+        "voucherDate": "2026-06-18",
+        "accountCode": "1122.05",
+        "accountName": "应收账款-深圳市金博源电子有限公司",
+        "side": "CREDIT",
+        "amount": 17550.0,
+        "dimensionKey": null
+      },
+      {
+        "voucherId": "83d71e5e-e9fe-4dbb-bb83-be041fb665a6",
+        "voucherNumber": "BANK-202606-021",
+        "voucherDate": "2026-06-21",
+        "accountCode": "1002.01",
+        "accountName": "银行存款-建设银行",
+        "side": "DEBIT",
+        "amount": 78.15,
+        "dimensionKey": null
+      },
+      {
+        "voucherId": "83d71e5e-e9fe-4dbb-bb83-be041fb665a6",
+        "voucherNumber": "BANK-202606-021",
+        "voucherDate": "2026-06-21",
+        "accountCode": "6603.02",
+        "accountName": "财务费用-利息收入",
+        "side": "CREDIT",
+        "amount": 78.15,
+        "dimensionKey": null
+      },
+      {
+        "voucherId": "bd868016-e99f-4de7-832a-fca834655b1c",
+        "voucherNumber": "BANK-202606-022",
+        "voucherDate": "2026-06-21",
+        "accountCode": "6603.03",
+        "accountName": "财务费用-利息费用",
+        "side": "DEBIT",
+        "amount": 2195.83,
+        "dimensionKey": null
+      },
+      {
+        "voucherId": "bd868016-e99f-4de7-832a-fca834655b1c",
+        "voucherNumber": "BANK-202606-022",
+        "voucherDate": "2026-06-21",
+        "accountCode": "1002.01",
+        "accountName": "银行存款-建设银行",
+        "side": "CREDIT",
+        "amount": 2195.83,
+        "dimensionKey": null
+      },
+      {
+        "voucherId": "c2b5a85b-4d28-406b-afc6-c6e6d1f39b09",
+        "voucherNumber": "BANK-202606-023",
+        "voucherDate": "2026-06-23",
+        "accountCode": "1002.01",
+        "accountName": "银行存款-建设银行",
+        "side": "DEBIT",
+        "amount": 9450.0,
+        "dimensionKey": null
+      },
+      {
+        "voucherId": "c2b5a85b-4d28-406b-afc6-c6e6d1f39b09",
+        "voucherNumber": "BANK-202606-023",
+        "voucherDate": "2026-06-23",
+        "accountCode": "1122.03",
+        "accountName": "应收账款-深圳市创卓成微电子有限公司",
+        "side": "CREDIT",
+        "amount": 9450.0,
+        "dimensionKey": null
+      },
+      {
+        "voucherId": "b90586e1-8fe8-45f4-90eb-503e6df3f48d",
+        "voucherNumber": "BANK-202606-024",
+        "voucherDate": "2026-06-23",
+        "accountCode": "1002.01",
+        "accountName": "银行存款-建设银行",
+        "side": "DEBIT",
+        "amount": 850.0,
+        "dimensionKey": null
+      },
+      {
+        "voucherId": "b90586e1-8fe8-45f4-90eb-503e6df3f48d",
+        "voucherNumber": "BANK-202606-024",
+        "voucherDate": "2026-06-23",
+        "accountCode": "1122.02",
+        "accountName": "应收账款-惠州市巨蜂智能科技有限公司",
+        "side": "CREDIT",
+        "amount": 850.0,
+        "dimensionKey": null
+      },
+      {
+        "voucherId": "f0d88573-e39d-44d6-b22b-42417609f4e2",
+        "voucherNumber": "BANK-202606-025",
+        "voucherDate": "2026-06-23",
+        "accountCode": "1002.01",
+        "accountName": "银行存款-建设银行",
+        "side": "DEBIT",
+        "amount": 3720.0,
+        "dimensionKey": null
+      },
+      {
+        "voucherId": "f0d88573-e39d-44d6-b22b-42417609f4e2",
+        "voucherNumber": "BANK-202606-025",
+        "voucherDate": "2026-06-23",
+        "accountCode": "1122.04",
+        "accountName": "应收账款-深圳市灿昇科技有限公司",
+        "side": "CREDIT",
+        "amount": 3720.0,
+        "dimensionKey": null
+      }
+    ],
+    "balance_sheet": {
+      "totalLines": 13,
+      "lines": [
+        {
+          "code": "1002.01",
+          "name": "银行存款-建设银行",
+          "amount": -253319.03
+        },
+        {
+          "code": "1122.01",
+          "name": "应收账款-中山祥和安全电器科技有限公司",
+          "amount": -2310.0
+        },
+        {
+          "code": "1122.02",
+          "name": "应收账款-惠州市巨蜂智能科技有限公司",
+          "amount": -850.0
+        },
+        {
+          "code": "1122.03",
+          "name": "应收账款-深圳市创卓成微电子有限公司",
+          "amount": -18000.0
+        },
+        {
+          "code": "1122.04",
+          "name": "应收账款-深圳市灿昇科技有限公司",
+          "amount": -3720.0
+        },
+        {
+          "code": "1122.05",
+          "name": "应收账款-深圳市金博源电子有限公司",
+          "amount": -17550.0
+        },
+        {
+          "code": "1122.06",
+          "name": "应收账款-深圳市顺合汇电子有限公司",
+          "amount": -8400.0
+        },
+        {
+          "code": "1122.07",
+          "name": "应收账款-深圳腾煜科技有限公司",
+          "amount": -3450.0
+        },
+        {
+          "code": "2202.01",
+          "name": "应付账款-深圳市固德微电子有限公司",
+          "amount": -129600.0
+        },
+        {
+          "code": "2202.02",
+          "name": "应付账款-深圳市晶晟微电子科技有限公司",
+          "amount": -64365.0
+        },
+        {
+          "code": "2211.01",
+          "name": "应付职工薪酬-工资",
+          "amount": -77691.45
+        },
+        {
+          "code": "2241.01",
+          "name": "其他应付款-中国电信股份有限公司深圳分公司",
+          "amount": -425.0
+        },
+        {
+          "code": "2241.02",
+          "name": "其他应付款-深圳市环智卓雅企业管理有限公司",
+          "amount": -33397.1
+        }
+      ]
+    },
+    "income_statement": {
+      "totalLines": 3,
+      "lines": [
+        {
+          "code": "6603.01",
+          "name": "财务费用-手续费",
+          "amount": 2.8
+        },
+        {
+          "code": "6603.02",
+          "name": "财务费用-利息收入",
+          "amount": -78.15
+        },
+        {
+          "code": "6603.03",
+          "name": "财务费用-利息费用",
+          "amount": 2195.83
+        }
+      ]
+    }
+  }
+}

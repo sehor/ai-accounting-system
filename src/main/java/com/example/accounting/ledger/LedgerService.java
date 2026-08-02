@@ -14,11 +14,30 @@ public interface LedgerService {
 
     LedgerResponses.Ledger findLedger(UUID actorId, UUID ledgerId);
 
+    LedgerRole role(UUID actorId, UUID ledgerId);
+
     List<LedgerResponses.Member> listMembers(UUID actorId, UUID ledgerId);
 
     List<UserResponse> findMemberCandidates(UUID actorId, UUID ledgerId, String email);
 
     List<LedgerResponses.Account> listAccounts(UUID actorId, UUID ledgerId);
+
+    LedgerResponses.Account findAccount(UUID actorId, UUID ledgerId, UUID accountId);
+
+    LedgerResponses.Account createAccount(UUID actorId, UUID ledgerId, LedgerRequests.AccountCreate request);
+
+    LedgerResponses.Account updateAccount(
+            UUID actorId, UUID ledgerId, UUID accountId, LedgerRequests.AccountPatch request);
+
+    void deleteAccount(UUID actorId, UUID ledgerId, UUID accountId, long expectedVersion);
+
+    AccountCodeRule updateAccountCodeRule(
+            UUID actorId, UUID ledgerId, LedgerRequests.AccountCodeRuleUpdate request);
+
+    List<LedgerResponses.CashFlowItem> listCashFlowItems(UUID actorId, UUID ledgerId);
+
+    LedgerResponses.Account ensureAgentAccount(
+            UUID actorId, UUID ledgerId, LedgerRequests.AccountCreate request);
 
     List<LedgerResponses.Period> listPeriods(UUID actorId, UUID ledgerId);
 

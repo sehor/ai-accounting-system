@@ -17,7 +17,18 @@ public final class VoucherResponses {
     }
 
     public record Line(UUID id, int lineNo, UUID accountId, String side, String currency,
-                       BigDecimal originalAmount, BigDecimal exchangeRate, BigDecimal baseAmount, String summary) {
+                       BigDecimal originalAmount, BigDecimal exchangeRate, BigDecimal baseAmount, String summary,
+                       UUID cashFlowItemId, BigDecimal quantity, BigDecimal unitPrice,
+                       List<Dimension> dimensions) {
+
+        public Line(UUID id, int lineNo, UUID accountId, String side, String currency,
+                    BigDecimal originalAmount, BigDecimal exchangeRate, BigDecimal baseAmount, String summary) {
+            this(id, lineNo, accountId, side, currency, originalAmount, exchangeRate,
+                    baseAmount, summary, null, null, null, List.of());
+        }
+    }
+
+    public record Dimension(UUID dimensionTypeId, UUID dimensionValueId) {
     }
 
     public record Revision(UUID id, int revision, String action, UUID actorId, String reason,

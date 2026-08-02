@@ -8,7 +8,7 @@ import java.util.UUID;
 
 public interface ExtractionRepository {
 
-    void create(UUID extractionId, UUID ledgerId, UUID documentId, String result,
+    void create(UUID extractionId, UUID ledgerId, UUID documentId, DocumentExtractor.Result result,
                 String inputHash, String outputHash);
 
     List<ExtractionResponses.Extraction> list(UUID ledgerId, UUID documentId);

@@ -37,6 +37,76 @@ export interface Account {
   category: string
   normalBalance: string
   status: string
+  parentId: string | null
+  level: number
+  isLeaf: boolean
+  isTemplate: boolean
+  hasBusinessUsage: boolean
+  coreLocked: boolean
+  legacyCode: boolean
+  version: number
+  cashFlowRequired: boolean
+  defaultCashFlowItemId: string | null
+  quantityEnabled: boolean
+  unitName: string | null
+  dimensionRequirements: AccountDimensionRequirement[]
+}
+
+export interface AccountDimensionRequirement {
+  dimensionTypeId: string
+  code: string
+  name: string
+  required: boolean
+}
+
+export interface CashFlowItem {
+  id: string
+  ledgerId: string
+  code: string
+  name: string
+  status: string
+  isTemplate: boolean
+}
+
+export interface AccountingStandard {
+  code: string
+  version: string
+  name: string
+  effectiveDate: string
+  accountCodeRule: AccountCodeRule
+}
+
+export interface AccountCodeRule {
+  separator: '.' | '-'
+  level2Width: number
+  level3Width: number
+  level4Width: number
+}
+
+export interface AccountImportRow {
+  rowNo: number
+  rawData: Record<string, string>
+  cleanedData: Record<string, string>
+  accountCode: string
+  targetAccountId: string | null
+  expectedAccountVersion: number | null
+  action: 'CREATE' | 'UPDATE' | 'MAP' | 'SKIP' | null
+  confirmed: boolean
+  confidence: string | null
+  issues: string[]
+}
+
+export interface AccountImportPreview {
+  id: string
+  ledgerId: string
+  format: 'STANDARD' | 'KINGDEE'
+  status: 'PREVIEW' | 'COMMITTED'
+  ledgerVersion: number
+  filename: string
+  rowCount: number
+  errorCount: number
+  aiStatus: string
+  rows: AccountImportRow[]
 }
 
 export interface Period {
@@ -91,6 +161,15 @@ export interface VoucherLine {
   exchangeRate: string
   baseAmount: string
   summary: string | null
+  cashFlowItemId: string | null
+  quantity: string | null
+  unitPrice: string | null
+  dimensions: VoucherLineDimension[]
+}
+
+export interface VoucherLineDimension {
+  dimensionTypeId: string
+  dimensionValueId: string
 }
 
 export interface Voucher {

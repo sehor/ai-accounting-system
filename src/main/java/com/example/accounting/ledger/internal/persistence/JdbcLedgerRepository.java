@@ -49,6 +49,16 @@ public class JdbcLedgerRepository implements LedgerRepository {
     }
 
     @Override
+    public boolean createAccountIfAbsent(
+            UUID ledgerId, String code, String name, String category, String normalBalance) {
+        return jdbc.update("""
+                insert into ledger_account (id, ledger_id, code, name, category, normal_balance)
+                values (?, ?, ?, ?, ?, ?)
+                on conflict (ledger_id, code) do nothing
+                """, UUID.randomUUID(), ledgerId, code, name, category, normalBalance) == 1;
+    }
+
+    @Override
     public void createPeriod(UUID ledgerId, String periodCode, LocalDate startDate, LocalDate endDate) {
         jdbc.update("""
                 insert into accounting_period (id, ledger_id, period_code, start_date, end_date)
@@ -99,9 +109,15 @@ public class JdbcLedgerRepository implements LedgerRepository {
         return jdbc.query("""
                 select id, ledger_id, code, name, category, normal_balance, status
                 from ledger_account where ledger_id = ? order by code
-                """, (rs, rowNum) -> new LedgerResponses.Account(rs.getObject("id", UUID.class),
-                rs.getObject("ledger_id", UUID.class), rs.getString("code"), rs.getString("name"),
-                rs.getString("category"), rs.getString("normal_balance"), rs.getString("status")), ledgerId);
+                """, (rs, rowNum) -> mapAccount(rs), ledgerId);
+    }
+
+    @Override
+    public Optional<LedgerResponses.Account> findAccount(UUID ledgerId, String code) {
+        return Optional.ofNullable(jdbc.query("""
+                select id, ledger_id, code, name, category, normal_balance, status
+                from ledger_account where ledger_id = ? and code = ?
+                """, rs -> rs.next() ? mapAccount(rs) : null, ledgerId, code));
     }
 
     @Override
@@ -233,6 +249,9 @@ public class JdbcLedgerRepository implements LedgerRepository {
                 select exists (
                     select 1 from ledger_account a join accounting_period p on p.ledger_id = a.ledger_id
                     where a.ledger_id = ? and a.id = ? and a.status = 'ACTIVE'
+                      and not exists (
+                          select 1 from ledger_account child
+                          where child.ledger_id = a.ledger_id and child.parent_id = a.id)
                       and p.id = ? and p.status = 'OPEN')
                 """, Boolean.class, ledgerId, accountId, periodId));
     }
@@ -331,6 +350,12 @@ public class JdbcLedgerRepository implements LedgerRepository {
                 rs.getString("accounting_standard_code"), rs.getString("accounting_standard_version"),
                 rs.getString("base_currency"), rs.getObject("start_date", LocalDate.class),
                 rs.getBoolean("approval_enabled"), rs.getString("status"));
+    }
+
+    private LedgerResponses.Account mapAccount(java.sql.ResultSet rs) throws java.sql.SQLException {
+        return new LedgerResponses.Account(rs.getObject("id", UUID.class),
+                rs.getObject("ledger_id", UUID.class), rs.getString("code"), rs.getString("name"),
+                rs.getString("category"), rs.getString("normal_balance"), rs.getString("status"));
     }
 
     private LedgerResponses.Member mapMember(java.sql.ResultSet rs) throws java.sql.SQLException {

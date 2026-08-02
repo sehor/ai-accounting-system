@@ -10,6 +10,9 @@ public interface VoucherService {
     VoucherResponses.Voucher create(UUID actorId, UUID ledgerId, VoucherRequests.Create request,
                                     String idempotencyKey);
 
+    VoucherResponses.Voucher createAgentDraft(UUID actorId, UUID ledgerId, VoucherRequests.Create request,
+                                              String idempotencyKey);
+
     VoucherResponses.Voucher update(UUID actorId, UUID ledgerId, UUID voucherId, VoucherRequests.Update request);
 
     List<VoucherResponses.Voucher> list(UUID actorId, UUID ledgerId);
@@ -20,6 +23,8 @@ public interface VoucherService {
 
     VoucherResponses.Voucher validate(UUID actorId, UUID ledgerId, UUID voucherId);
 
+    VoucherResponses.Voucher validateAgentDraft(UUID actorId, UUID ledgerId, UUID voucherId);
+
     VoucherResponses.Voucher submit(UUID actorId, UUID ledgerId, UUID voucherId);
 
     VoucherResponses.Voucher approve(UUID actorId, UUID ledgerId, UUID voucherId, String comment);
@@ -27,6 +32,8 @@ public interface VoucherService {
     VoucherResponses.Voucher reject(UUID actorId, UUID ledgerId, UUID voucherId, String comment);
 
     VoucherResponses.Voucher post(UUID actorId, UUID ledgerId, UUID voucherId);
+
+    VoucherResponses.Voucher postAgentVoucher(UUID actorId, UUID ledgerId, UUID voucherId);
 
     VoucherResponses.Voucher unpost(UUID actorId, UUID ledgerId, UUID voucherId, String reason);
 

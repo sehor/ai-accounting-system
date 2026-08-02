@@ -9,6 +9,9 @@ public interface DocumentService {
     DocumentResponses.Document upload(UUID actorId, UUID ledgerId, String fileName, String contentType,
                                       long declaredSize, InputStream input);
 
+    DocumentResponses.Document upload(UUID actorId, UUID ledgerId, String fileName, String contentType,
+                                      long declaredSize, InputStream input, String idempotencyKey);
+
     DocumentResponses.Document find(UUID actorId, UUID ledgerId, UUID documentId);
 
     List<DocumentResponses.Document> list(UUID actorId, UUID ledgerId, int limit, int offset);

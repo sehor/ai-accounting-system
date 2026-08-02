@@ -11,6 +11,10 @@ public interface DocumentRepository {
 
     void create(DocumentResponses.Document document, UUID actorId);
 
+    boolean reserveIdempotency(UUID ledgerId, UUID actorId, String key, String requestHash, UUID documentId);
+
+    Optional<DocumentIdempotency> findIdempotency(UUID ledgerId, UUID actorId, String key);
+
     void enqueueExtraction(UUID ledgerId, UUID documentId);
 
     Optional<DocumentResponses.Document> find(UUID ledgerId, UUID documentId);
@@ -18,4 +22,7 @@ public interface DocumentRepository {
     List<DocumentResponses.Document> list(UUID ledgerId, int limit, int offset);
 
     void markExtracted(UUID ledgerId, UUID documentId);
+
+    record DocumentIdempotency(String requestHash, UUID documentId) {
+    }
 }

@@ -416,7 +416,7 @@ Spring Security 作为 OAuth2 Resource Server 验证 JWT：
 | 编辑基础资料 | ✓ | ✓ |  |  |  |
 | 创建/修改凭证 | ✓ | ✓ |  |  | 仅草稿工具 |
 | 审批/退回 | ✓ |  | ✓ |  |  |
-| 记账/反记账 | ✓ | ✓ |  |  |  |
+| 记账/反记账 | ✓ | ✓ |  |  | 仅记账工具 |
 | 关账/重新开账 | ✓ |  |  |  |  |
 | 管理成员 | ✓ |  |  |  |  |
 
@@ -652,7 +652,7 @@ LIMIT :batchSize
 
 失败最多重试 3 次，间隔 1、5、30 分钟。业务校验失败不自动重试；临时网络或存储错误可重试。
 
-### 11.3 Mock 提取
+### 11.3 文档提取
 
 定义最小接口：
 
@@ -662,7 +662,7 @@ public interface DocumentExtractor {
 }
 ```
 
-v0.1 只有 `MockDocumentExtractor`，按固定测试样本或文件元数据返回结构化结果。真实服务接入时新增实现，不改变文档、任务和凭证草稿流程。
+`HttpDocumentExtractor` 通过配置的 HTTPS 服务获取结构化结果，校验金额、币种和汇率后保存；未配置服务时返回稳定错误，不生成模拟财务数据。本地测试使用接口替身，不改变文档、任务和凭证草稿流程。
 
 ## 12. MCP 设计
 
@@ -671,10 +671,13 @@ MCP 使用与 REST 相同的 JWT 身份、`LedgerAccessService` 和应用服务�
 固定工具：
 
 - `list_ledgers`
+- `list_periods`
+- `ensure_account`
 - `finance_query`
 - `get_voucher`
 - `create_voucher_draft`
 - `validate_voucher`
+- `post_voucher`
 - `upload_document`
 - `extract_document`
 - `get_job_status`
@@ -683,8 +686,10 @@ MCP 使用与 REST 相同的 JWT 身份、`LedgerAccessService` 和应用服务�
 约束：
 
 - 每次调用必须确定当前用户和账套。
+- 本地联调仅在显式启用 `LOCAL_USER_HEADER_ENABLED` 且未配置 OIDC issuer 时，将 `X-User-Id` 建立为 MCP 认证身份。
 - 工具参数使用明确 JSON Schema，不接受任意 SQL。
-- MCP 不暴露记账、反记账、审批、关账、重新开账或成员管理。
+- `ensure_account` 校验科目编码、名称、类别和余额方向，并以账套内科目编码实现语义幂等；同码不同属性返回冲突。
+- MCP 仅开放满足凭证状态和审批前置条件的记账，不暴露反记账、审批、关账、重新开账或成员管理。
 - 调用、参数哈希、结果哈希、操作者和 `traceId` 写入审计。
 
 ## 13. 幂等、并发与错误处理
@@ -723,7 +728,7 @@ MCP 使用与 REST 相同的 JWT 身份、`LedgerAccessService` 和应用服务�
 3. API 集成测试：JWT、角色权限、Problem Details、幂等和乐观锁。
 4. 报表金样测试：固定凭证集对应固定余额表和法定报表结果。
 5. 跨账套安全测试：读取、写入、关联引用全部拒绝。
-6. 文件/任务测试：上传、哈希、重复警告、重试和 Mock 提取。
+6. 文件/任务测试：上传、哈希、重复警告、重试和真实提取适配器。
 7. Modulith 校验：禁止越过模块公开边界。
 
 每个业务功能至少包含正常路径、非法状态、权限不足和跨账套四类测试；纯查询功能可省略不适用的状态测试。
@@ -831,7 +836,7 @@ MCP 使用与 REST 相同的 JWT 身份、`LedgerAccessService` 和应用服务�
 2. 实现本地文件存储流式上传、类型/大小校验和 SHA-256。
 3. 实现重复警告，不设置阻断分支。
 4. 实现 `SKIP LOCKED` 任务领取、状态转换和重试。
-5. 实现 Mock 提取器和结构化结果保存。
+5. 实现 HTTPS 提取器和结构化结果保存。
 6. 实现从提取结果创建凭证草稿。
 
 验收：
@@ -855,7 +860,7 @@ MCP 使用与 REST 相同的 JWT 身份、`LedgerAccessService` 和应用服务�
 
 - MCP 与 REST 返回一致的业务结果和错误码。
 - Agent 只能访问其有权限的账套。
-- 不存在记账、反记账、审批、关账或成员管理工具。
+- 仅存在受状态与审批规则约束的记账工具，不存在反记账、审批、关账或成员管理工具。
 
 ### 阶段 7：交付加固
 

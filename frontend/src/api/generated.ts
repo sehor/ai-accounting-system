@@ -36,6 +36,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/ledgers/{ledgerId}/account-imports/{importId}/rows/{rowNo}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["decide"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/ledgers/{ledgerId}/account-code-rule": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["updateAccountCodeRule"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/ledgers": {
         parameters: {
             query?: never;
@@ -333,7 +365,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        post: operations["extractMock"];
+        post: operations["extract"];
         delete?: never;
         options?: never;
         head?: never;
@@ -388,6 +420,70 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/ledgers/{ledgerId}/data-exchange/kingdee:import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["importKingdee"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/ledgers/{ledgerId}/accounts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listAccounts"];
+        put?: never;
+        post: operations["createAccount"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/ledgers/{ledgerId}/account-imports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["preview"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/ledgers/{ledgerId}/account-imports/{importId}:commit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["commit"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/ledgers/{ledgerId}/members/{userId}": {
         parameters: {
             query?: never;
@@ -402,6 +498,22 @@ export interface paths {
         options?: never;
         head?: never;
         patch: operations["updateMember"];
+        trace?: never;
+    };
+    "/v1/ledgers/{ledgerId}/accounts/{accountId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getAccount"];
+        put?: never;
+        post?: never;
+        delete: operations["deleteAccount"];
+        options?: never;
+        head?: never;
+        patch: operations["updateAccount"];
         trace?: never;
     };
     "/v1/me": {
@@ -444,6 +556,22 @@ export interface paths {
             cookie?: never;
         };
         get: operations["revisions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/ledgers/{ledgerId}/role": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["role"];
         put?: never;
         post?: never;
         delete?: never;
@@ -628,6 +756,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/ledgers/{ledgerId}/data-exchange/kingdee:export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["exportKingdee"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/ledgers/{ledgerId}/cash-flow-items": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listCashFlowItems"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/ledgers/{ledgerId}/audit": {
         parameters: {
             query?: never;
@@ -644,14 +804,78 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/ledgers/{ledgerId}/accounts": {
+    "/v1/ledgers/{ledgerId}/account-imports/{importId}": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        get: operations["listAccounts"];
+        get: operations["get_4"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/ledgers/{ledgerId}/account-import-template": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["template"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/ledgers/{ledgerId}/account-export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["export"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/accounting-standards": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["list_4"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/accounting-standards/{code}/versions/{version}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["get_5"];
         put?: never;
         post?: never;
         delete?: never;
@@ -664,6 +888,12 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        Dimension: {
+            /** Format: uuid */
+            dimensionTypeId: string;
+            /** Format: uuid */
+            dimensionValueId: string;
+        };
         Line: {
             /** Format: uuid */
             accountId: string;
@@ -672,6 +902,11 @@ export interface components {
             originalAmount: number;
             exchangeRate: number;
             summary?: string;
+            /** Format: uuid */
+            cashFlowItemId?: string;
+            quantity?: number;
+            unitPrice?: number;
+            dimensions?: components["schemas"]["Dimension"][];
         };
         Update: {
             /** Format: int64 */
@@ -735,6 +970,67 @@ export interface components {
             creditBase?: number;
             confirmed?: boolean;
         };
+        Decision: {
+            action?: string;
+            /** Format: uuid */
+            targetAccountId?: string;
+            accountCode?: string;
+        };
+        Preview: {
+            /** Format: uuid */
+            id?: string;
+            /** Format: uuid */
+            ledgerId?: string;
+            /** @enum {string} */
+            format?: "STANDARD" | "KINGDEE";
+            status?: string;
+            /** Format: int64 */
+            ledgerVersion?: number;
+            filename?: string;
+            /** Format: int32 */
+            rowCount?: number;
+            /** Format: int32 */
+            errorCount?: number;
+            aiStatus?: string;
+            rows?: components["schemas"]["PreviewRow"][];
+        };
+        PreviewRow: {
+            /** Format: int32 */
+            rowNo?: number;
+            rawData?: {
+                [key: string]: string;
+            };
+            cleanedData?: {
+                [key: string]: string;
+            };
+            accountCode?: string;
+            /** Format: uuid */
+            targetAccountId?: string;
+            /** Format: int64 */
+            expectedAccountVersion?: number;
+            action?: string;
+            confirmed?: boolean;
+            confidence?: number;
+            issues?: string[];
+        };
+        AccountCodeRuleUpdate: {
+            separator: string;
+            /** Format: int32 */
+            level2Width: number;
+            /** Format: int32 */
+            level3Width: number;
+            /** Format: int32 */
+            level4Width: number;
+        };
+        AccountCodeRule: {
+            separator?: string;
+            /** Format: int32 */
+            level2Width?: number;
+            /** Format: int32 */
+            level3Width?: number;
+            /** Format: int32 */
+            level4Width?: number;
+        };
         Create: {
             name: string;
             accountingStandardCode: string;
@@ -743,6 +1039,7 @@ export interface components {
             /** Format: date */
             startDate: string;
             approvalEnabled?: boolean;
+            accountCodeRule?: components["schemas"]["AccountCodeRule"];
         };
         Ledger: {
             /** Format: uuid */
@@ -863,11 +1160,81 @@ export interface components {
             name?: string;
             status?: string;
         };
+        ImportResult: {
+            /** Format: int32 */
+            voucherCount?: number;
+            /** Format: int32 */
+            rowCount?: number;
+        };
+        AccountCreate: {
+            code: string;
+            name: string;
+            category: string;
+            normalBalance: string;
+            /** Format: uuid */
+            parentId?: string;
+            cashFlowRequired?: boolean;
+            /** Format: uuid */
+            defaultCashFlowItemId?: string;
+            quantityEnabled?: boolean;
+            unitName?: string;
+            dimensionRequirements?: components["schemas"]["DimensionRequirement"][];
+        };
+        DimensionRequirement: {
+            /** Format: uuid */
+            dimensionTypeId: string;
+            required?: boolean;
+        };
+        Account: {
+            /** Format: uuid */
+            id?: string;
+            /** Format: uuid */
+            ledgerId?: string;
+            code?: string;
+            name?: string;
+            category?: string;
+            normalBalance?: string;
+            status?: string;
+            /** Format: uuid */
+            parentId?: string;
+            /** Format: int32 */
+            level?: number;
+            isLeaf?: boolean;
+            isTemplate?: boolean;
+            hasBusinessUsage?: boolean;
+            coreLocked?: boolean;
+            legacyCode?: boolean;
+            /** Format: int64 */
+            version?: number;
+            cashFlowRequired?: boolean;
+            /** Format: uuid */
+            defaultCashFlowItemId?: string;
+            quantityEnabled?: boolean;
+            unitName?: string;
+            dimensionRequirements?: components["schemas"]["DimensionRequirement"][];
+        };
         UpdateMember: {
             /** @enum {string} */
             role: "OWNER" | "EDITOR" | "REVIEWER" | "VIEWER" | "AGENT";
             /** @enum {string} */
             status: "ACTIVE" | "INACTIVE";
+        };
+        AccountPatch: {
+            /** Format: int64 */
+            expectedVersion: number;
+            code?: string;
+            name?: string;
+            /** Format: uuid */
+            parentId?: string;
+            category?: string;
+            normalBalance?: string;
+            status?: string;
+            cashFlowRequired?: boolean;
+            /** Format: uuid */
+            defaultCashFlowItemId?: string;
+            quantityEnabled?: boolean;
+            unitName?: string;
+            dimensionRequirements?: components["schemas"]["DimensionRequirement"][];
         };
         UserResponse: {
             /** Format: uuid */
@@ -939,6 +1306,16 @@ export interface components {
             nextRunAt?: string;
             lockedBy?: string;
         };
+        CashFlowItem: {
+            /** Format: uuid */
+            id?: string;
+            /** Format: uuid */
+            ledgerId?: string;
+            code?: string;
+            name?: string;
+            status?: string;
+            template?: boolean;
+        };
         Entry: {
             /** Format: uuid */
             id?: string;
@@ -954,16 +1331,23 @@ export interface components {
             /** Format: date-time */
             createdAt?: string;
         };
-        Account: {
-            /** Format: uuid */
-            id?: string;
-            /** Format: uuid */
-            ledgerId?: string;
+        Formula: {
             code?: string;
             name?: string;
-            category?: string;
-            normalBalance?: string;
-            status?: string;
+            definition?: components["schemas"]["JsonNode"];
+        };
+        JsonNode: unknown;
+        Package: {
+            code?: string;
+            version?: string;
+            name?: string;
+            /** Format: date */
+            effectiveDate?: string;
+            accountCodeRule?: components["schemas"]["AccountCodeRule"];
+            accounts?: components["schemas"]["Account"][];
+            formulas?: components["schemas"]["Formula"][];
+            cashFlowItems?: components["schemas"]["CashFlowItem"][];
+            dimensionTypes?: components["schemas"]["DimensionType"][];
         };
     };
     responses: never;
@@ -1089,6 +1473,60 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["OpeningBalance"][];
+                };
+            };
+        };
+    };
+    decide: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ledgerId: string;
+                importId: string;
+                rowNo: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Decision"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["Preview"];
+                };
+            };
+        };
+    };
+    updateAccountCodeRule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ledgerId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AccountCodeRuleUpdate"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["AccountCodeRule"];
                 };
             };
         };
@@ -1643,7 +2081,7 @@ export interface operations {
             };
         };
     };
-    extractMock: {
+    extract: {
         parameters: {
             query?: never;
             header?: never;
@@ -1787,6 +2225,139 @@ export interface operations {
             };
         };
     };
+    importKingdee: {
+        parameters: {
+            query?: never;
+            header?: {
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                ledgerId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "multipart/form-data": {
+                    /** Format: binary */
+                    file: string;
+                };
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ImportResult"];
+                };
+            };
+        };
+    };
+    listAccounts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ledgerId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["Account"][];
+                };
+            };
+        };
+    };
+    createAccount: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ledgerId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AccountCreate"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["Account"];
+                };
+            };
+        };
+    };
+    preview: {
+        parameters: {
+            query: {
+                format: "STANDARD" | "KINGDEE";
+            };
+            header?: never;
+            path: {
+                ledgerId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "multipart/form-data": {
+                    /** Format: binary */
+                    file: string;
+                };
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["Preview"];
+                };
+            };
+        };
+    };
+    commit: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ledgerId: string;
+                importId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["Preview"];
+                };
+            };
+        };
+    };
     removeMember: {
         parameters: {
             query?: never;
@@ -1831,6 +2402,79 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["Member"];
+                };
+            };
+        };
+    };
+    getAccount: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ledgerId: string;
+                accountId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["Account"];
+                };
+            };
+        };
+    };
+    deleteAccount: {
+        parameters: {
+            query: {
+                expectedVersion: number;
+            };
+            header?: never;
+            path: {
+                ledgerId: string;
+                accountId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    updateAccount: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ledgerId: string;
+                accountId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AccountPatch"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["Account"];
                 };
             };
         };
@@ -1900,10 +2544,35 @@ export interface operations {
             };
         };
     };
+    role: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ledgerId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": {
+                        [key: string]: string;
+                    };
+                };
+            };
+        };
+    };
     trialBalance: {
         parameters: {
             query?: {
                 periodCode?: string;
+                includeParents?: boolean;
             };
             header?: never;
             path: {
@@ -2158,6 +2827,50 @@ export interface operations {
             };
         };
     };
+    exportKingdee: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ledgerId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": string;
+                };
+            };
+        };
+    };
+    listCashFlowItems: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ledgerId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["CashFlowItem"][];
+                };
+            };
+        };
+    };
     list_3: {
         parameters: {
             query?: never;
@@ -2180,9 +2893,34 @@ export interface operations {
             };
         };
     };
-    listAccounts: {
+    get_4: {
         parameters: {
             query?: never;
+            header?: never;
+            path: {
+                ledgerId: string;
+                importId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["Preview"];
+                };
+            };
+        };
+    };
+    template: {
+        parameters: {
+            query: {
+                format: "STANDARD" | "KINGDEE";
+            };
             header?: never;
             path: {
                 ledgerId: string;
@@ -2197,7 +2935,74 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "*/*": components["schemas"]["Account"][];
+                    "*/*": string;
+                };
+            };
+        };
+    };
+    export: {
+        parameters: {
+            query: {
+                format: "STANDARD" | "KINGDEE";
+            };
+            header?: never;
+            path: {
+                ledgerId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": string;
+                };
+            };
+        };
+    };
+    list_4: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["Package"][];
+                };
+            };
+        };
+    };
+    get_5: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                code: string;
+                version: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["Package"];
                 };
             };
         };

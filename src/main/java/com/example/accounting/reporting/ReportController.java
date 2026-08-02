@@ -25,8 +25,10 @@ public class ReportController {
     @GetMapping("/trial-balance")
     public List<ReportResponses.TrialBalanceLine> trialBalance(HttpServletRequest request,
                                                                 @PathVariable UUID ledgerId,
-                                                                @RequestParam(required = false) String periodCode) {
-        return reportingService.trialBalance(user(request), ledgerId, periodCode);
+                                                                @RequestParam(required = false) String periodCode,
+                                                                @RequestParam(defaultValue = "false")
+                                                                boolean includeParents) {
+        return reportingService.trialBalance(user(request), ledgerId, periodCode, includeParents);
     }
 
     @GetMapping("/balance-sheet")

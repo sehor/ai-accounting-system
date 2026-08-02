@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.example.accounting.identity.CurrentUserResolver;
+import com.example.accounting.documents.internal.port.DocumentExtractor;
 import com.example.accounting.ledger.LedgerRequests;
 import com.example.accounting.ledger.LedgerService;
 import com.example.accounting.shared.web.ApiProblemException;
@@ -16,8 +17,13 @@ import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Import;
+import org.springframework.context.annotation.Primary;
 
 @SpringBootTest
+@Import(Stage5DocumentTest.ExtractorTestConfiguration.class)
 class Stage5DocumentTest {
 
     @Autowired
@@ -50,7 +56,7 @@ class Stage5DocumentTest {
         JobResponses.Job job = jobService.claimOne(userId.toString());
         assertThat(job).isNotNull();
         assertThat(jobService.complete(job.id()).status()).isEqualTo("SUCCEEDED");
-        assertThat(extractionService.extractMock(userId, ledgerId, first.id()).status()).isEqualTo("SUCCEEDED");
+        assertThat(extractionService.extract(userId, ledgerId, first.id()).provider()).isEqualTo("test");
         assertThat(extractionService.list(userId, ledgerId, first.id())).hasSize(1);
         assertThat(extractionService.createVoucherDraft(userId, ledgerId, first.id()).status()).isEqualTo("DRAFT");
         assertThat(documentService.find(userId, ledgerId, first.id()).status()).isEqualTo("EXTRACTED");
@@ -66,5 +72,17 @@ class Stage5DocumentTest {
                 1, new ByteArrayInputStream(new byte[]{1}))).isInstanceOf(ApiProblemException.class);
         assertThatThrownBy(() -> documentService.upload(userId, ledgerId, "invoice.pdf", "application/pdf",
                 20 * 1024 * 1024L + 1, new ByteArrayInputStream(new byte[]{1}))).isInstanceOf(ApiProblemException.class);
+    }
+
+    @TestConfiguration
+    static class ExtractorTestConfiguration {
+
+        @Bean
+        @Primary
+        DocumentExtractor testDocumentExtractor() {
+            return (document, content) -> new DocumentExtractor.Result(
+                    "test", "v1",
+                    "{\"totalAmount\":\"12.34\",\"currency\":\"CNY\",\"exchangeRate\":\"1\"}", "{}");
+        }
     }
 }

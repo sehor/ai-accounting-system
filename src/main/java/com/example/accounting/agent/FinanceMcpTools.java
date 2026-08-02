@@ -3,6 +3,7 @@ package com.example.accounting.agent;
 import com.example.accounting.agent.internal.port.AgentToolAuditRepository;
 import com.example.accounting.identity.CurrentUserResolver;
 import com.example.accounting.ledger.LedgerResponses;
+import com.example.accounting.ledger.LedgerRequests;
 import com.example.accounting.ledger.LedgerService;
 import com.example.accounting.documents.DocumentResponses;
 import com.example.accounting.documents.DocumentService;
@@ -12,6 +13,7 @@ import com.example.accounting.documents.JobResponses;
 import com.example.accounting.documents.JobService;
 import com.example.accounting.shared.web.ApiProblemException;
 import com.example.accounting.reporting.ReportingService;
+import com.example.accounting.shared.audit.AuditContext;
 import com.example.accounting.voucher.VoucherRequests;
 import com.example.accounting.voucher.VoucherResponses;
 import com.example.accounting.voucher.VoucherService;
@@ -63,6 +65,27 @@ public class FinanceMcpTools {
         return audited(actorId, "list_ledgers", null, "", () -> ledgerService.list(actorId));
     }
 
+    @McpTool(name = "list_periods", description = "List accounting periods available in a ledger")
+    @PreAuthorize("isAuthenticated()")
+    public List<LedgerResponses.Period> listPeriods(
+            @McpToolParam(description = "Ledger identifier") UUID ledgerId) {
+        UUID actorId = actor();
+        return audited(actorId, "list_periods", ledgerId, "",
+                () -> ledgerService.listPeriods(actorId, ledgerId));
+    }
+
+    @McpTool(name = "ensure_account",
+            description = "Create an accounting account if its code is absent, or return the matching account")
+    @PreAuthorize("isAuthenticated()")
+    public LedgerResponses.Account ensureAccount(
+            @McpToolParam(description = "Ledger identifier") UUID ledgerId,
+            @McpToolParam(description = "Account code, name, category, and normal balance")
+            LedgerRequests.AccountCreate request) {
+        UUID actorId = actor();
+        return audited(actorId, "ensure_account", ledgerId, request.toString(),
+                () -> ledgerService.ensureAgentAccount(actorId, ledgerId, request));
+    }
+
     @McpTool(name = "finance_query", description = "Run one whitelisted finance report query")
     @PreAuthorize("isAuthenticated()")
     public Object financeQuery(
@@ -95,10 +118,12 @@ public class FinanceMcpTools {
     @PreAuthorize("isAuthenticated()")
     public VoucherResponses.Voucher createVoucherDraft(
             @McpToolParam(description = "Draft voucher payload") VoucherRequests.Create request,
-            @McpToolParam(description = "Ledger identifier") UUID ledgerId) {
+            @McpToolParam(description = "Ledger identifier") UUID ledgerId,
+            @McpToolParam(description = "Unique retry key for this draft creation") String idempotencyKey) {
         UUID actorId = actor();
-        return audited(actorId, "create_voucher_draft", ledgerId, request.toString(),
-                () -> voucherService.create(actorId, ledgerId, request));
+        String key = requiredIdempotencyKey(idempotencyKey);
+        return audited(actorId, "create_voucher_draft", ledgerId, request + ":" + key,
+                () -> voucherService.createAgentDraft(actorId, ledgerId, request, key));
     }
 
     @McpTool(name = "validate_voucher", description = "Validate a voucher without posting it")
@@ -108,7 +133,18 @@ public class FinanceMcpTools {
             @McpToolParam(description = "Voucher identifier") UUID voucherId) {
         UUID actorId = actor();
         return audited(actorId, "validate_voucher", ledgerId, voucherId.toString(),
-                () -> voucherService.validate(actorId, ledgerId, voucherId));
+                () -> voucherService.validateAgentDraft(actorId, ledgerId, voucherId));
+    }
+
+    @McpTool(name = "post_voucher",
+            description = "Post a validated or approved voucher; repeating an already successful call is safe")
+    @PreAuthorize("isAuthenticated()")
+    public VoucherResponses.Voucher postVoucher(
+            @McpToolParam(description = "Ledger identifier") UUID ledgerId,
+            @McpToolParam(description = "Voucher identifier") UUID voucherId) {
+        UUID actorId = actor();
+        return audited(actorId, "post_voucher", ledgerId, voucherId.toString(),
+                () -> voucherService.postAgentVoucher(actorId, ledgerId, voucherId));
     }
 
     @McpTool(name = "upload_document", description = "Upload a base64 encoded PDF, JPEG, or PNG document")
@@ -117,8 +153,10 @@ public class FinanceMcpTools {
             @McpToolParam(description = "Ledger identifier") UUID ledgerId,
             @McpToolParam(description = "Original file name") String fileName,
             @McpToolParam(description = "MIME type") String contentType,
-            @McpToolParam(description = "Base64 file content") String base64Content) {
+            @McpToolParam(description = "Base64 file content") String base64Content,
+            @McpToolParam(description = "Unique retry key for this upload") String idempotencyKey) {
         UUID actorId = actor();
+        String key = requiredIdempotencyKey(idempotencyKey);
         // ponytail: MCP JSON base64 buffers payload; REST upload remains streaming until binary MCP transport is needed.
         byte[] content;
         try {
@@ -127,19 +165,20 @@ public class FinanceMcpTools {
             throw new ApiProblemException(400, "DOCUMENT_CONTENT_INVALID", "Invalid document content",
                     "The document content must be base64", false);
         }
-        return audited(actorId, "upload_document", ledgerId, fileName + ":" + content.length,
+        return audited(actorId, "upload_document", ledgerId,
+                fileName + ":" + contentType + ":" + hash(base64Content) + ":" + key,
                 () -> documentService.upload(actorId, ledgerId, fileName, contentType, content.length,
-                        new ByteArrayInputStream(content)));
+                        new ByteArrayInputStream(content), key));
     }
 
-    @McpTool(name = "extract_document", description = "Run the mock document extractor")
+    @McpTool(name = "extract_document", description = "Extract structured accounting data from a document")
     @PreAuthorize("isAuthenticated()")
     public ExtractionResponses.Extraction extractDocument(
             @McpToolParam(description = "Ledger identifier") UUID ledgerId,
             @McpToolParam(description = "Document identifier") UUID documentId) {
         UUID actorId = actor();
         return audited(actorId, "extract_document", ledgerId, documentId.toString(),
-                () -> extractionService.extractMock(actorId, ledgerId, documentId));
+                () -> extractionService.extract(actorId, ledgerId, documentId));
     }
 
     @McpTool(name = "get_job_status", description = "Get the status of a background job")
@@ -159,17 +198,39 @@ public class FinanceMcpTools {
             @McpToolParam(description = "Document identifier") UUID documentId) {
         UUID actorId = actor();
         return audited(actorId, "create_voucher_draft_from_document", ledgerId, documentId.toString(),
-                () -> extractionService.createVoucherDraft(actorId, ledgerId, documentId));
+                () -> extractionService.createAgentVoucherDraft(actorId, ledgerId, documentId));
     }
 
     private UUID actor() {
         return currentUserResolver.resolveAuthenticatedUser();
     }
 
+    private String requiredIdempotencyKey(String key) {
+        if (key == null || key.isBlank()) {
+            throw new ApiProblemException(400, "IDEMPOTENCY_KEY_REQUIRED", "Idempotency key required",
+                    "MCP write tools require a non-blank idempotency key", false);
+        }
+        return key.trim();
+    }
+
     private <T> T audited(UUID actorId, String toolName, UUID ledgerId, String input, Supplier<T> action) {
-        T result = action.get();
-        audits.record(toolName, ledgerId, actorId, UUID.randomUUID(), hash(input), hash(result));
-        return result;
+        String traceId = AuditContext.traceId().orElseGet(() -> UUID.randomUUID().toString());
+        String inputHash = hash(input);
+        try {
+            T result = action.get();
+            audits.recordSuccess(toolName, ledgerId, actorId, traceId, inputHash, hash(result));
+            return result;
+        } catch (RuntimeException exception) {
+            String errorCode = exception instanceof ApiProblemException problem
+                    ? problem.code() : "UNEXPECTED_ERROR";
+            try {
+                audits.recordFailure(toolName, ledgerId, actorId, traceId, inputHash, errorCode,
+                        hash(exception.getClass().getName() + ":" + exception.getMessage()));
+            } catch (RuntimeException auditFailure) {
+                exception.addSuppressed(auditFailure);
+            }
+            throw exception;
+        }
     }
 
     private String hash(Object value) {

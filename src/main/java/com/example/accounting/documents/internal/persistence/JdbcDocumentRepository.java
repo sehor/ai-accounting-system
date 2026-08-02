@@ -36,6 +36,26 @@ public class JdbcDocumentRepository implements DocumentRepository {
     }
 
     @Override
+    public boolean reserveIdempotency(
+            UUID ledgerId, UUID actorId, String key, String requestHash, UUID documentId) {
+        return jdbc.update("""
+                insert into document_idempotency
+                    (ledger_id, actor_id, idempotency_key, request_hash, document_id)
+                values (?, ?, ?, ?, ?) on conflict do nothing
+                """, ledgerId, actorId, key, requestHash, documentId) == 1;
+    }
+
+    @Override
+    public Optional<DocumentIdempotency> findIdempotency(UUID ledgerId, UUID actorId, String key) {
+        return Optional.ofNullable(jdbc.query("""
+                select request_hash, document_id from document_idempotency
+                where ledger_id = ? and actor_id = ? and idempotency_key = ?
+                """, rs -> rs.next() ? new DocumentIdempotency(
+                rs.getString("request_hash"), rs.getObject("document_id", UUID.class)) : null,
+                ledgerId, actorId, key));
+    }
+
+    @Override
     public void enqueueExtraction(UUID ledgerId, UUID documentId) {
         jdbc.update("""
                 insert into background_job (id, ledger_id, job_type, aggregate_type, aggregate_id, payload)

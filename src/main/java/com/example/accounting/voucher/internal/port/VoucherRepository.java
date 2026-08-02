@@ -1,6 +1,7 @@
 package com.example.accounting.voucher.internal.port;
 
 import com.example.accounting.voucher.VoucherResponses;
+import com.example.accounting.voucher.VoucherRequests;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
@@ -18,6 +19,12 @@ public interface VoucherRepository {
 
     boolean activeAccountExists(UUID ledgerId, UUID accountId);
 
+    Optional<AccountControls> accountControls(UUID ledgerId, UUID accountId);
+
+    boolean validCashFlowItem(UUID ledgerId, UUID cashFlowItemId);
+
+    boolean validDimensionValue(UUID ledgerId, UUID dimensionTypeId, UUID dimensionValueId);
+
     void createVoucher(UUID voucherId, UUID ledgerId, UUID periodId, LocalDate voucherDate, String voucherType,
                        String voucherNumber, String summary, boolean approvalRequired, UUID reversalOfId,
                        UUID actorId);
@@ -30,7 +37,11 @@ public interface VoucherRepository {
 
     void createLine(UUID lineId, UUID ledgerId, UUID voucherId, int lineNo, UUID accountId, String side,
                     String currency, BigDecimal originalAmount, BigDecimal exchangeRate, BigDecimal baseAmount,
-                    String summary);
+                    String summary, UUID cashFlowItemId, BigDecimal quantity, BigDecimal unitPrice);
+
+    void createLineDimensions(UUID lineId, UUID ledgerId, List<VoucherRequests.Dimension> dimensions);
+
+    boolean controlsComplete(UUID ledgerId, UUID voucherId);
 
     List<VoucherResponses.Voucher> list(UUID ledgerId, int limit, int offset);
 
@@ -82,5 +93,10 @@ public interface VoucherRepository {
     }
 
     record VoucherState(String status, boolean approvalRequired, long version) {
+    }
+
+    record AccountControls(boolean cashFlowRequired, UUID defaultCashFlowItemId,
+                           boolean quantityEnabled, String unitName,
+                           List<UUID> dimensionTypeIds) {
     }
 }

@@ -11,4 +11,13 @@ describe('api client', () => {
   it('creates stable-looking idempotency keys', () => {
     expect(createIdempotencyKey()).toMatch(/^[0-9a-f-]{36}$/)
   })
+
+  it('clears the stored session after an unauthorized response', async () => {
+    sessionStorage.setItem('ai-accounting.session', JSON.stringify({ accessToken: 'expired' }))
+    window.history.replaceState({}, '', '/login')
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(null, { status: 401 })))
+
+    await expect(apiFetch('/ledgers', { accessToken: 'expired' })).rejects.toMatchObject({ status: 401 })
+    expect(sessionStorage.getItem('ai-accounting.session')).toBeNull()
+  })
 })
