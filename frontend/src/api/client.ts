@@ -4,6 +4,7 @@ import { clearSession } from '../auth/session'
 export interface ApiAuth {
   accessToken?: string
   localUserId?: string
+  localUserName?: string
 }
 
 export class ApiError extends Error {
@@ -25,6 +26,7 @@ export async function apiFetch<T>(path: string, auth: ApiAuth, init: RequestInit
   if (init.body && !(init.body instanceof FormData)) headers.set('Content-Type', 'application/json')
   if (auth.accessToken) headers.set('Authorization', `Bearer ${auth.accessToken}`)
   if (auth.localUserId) headers.set('X-User-Id', auth.localUserId)
+  if (auth.localUserName) headers.set('X-User-Name', auth.localUserName)
 
   const response = await fetch(`${baseUrl}${path}`, { ...init, headers })
   if (response.status === 401) {

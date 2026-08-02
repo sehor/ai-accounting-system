@@ -50,7 +50,7 @@
 - `POST /v1/ledgers/{ledgerId}/opening-balances:import-csv`
 - `POST /v1/ledgers/{ledgerId}/opening-balances:confirm`
 
-本地联调可设置 `LOCAL_USER_HEADER_ENABLED=true`，然后在请求中传入 `X-User-Id: <UUID>`。
+`spring-boot:run` 会自动启用本地联调身份；直接运行打包产物时仍需显式设置 `LOCAL_USER_HEADER_ENABLED=true`。本地请求使用 `X-User-Id: <UUID>`。
 启用 OIDC 时设置 `spring.security.oauth2.resourceserver.jwt.issuer-uri`，接口使用标准 Bearer JWT。
 
 MCP 使用 `POST /mcp`。本地联调启用上述开关后，`X-User-Id` 同时建立 MCP 认证身份；Agent 可查询账套和期间、创建或复用科目、创建/校验/过账凭证并生成报表，但不能审批、关账、重新开账、反记账或管理成员。

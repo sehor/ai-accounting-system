@@ -1,16 +1,16 @@
-# Graph Report - ai-accouting-system  (2026-07-31)
+# Graph Report - ai-accouting-system  (2026-08-02)
 
 ## Corpus Check
-- 193 files · ~65,390 words
+- 196 files · ~65,931 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 1640 nodes · 5860 edges · 101 communities (82 shown, 19 thin omitted)
-- Extraction: 95% EXTRACTED · 5% INFERRED · 0% AMBIGUOUS · INFERRED: 289 edges (avg confidence: 0.8)
+- 1648 nodes · 5903 edges · 92 communities (79 shown, 13 thin omitted)
+- Extraction: 95% EXTRACTED · 5% INFERRED · 0% AMBIGUOUS · INFERRED: 295 edges (avg confidence: 0.8)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `eb006538`
+- Built from commit: `fa9cfc92`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -71,6 +71,7 @@
 - [[_COMMUNITY_Community 69|Community 69]]
 - [[_COMMUNITY_Community 70|Community 70]]
 - [[_COMMUNITY_Community 71|Community 71]]
+- [[_COMMUNITY_Community 73|Community 73]]
 - [[_COMMUNITY_Community 74|Community 74]]
 - [[_COMMUNITY_Community 75|Community 75]]
 - [[_COMMUNITY_Community 76|Community 76]]
@@ -83,24 +84,14 @@
 - [[_COMMUNITY_Community 83|Community 83]]
 - [[_COMMUNITY_Community 84|Community 84]]
 - [[_COMMUNITY_Community 85|Community 85]]
-- [[_COMMUNITY_Community 86|Community 86]]
-- [[_COMMUNITY_Community 87|Community 87]]
 - [[_COMMUNITY_Community 88|Community 88]]
-- [[_COMMUNITY_Community 89|Community 89]]
-- [[_COMMUNITY_Community 90|Community 90]]
 - [[_COMMUNITY_Community 91|Community 91]]
-- [[_COMMUNITY_Community 92|Community 92]]
-- [[_COMMUNITY_Community 93|Community 93]]
 - [[_COMMUNITY_Community 94|Community 94]]
-- [[_COMMUNITY_Community 95|Community 95]]
 - [[_COMMUNITY_Community 96|Community 96]]
-- [[_COMMUNITY_Community 97|Community 97]]
-- [[_COMMUNITY_Community 98|Community 98]]
 - [[_COMMUNITY_Community 99|Community 99]]
-- [[_COMMUNITY_Community 100|Community 100]]
 
 ## God Nodes (most connected - your core abstractions)
-1. `test` - 100 edges
+1. `test` - 102 edges
 2. `ApiProblemException` - 74 edges
 3. `DefaultLedgerService` - 57 edges
 4. `Voucher` - 52 edges
@@ -112,21 +103,21 @@
 10. `AccountExchangeService` - 40 edges
 
 ## Surprising Connections (you probably didn't know these)
+- `apiFetch()` --calls--> `clearSession()`  [EXTRACTED]
+  frontend/src/api/client.ts → frontend/src/auth/session.ts
 - `RequireAuth()` --calls--> `useAuth()`  [EXTRACTED]
   frontend/src/app/App.tsx → frontend/src/auth/AuthProvider.tsx
-- `LoginPage()` --calls--> `useAuth()`  [EXTRACTED]
-  frontend/src/pages/LoginPage.tsx → frontend/src/auth/AuthProvider.tsx
-- `JdbcAgentToolAuditRepository` --implements--> `AgentToolAuditRepository`  [EXTRACTED]
-  src/main/java/com/example/accounting/agent/internal/persistence/JdbcAgentToolAuditRepository.java → src/main/java/com/example/accounting/agent/internal/port/AgentToolAuditRepository.java
-- `DefaultDocumentService` --implements--> `DocumentService`  [EXTRACTED]
-  src/main/java/com/example/accounting/documents/internal/application/DefaultDocumentService.java → src/main/java/com/example/accounting/documents/DocumentService.java
-- `DefaultIdentityService` --implements--> `IdentityService`  [EXTRACTED]
-  src/main/java/com/example/accounting/identity/internal/application/DefaultIdentityService.java → src/main/java/com/example/accounting/identity/IdentityService.java
+- `AppShell()` --calls--> `useAuth()`  [EXTRACTED]
+  frontend/src/components/AppShell.tsx → frontend/src/auth/AuthProvider.tsx
+- `DocumentsPage()` --calls--> `useAuth()`  [EXTRACTED]
+  frontend/src/pages/DocumentsPage.tsx → frontend/src/auth/AuthProvider.tsx
+- `LedgerOverviewPage()` --calls--> `useAuth()`  [EXTRACTED]
+  frontend/src/pages/LedgerOverviewPage.tsx → frontend/src/auth/AuthProvider.tsx
 
 ## Import Cycles
 - None detected.
 
-## Communities (101 total, 19 thin omitted)
+## Communities (92 total, 13 thin omitted)
 
 ### Community 0 - "Community 0"
 Cohesion: 0.15
@@ -142,59 +133,59 @@ Nodes (10): 5.1 通用字段, 5.3 基础资料, 5.6 审计与幂等, 5. 数据�
 
 ### Community 3 - "Community 3"
 Cohesion: 0.08
-Nodes (10): AccountingArchitectureTest, AccountingModularityTest, FinanceMcpToolsTest, HttpDocumentExtractorTest, FrontendContractTest, test, CurrentUserResolverTest, AccountCodeRuleTest (+2 more)
-
-### Community 4 - "Community 4"
-Cohesion: 0.10
-Nodes (3): JdbcDocumentRepository, DocumentIdempotency, DocumentRepository
+Nodes (10): AccountingArchitectureTest, AccountingModularityTest, FinanceMcpToolsTest, HttpDocumentExtractorTest, auth, FrontendContractTest, test, CurrentUserResolverTest (+2 more)
 
 ### Community 5 - "Community 5"
-Cohesion: 0.24
-Nodes (5): Content, DocumentResponses, DataExchangeControllerTest, LedgerBackupControllerTest, Header
+Cohesion: 0.13
+Nodes (8): AfterEach, AuditContext, FilterChain, HttpServletResponse, OncePerRequestFilter, LocalUserHeaderAuthenticationFilter, Stage0HttpSupportTest, TraceIdFilter
 
 ### Community 6 - "Community 6"
-Cohesion: 0.22
-Nodes (5): DefaultJobService, Job, JobResponses, JobService, Stage5DocumentTest
+Cohesion: 0.15
+Nodes (5): DefaultJobService, Job, JobResponses, JobService, JobRepository
 
 ### Community 7 - "Community 7"
-Cohesion: 0.14
-Nodes (7): AddMember, DimensionRequirement, LedgerRequests, OpeningBalances, UpdateMember, Member, Member
+Cohesion: 0.15
+Nodes (8): AddMember, Create, DimensionRequirement, LedgerRequests, OpeningBalances, UpdateMember, Member, Member
 
 ### Community 8 - "Community 8"
 Cohesion: 0.09
-Nodes (10): Optional, JdbcExtractionRepository, JdbcLedgerAccessRepository, ExtractionRepository, OpenPeriod, LedgerAccessRepository, AccountControls, Idempotency (+2 more)
+Nodes (5): Document, DocumentResponses, JdbcDocumentRepository, DocumentIdempotency, DocumentRepository
 
 ### Community 9 - "Community 9"
 Cohesion: 0.33
 Nodes (5): AI 财务系统, 启动前准备, 常用命令, 当前本地环境决策, 第一版 API
 
 ### Community 10 - "Community 10"
-Cohesion: 0.12
-Nodes (17): LedgerLine, Statement, TrialBalanceLine, DefaultReportingService, LedgerLine, Filters, FinanceQueryRequests, Query (+9 more)
+Cohesion: 0.09
+Nodes (19): LedgerLine, Statement, TrialBalanceLine, DefaultReportingService, LedgerLine, JdbcReportingRepository, ReportingRepository, Filters (+11 more)
 
 ### Community 11 - "Community 11"
-Cohesion: 0.22
-Nodes (4): VoucherLineSnapshot, Dimension, Line, Line
+Cohesion: 0.17
+Nodes (5): Line, Dimension, Line, Revision, VoucherResponses
 
 ### Community 17 - "Community 17"
-Cohesion: 0.31
-Nodes (3): PeriodAction, Period, Period
+Cohesion: 0.20
+Nodes (6): PeriodAction, CashFlowItem, DimensionRequirement, LedgerResponses, Period, Period
 
 ### Community 25 - "Community 25"
-Cohesion: 0.30
+Cohesion: 0.36
 Nodes (3): DimensionValue, DimensionValueCreate, DimensionValue
 
 ### Community 26 - "Community 26"
 Cohesion: 0.06
-Nodes (4): LedgerRepository, VoucherRepository, UUID, Revision
+Nodes (5): MembershipStatus, LedgerRepository, OpeningTotals, VoucherRepository, UUID
+
+### Community 27 - "Community 27"
+Cohesion: 0.20
+Nodes (7): Cell, ImportedLine, ImportResult, KingdeeExchange, ParsedWorkbook, VoucherKey, Row
 
 ### Community 29 - "Community 29"
-Cohesion: 0.06
-Nodes (4): Override, JdbcLedgerRepository, JdbcVoucherRepository, OpeningTotals
+Cohesion: 0.09
+Nodes (3): Override, JdbcJobRepository, JdbcVoucherRepository
 
 ### Community 30 - "Community 30"
-Cohesion: 0.14
-Nodes (7): DefaultVoucherService, VoucherSnapshot, Transactional, Voucher, Update, Voucher, VoucherService
+Cohesion: 0.11
+Nodes (11): DefaultVoucherService, VoucherLineSnapshot, VoucherSnapshot, Dimension, AccountControls, Idempotency, LedgerContext, VoucherState (+3 more)
 
 ### Community 32 - "Community 32"
 Cohesion: 0.07
@@ -205,24 +196,24 @@ Cohesion: 0.09
 Nodes (22): ADR-001: Service contracts and database repository ports, Alternatives considered, Always, Ask first, Assumptions, Boundaries, Code style, Commands (+14 more)
 
 ### Community 34 - "Community 34"
-Cohesion: 0.19
-Nodes (4): DefaultIdentityService, UserResponse, JdbcIdentityRepository, IdentityRepository
+Cohesion: 0.09
+Nodes (8): DefaultIdentityService, UserResponse, Optional, JdbcExtractionRepository, JdbcIdentityRepository, ExtractionRepository, OpenPeriod, IdentityRepository
 
 ### Community 35 - "Community 35"
-Cohesion: 0.18
-Nodes (7): AfterEach, FilterChain, HttpServletResponse, OncePerRequestFilter, LocalUserHeaderAuthenticationFilter, Stage0HttpSupportTest, TraceIdFilter
+Cohesion: 0.08
+Nodes (15): FinanceMcpTools, FinanceMcpToolsIntegrationTest, Extraction, DefaultExtractionService, Create, Extraction, ExtractionResponses, ExtractionService (+7 more)
 
 ### Community 36 - "Community 36"
 Cohesion: 0.12
-Nodes (13): DefaultDocumentService, Bean, Document, ExtractorTestConfiguration, HttpSecurity, HttpDocumentExtractor, Path, DocumentExtractor (+5 more)
+Nodes (9): DefaultDocumentService, Account, AccountingStandard, CashFlowItem, DimensionType, Formula, Package, AccountingStandardCatalog (+1 more)
 
 ### Community 37 - "Community 37"
 Cohesion: 0.22
 Nodes (9): 16. 具体开发计划, 阶段 0：工程基础, 阶段 1：身份、账套与隔离, 阶段 2：准则包与基础资料, 阶段 3：凭证核心, 阶段 4：账簿与报表, 阶段 5：附件与异步任务, 阶段 6：MCP (+1 more)
 
 ### Community 38 - "Community 38"
-Cohesion: 0.20
-Nodes (3): DataExchangeServiceTest, AccountExchangeIntegrationTest, Stage4ReportingTest
+Cohesion: 0.19
+Nodes (4): DataExchangeServiceTest, AccountExchangeIntegrationTest, Decision, Stage4ReportingTest
 
 ### Community 39 - "Community 39"
 Cohesion: 0.40
@@ -237,8 +228,8 @@ Cohesion: 0.50
 Nodes (4): 2.1 技术栈, 2.2 为什么采用 Spring Boot, 2.3 保持简单的边界, 2. 架构决策
 
 ### Community 42 - "Community 42"
-Cohesion: 0.20
-Nodes (7): Cell, ImportedLine, ImportResult, KingdeeExchange, ParsedWorkbook, VoucherKey, Row
+Cohesion: 0.15
+Nodes (6): DefaultAuditService, AuditResponses, Entry, AuditService, JdbcAuditRepository, AuditRepository
 
 ### Community 43 - "Community 43"
 Cohesion: 0.50
@@ -261,20 +252,20 @@ Cohesion: 0.67
 Nodes (3): 8.1 通用约定, 8.2 主要接口, 8. API 规范
 
 ### Community 48 - "Community 48"
-Cohesion: 0.22
-Nodes (15): apiFetch(), User, AuthContext, AuthContextValue, AuthProvider(), clearSession(), finishOidcLogin(), getSession() (+7 more)
+Cohesion: 0.19
+Nodes (17): User, AuthContext, AuthContextValue, AuthProvider(), clearSession(), createLocalSession(), finishOidcLogin(), getSession() (+9 more)
 
 ### Community 49 - "Community 49"
 Cohesion: 0.05
-Nodes (42): dependencies, @ant-design/icons, antd, dayjs, decimal.js, oidc-client-ts, react, react-dom (+34 more)
+Nodes (43): dependencies, @ant-design/icons, @ant-design/v5-patch-for-react-19, antd, dayjs, decimal.js, oidc-client-ts, react (+35 more)
 
 ### Community 50 - "Community 50"
 Cohesion: 0.11
 Nodes (18): compilerOptions, allowJs, allowSyntheticDefaultImports, esModuleInterop, forceConsistentCasingInFileNames, isolatedModules, jsx, lib (+10 more)
 
 ### Community 51 - "Community 51"
-Cohesion: 0.09
-Nodes (6): AuditController, DataExchangeController, CurrentUserResolver, IdentityController, LedgerBackupController, FinanceQueryController
+Cohesion: 0.16
+Nodes (4): Account, DimensionRequirement, AccountCreate, AccountManagementRepository
 
 ### Community 52 - "Community 52"
 Cohesion: 0.42
@@ -284,125 +275,113 @@ Nodes (6): account_specs(), http_json(), main(), mcp_message(), McpClient, rest(
 Cohesion: 0.33
 Nodes (5): components, $defs, operations, paths, webhooks
 
+### Community 54 - "Community 54"
+Cohesion: 0.31
+Nodes (6): Bean, ExtractorTestConfiguration, HttpSecurity, Primary, SecurityFilterChain, SecurityConfiguration
+
 ### Community 61 - "Community 61"
-Cohesion: 0.14
-Nodes (6): Account, ParentResolution, DimensionRequirement, AccountPatch, AccountManagementRepository, ResultSet
+Cohesion: 0.36
+Nodes (4): Content, DataExchangeControllerTest, LedgerBackupControllerTest, Header
 
 ### Community 62 - "Community 62"
-Cohesion: 0.10
-Nodes (13): FinanceMcpTools, FinanceMcpToolsIntegrationTest, Extraction, DefaultExtractionService, Create, Extraction, ExtractionResponses, ExtractionService (+5 more)
+Cohesion: 0.11
+Nodes (10): DocumentService, HttpResponse, InputStream, Request, Response, Suggestion, LinkedHashMap, ObjectMapper (+2 more)
 
 ### Community 63 - "Community 63"
-Cohesion: 0.25
-Nodes (4): Boolean, Ledger, Create, Ledger
+Cohesion: 0.33
+Nodes (3): Ledger, Ledger, Transactional
 
 ### Community 64 - "Community 64"
-Cohesion: 0.22
-Nodes (4): AuditResponses, Entry, JdbcAuditRepository, AuditRepository
+Cohesion: 0.36
+Nodes (3): ExceptionHandler, ProblemDetail, ProblemDetailExceptionHandler
 
 ### Community 65 - "Community 65"
 Cohesion: 0.50
 Nodes (3): 前端开发说明, 本地启动, 质量门禁
 
 ### Community 66 - "Community 66"
-Cohesion: 0.05
-Nodes (33): AccountingApplication, ArrayNode, HttpResponse, InputStream, JsonNode, Request, Response, Suggestion (+25 more)
+Cohesion: 0.06
+Nodes (23): AccountingApplication, ArrayNode, Boolean, HttpDocumentExtractor, JsonNode, AccountManagementSchemaTest, Archive, ColumnDef (+15 more)
 
 ### Community 67 - "Community 67"
-Cohesion: 0.24
-Nodes (6): DeleteMapping, HttpServletRequest, Integer, LedgerController, PatchMapping, ResponseStatus
-
-### Community 68 - "Community 68"
-Cohesion: 0.31
-Nodes (3): PostMapping, VoucherController, Comment
+Cohesion: 0.05
+Nodes (27): AuditController, DeleteMapping, DocumentController, JobController, DataExchangeController, GetMapping, HttpServletRequest, CurrentUserResolver (+19 more)
 
 ### Community 69 - "Community 69"
 Cohesion: 0.06
-Nodes (30): AccountCodeRule, CellStyle, CommitRow, DataFormatter, Format, AccountAiMapper, Result, Source (+22 more)
+Nodes (29): AccountCodeRule, CellStyle, CommitRow, DataFormatter, Format, AccountAiMapper, Result, Source (+21 more)
 
 ### Community 70 - "Community 70"
-Cohesion: 0.09
-Nodes (17): LedgerRole, MembershipStatus, DefaultAuditService, DefaultLedgerAccessService, AuditService, BigDecimal, DocumentService, IdentityService (+9 more)
+Cohesion: 0.15
+Nodes (9): BigDecimal, IdentityService, JdbcTemplate, List, LocalDate, ReportResponses, RuntimeException, Set (+1 more)
+
+### Community 71 - "Community 71"
+Cohesion: 0.17
+Nodes (5): LedgerRole, DefaultLedgerAccessService, LedgerAccessService, JdbcLedgerAccessRepository, LedgerAccessRepository
+
+### Community 74 - "Community 74"
+Cohesion: 0.40
+Nodes (4): DocumentRecord, Voucher, allowed, DocumentsPage()
 
 ### Community 75 - "Community 75"
-Cohesion: 0.16
-Nodes (11): ApiAuth, ApiError, baseUrl, createIdempotencyKey(), jsonBody(), AccountingStandard, Ledger, ProblemDetails (+3 more)
+Cohesion: 0.20
+Nodes (9): ApiAuth, ApiError, apiFetch(), baseUrl, createIdempotencyKey(), Ledger, ProblemDetails, backupFileError() (+1 more)
 
 ### Community 76 - "Community 76"
-Cohesion: 0.20
-Nodes (14): App(), queryClient, RequireAuth(), useAuth(), AppShell(), AuditPage(), AuthCallbackPage(), DocumentsPage() (+6 more)
+Cohesion: 0.14
+Nodes (17): jsonBody(), AccountingStandard, AuditEntry, App(), queryClient, RequireAuth(), useAuth(), AuditPage() (+9 more)
 
-### Community 78 - "Community 78"
-Cohesion: 0.29
-Nodes (3): JobController, GetMapping, ReportController
+### Community 77 - "Community 77"
+Cohesion: 0.15
+Nodes (5): CashFlowItem, AccountPatch, OpeningBalance, LedgerService, OpeningBalance
 
 ### Community 79 - "Community 79"
-Cohesion: 0.13
-Nodes (17): Account, AccountCodeRule, AccountDimensionRequirement, AccountImportRow, AuditEntry, DimensionValue, DocumentRecord, Period (+9 more)
+Cohesion: 0.19
+Nodes (8): DimensionValue, VoucherRevision, OpeningsTab(), decimalRule, emptyLines, VoucherForm, decimalOrZero(), voucherTotals()
 
 ### Community 80 - "Community 80"
-Cohesion: 0.21
-Nodes (7): Member, OpeningBalance, decimalRule, OpeningFormLine, OpeningsTab(), decimalOrZero(), voucherTotals()
+Cohesion: 0.11
+Nodes (19): Account, AccountCodeRule, AccountDimensionRequirement, AccountImportPreview, AccountImportRow, CashFlowItem, DimensionType, Member (+11 more)
 
 ### Community 81 - "Community 81"
-Cohesion: 0.37
-Nodes (3): ResolvedUser, OpeningBalanceLine, Stage2BaseDataTest
+Cohesion: 0.24
+Nodes (5): Stage5DocumentTest, ResolvedUser, OpeningBalanceLine, Stage2BaseDataTest, Stage2LedgerInitializationTest
 
 ### Community 82 - "Community 82"
 Cohesion: 0.17
 Nodes (11): 10. 验收, 1. 范围与兼容性, 2. 准则包, 3. 科目树与编码, 4. 属性、辅助核算与凭证, 5. 安全锁、状态与审计, 6. REST API, 7. Excel 合同 (+3 more)
 
-### Community 83 - "Community 83"
-Cohesion: 0.19
-Nodes (4): AuditContext, ExceptionHandler, ProblemDetail, ProblemDetailExceptionHandler
-
-### Community 85 - "Community 85"
-Cohesion: 0.35
-Nodes (4): AccountExchangeController, Preview, PutMapping, ResponseEntity
-
 ### Community 88 - "Community 88"
 Cohesion: 0.20
 Nodes (9): API 合同, 前端, 命令与项目位置, 实施任务, 文件格式与安全边界, 目标, 范围, 账套备份与恢复规格 (+1 more)
-
-### Community 89 - "Community 89"
-Cohesion: 0.22
-Nodes (6): AccountImportPreview, CashFlowItem, DimensionType, AccountForm, AccountsTab(), AccountTree
-
-### Community 90 - "Community 90"
-Cohesion: 0.22
-Nodes (4): Account, CashFlowItem, DimensionRequirement, LedgerResponses
-
-### Community 92 - "Community 92"
-Cohesion: 0.29
-Nodes (5): Create, Dimension, Line, Reason, VoucherRequests
 
 ### Community 94 - "Community 94"
 Cohesion: 0.50
 Nodes (4): 5.2 身份与账套, `app_user`, `ledger`, `ledger_membership`
 
 ### Community 96 - "Community 96"
-Cohesion: 0.30
+Cohesion: 0.33
 Nodes (3): DimensionType, DimensionTypeCreate, DimensionType
 
 ## Knowledge Gaps
 - **249 isolated node(s):** `auth`, `name`, `private`, `version`, `type` (+244 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **19 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **13 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `test` connect `Community 3` to `Community 5`, `Community 6`, `Community 26`, `Community 35`, `Community 36`, `Community 38`, `Community 49`, `Community 62`, `Community 66`, `Community 69`, `Community 70`, `Community 81`, `Community 83`, `Community 84`, `Community 86`, `Community 91`, `Community 93`, `Community 95`, `Community 98`, `Community 99`, `Community 100`?**
+- **Why does `test` connect `Community 3` to `Community 5`, `Community 6`, `Community 35`, `Community 38`, `Community 42`, `Community 49`, `Community 54`, `Community 61`, `Community 62`, `Community 64`, `Community 66`, `Community 68`, `Community 69`, `Community 70`, `Community 78`, `Community 81`, `Community 84`, `Community 85`, `Community 91`, `Community 99`?**
   _High betweenness centrality (0.087) - this node is a cross-community bridge._
-- **Why does `LedgerRole` connect `Community 70` to `Community 7`, `Community 8`, `Community 75`, `Community 79`, `Community 80`, `Community 26`, `Community 29`, `Community 30`, `Community 31`?**
-  _High betweenness centrality (0.075) - this node is a cross-community bridge._
+- **Why does `LedgerRole` connect `Community 71` to `Community 4`, `Community 70`, `Community 7`, `Community 42`, `Community 75`, `Community 77`, `Community 80`, `Community 30`, `Community 26`, `Community 62`, `Community 31`?**
+  _High betweenness centrality (0.079) - this node is a cross-community bridge._
 - **Why does `scripts` connect `Community 49` to `Community 3`?**
-  _High betweenness centrality (0.030) - this node is a cross-community bridge._
+  _High betweenness centrality (0.031) - this node is a cross-community bridge._
 - **What connects `auth`, `name`, `private` to the rest of the system?**
   _249 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `Community 1` be split into smaller, more focused modules?**
   _Cohesion score 0.043478260869565216 - nodes in this community are weakly interconnected._
 - **Should `Community 3` be split into smaller, more focused modules?**
-  _Cohesion score 0.07954545454545454 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.0784313725490196 - nodes in this community are weakly interconnected._
 - **Should `Community 4` be split into smaller, more focused modules?**
-  _Cohesion score 0.09881422924901186 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.07661290322580645 - nodes in this community are weakly interconnected._

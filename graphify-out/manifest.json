@@ -5,8 +5,8 @@
     "semantic_hash": ""
   },
   "pom.xml": {
-    "mtime": 1785457584.9223201,
-    "ast_hash": "3aaa256943f8bc69a8fe64332e6bddf7",
+    "mtime": 1785639622.2872314,
+    "ast_hash": "6a548edfda99d7e07671551dffd4fe61",
     "semantic_hash": ""
   },
   "src/main/java/com/example/accounting/AccountingApplication.java": {
@@ -75,8 +75,8 @@
     "semantic_hash": ""
   },
   "README.md": {
-    "mtime": 1785487272.6070242,
-    "ast_hash": "6ced150c51e067d55c068beca1f978fe",
+    "mtime": 1785639628.9432113,
+    "ast_hash": "52f8af22324374f19d4b01a9d0405d74",
     "semantic_hash": ""
   },
   "src/main/resources/application.yml": {
@@ -130,8 +130,8 @@
     "semantic_hash": ""
   },
   "src/main/java/com/example/accounting/identity/CurrentUserResolver.java": {
-    "mtime": 1785222347.1266863,
-    "ast_hash": "742699ff7487958331c8f794158e95aa",
+    "mtime": 1785637590.740815,
+    "ast_hash": "f08533beef3493bef9860b96d25c5821",
     "semantic_hash": ""
   },
   "src/main/java/com/example/accounting/identity/IdentityController.java": {
@@ -190,8 +190,8 @@
     "semantic_hash": ""
   },
   "src/test/java/com/example/accounting/identity/CurrentUserResolverTest.java": {
-    "mtime": 1785119991.776728,
-    "ast_hash": "2aca488a2c607241849d2e802d5e69f5",
+    "mtime": 1785637539.6768527,
+    "ast_hash": "cb0125a15213dbd4b1a378a2a69abfe5",
     "semantic_hash": ""
   },
   "src/test/java/com/example/accounting/ledger/LedgerControllerTest.java": {
@@ -385,8 +385,8 @@
     "semantic_hash": ""
   },
   "RUNBOOK.md": {
-    "mtime": 1785490409.6710453,
-    "ast_hash": "119ea462a970b1c38ac2699413095533",
+    "mtime": 1785639627.13657,
+    "ast_hash": "125d9382fd058678b0737ea6c3401e06",
     "semantic_hash": ""
   },
   "src/test/java/com/example/accounting/security/Stage7IsolationTest.java": {
@@ -570,8 +570,8 @@
     "semantic_hash": ""
   },
   "frontend/package.json": {
-    "mtime": 1785224933.873192,
-    "ast_hash": "52216fa1647156e428192ae0f6fc9438",
+    "mtime": 1785639580.5475583,
+    "ast_hash": "ed288d95db6684ed7ce20da8095d60db",
     "semantic_hash": ""
   },
   "frontend/playwright.config.ts": {
@@ -580,13 +580,13 @@
     "semantic_hash": ""
   },
   "frontend/src/api/client.test.ts": {
-    "mtime": 1785228481.9847791,
-    "ast_hash": "74cb69d528b0ed86062d2c8d832f8cce",
+    "mtime": 1785637424.6293957,
+    "ast_hash": "4ff0d150c276a85abc3369ac39974380",
     "semantic_hash": ""
   },
   "frontend/src/api/client.ts": {
-    "mtime": 1785228701.5586226,
-    "ast_hash": "bd2adb4dcf8a7450d6ed93b25ee393d2",
+    "mtime": 1785637587.0930915,
+    "ast_hash": "a505553828fab3e2141d315eb7ce8c43",
     "semantic_hash": ""
   },
   "frontend/src/api/generated.ts": {
@@ -610,8 +610,8 @@
     "semantic_hash": ""
   },
   "frontend/src/auth/session.ts": {
-    "mtime": 1785222840.2592006,
-    "ast_hash": "e5ca8e41b7e82a9f971b9a4c92cec063",
+    "mtime": 1785637585.2380834,
+    "ast_hash": "fc6b528e15abe31840185a173e50d7d9",
     "semantic_hash": ""
   },
   "frontend/src/components/AppShell.tsx": {
@@ -630,8 +630,8 @@
     "semantic_hash": ""
   },
   "frontend/src/main.tsx": {
-    "mtime": 1785222979.194546,
-    "ast_hash": "f40b34b4d9de04ad3475b37c351476cc",
+    "mtime": 1785639620.030555,
+    "ast_hash": "c2cb80ab244f769cbfb563a05b061315",
     "semantic_hash": ""
   },
   "frontend/src/pages/AuditPage.tsx": {
@@ -665,8 +665,8 @@
     "semantic_hash": ""
   },
   "frontend/src/pages/LoginPage.tsx": {
-    "mtime": 1785225037.2637308,
-    "ast_hash": "5726eb470f1a3d44824e1230a9dc6ab4",
+    "mtime": 1785637588.9343204,
+    "ast_hash": "039ed96297ac12a027e626eaa44b35db",
     "semantic_hash": ""
   },
   "frontend/src/pages/ReportsPage.tsx": {
@@ -695,8 +695,8 @@
     "semantic_hash": ""
   },
   "frontend/vite.config.ts": {
-    "mtime": 1785222521.3672597,
-    "ast_hash": "d75e8c5e0cf36b8b19c8319cbd957a73",
+    "mtime": 1785636688.7257392,
+    "ast_hash": "60a327c6f7d694733f51d94db0421e9a",
     "semantic_hash": ""
   },
   "frontend/vitest.config.ts": {
@@ -715,8 +715,8 @@
     "semantic_hash": ""
   },
   "frontend/e2e/smoke.spec.ts": {
-    "mtime": 1785224092.24743,
-    "ast_hash": "72f3dcc65bf99772669b8fec241dcff1",
+    "mtime": 1785640077.1522055,
+    "ast_hash": "85ab37e3363f3cc5581aa0238e03aac1",
     "semantic_hash": ""
   },
   "docs/frontend-development.md": {
@@ -977,6 +977,26 @@
   "docs/specs/ledger-backup-restore.md": {
     "mtime": 1785495804.1516037,
     "ast_hash": "34230452ba70e462b273486bed5faedb",
+    "semantic_hash": ""
+  },
+  "frontend/src/auth/session.test.ts": {
+    "mtime": 1785637422.8335285,
+    "ast_hash": "348777bcef631a5070efaf65954441e6",
+    "semantic_hash": ""
+  },
+  "frontend/vite.config.test.ts": {
+    "mtime": 1785636690.4863338,
+    "ast_hash": "ba3bdf4e610bc904d44fd1c10436a521",
+    "semantic_hash": ""
+  },
+  "frontend/src/pages/LoginPage.test.tsx": {
+    "mtime": 1785637722.6935966,
+    "ast_hash": "84231aaf66238e3b1948a59089dc09f9",
+    "semantic_hash": ""
+  },
+  "src/main/resources/application-local.yml": {
+    "mtime": 1785639625.0492985,
+    "ast_hash": "8e845ab647f4a2abeecb5433f5b0a7c4",
     "semantic_hash": ""
   }
 }

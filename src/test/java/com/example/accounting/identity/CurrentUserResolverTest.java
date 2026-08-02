@@ -21,6 +21,32 @@ class CurrentUserResolverTest {
     }
 
     @Test
+    void usesTheLocalUsernameAsTheDisplayName() {
+        UUID userId = UUID.randomUUID();
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.addHeader("X-User-Id", userId.toString());
+        request.addHeader("X-User-Name", "alice");
+
+        CurrentUserResolver.ResolvedUser user = new CurrentUserResolver(true).resolveUser(request);
+
+        assertEquals(userId, user.id());
+        assertEquals("alice", user.displayName());
+    }
+
+    @Test
+    void rejectsAnInvalidLocalUsername() {
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.addHeader("X-User-Id", UUID.randomUUID().toString());
+        request.addHeader("X-User-Name", "<script>");
+
+        ApiProblemException exception = assertThrows(ApiProblemException.class,
+                () -> new CurrentUserResolver(true).resolveUser(request));
+
+        assertEquals(400, exception.status());
+        assertEquals("INVALID_USER_NAME", exception.code());
+    }
+
+    @Test
     void rejectsMissingIdentity() {
         MockHttpServletRequest request = new MockHttpServletRequest();
 

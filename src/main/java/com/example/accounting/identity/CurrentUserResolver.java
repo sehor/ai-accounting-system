@@ -4,6 +4,7 @@ import com.example.accounting.shared.web.ApiProblemException;
 import jakarta.servlet.http.HttpServletRequest;
 import java.nio.charset.StandardCharsets;
 import java.util.UUID;
+import java.util.regex.Pattern;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -15,6 +16,8 @@ import org.springframework.stereotype.Component;
 public class CurrentUserResolver {
 
     private static final String LOCAL_USER_HEADER = "X-User-Id";
+    private static final String LOCAL_USER_NAME_HEADER = "X-User-Name";
+    private static final Pattern LOCAL_USER_NAME = Pattern.compile("[A-Za-z0-9][A-Za-z0-9._-]{0,63}");
     private final boolean localHeaderEnabled;
 
     public CurrentUserResolver(@Value("${app.security.local-user-header-enabled:false}") boolean localHeaderEnabled) {
@@ -31,7 +34,15 @@ public class CurrentUserResolver {
             if (header != null) {
                 try {
                     UUID id = UUID.fromString(header);
-                    return new ResolvedUser(id, "local", header, null, null);
+                    String displayName = request.getHeader(LOCAL_USER_NAME_HEADER);
+                    if (displayName != null) {
+                        displayName = displayName.trim();
+                        if (!LOCAL_USER_NAME.matcher(displayName).matches()) {
+                            throw new ApiProblemException(400, "INVALID_USER_NAME", "Invalid user name",
+                                    "X-User-Name contains unsupported characters", false);
+                        }
+                    }
+                    return new ResolvedUser(id, "local", header, displayName, null);
                 } catch (IllegalArgumentException exception) {
                     throw new ApiProblemException(400, "INVALID_USER_ID", "Invalid user ID",
                             "X-User-Id must be a UUID", false);
