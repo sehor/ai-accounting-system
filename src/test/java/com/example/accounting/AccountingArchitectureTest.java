@@ -2,6 +2,7 @@ package com.example.accounting;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.example.accounting.agent.AccountingExperienceService;
 import com.example.accounting.audit.AuditService;
 import com.example.accounting.documents.DocumentService;
 import com.example.accounting.documents.ExtractionService;
@@ -23,6 +24,7 @@ class AccountingArchitectureTest {
     void applicationServicesExposeInterfaces() {
         assertThat(List.of(
                 IdentityService.class,
+                AccountingExperienceService.class,
                 LedgerService.class,
                 VoucherService.class,
                 ReportingService.class,

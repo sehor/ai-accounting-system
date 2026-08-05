@@ -29,6 +29,9 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class DefaultVoucherService implements VoucherService {
 
+    // 同时审批记账开关：改为 false 即恢复原有的人工提交、审批和记账流程。
+    private static final boolean AUTO_APPROVE_AND_POST_ON_SAVE = true;
+
     private final VoucherRepository vouchers;
     private final LedgerAccessService ledgerAccess;
     private final ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
@@ -84,7 +87,7 @@ public class DefaultVoucherService implements VoucherService {
                 context.approvalRequired(), null, actorId);
         insertLines(ledgerId, voucherId, context, request.lines());
         audit(ledgerId, voucherId, "CREATE", actorId, null, null, snapshot(ledgerId, voucherId));
-        return find(actorId, ledgerId, voucherId);
+        return finalizeOnSave(actorId, ledgerId, voucherId, roles);
     }
 
     @Transactional
@@ -108,7 +111,7 @@ public class DefaultVoucherService implements VoucherService {
         vouchers.deleteLines(ledgerId, voucherId);
         insertLines(ledgerId, voucherId, context, request.lines());
         audit(ledgerId, voucherId, "UPDATE", actorId, null, before, snapshot(ledgerId, voucherId));
-        return find(actorId, ledgerId, voucherId);
+        return finalizeOnSave(actorId, ledgerId, voucherId, Set.of(LedgerRole.OWNER, LedgerRole.EDITOR));
     }
 
     private void insertLines(UUID ledgerId, UUID voucherId, LedgerContext context, List<VoucherRequests.Line> lines) {
@@ -254,6 +257,25 @@ public class DefaultVoucherService implements VoucherService {
         return find(actorId, ledgerId, voucherId);
     }
 
+    private VoucherResponses.Voucher finalizeOnSave(
+            UUID actorId, UUID ledgerId, UUID voucherId, Set<LedgerRole> roles) {
+        VoucherResponses.Voucher validated = validate(actorId, ledgerId, voucherId, roles);
+        if (!AUTO_APPROVE_AND_POST_ON_SAVE) {
+            return validated;
+        }
+        VoucherSnapshot beforeSubmit = snapshot(ledgerId, voucherId);
+        changeStatus(ledgerId, voucherId, "VALIDATED", "SUBMITTED", actorId);
+        approval(ledgerId, voucherId, "SUBMIT", null, actorId);
+        audit(ledgerId, voucherId, "SUBMIT", actorId, null, beforeSubmit, snapshot(ledgerId, voucherId));
+
+        String comment = "Automatically approved on save";
+        VoucherSnapshot beforeApprove = snapshot(ledgerId, voucherId);
+        changeStatus(ledgerId, voucherId, "SUBMITTED", "APPROVED", actorId);
+        approval(ledgerId, voucherId, "APPROVE", comment, actorId);
+        audit(ledgerId, voucherId, "APPROVE", actorId, comment, beforeApprove, snapshot(ledgerId, voucherId));
+        return post(actorId, ledgerId, voucherId, roles, true);
+    }
+
     @Transactional
     @Override
     public VoucherResponses.Voucher submit(UUID actorId, UUID ledgerId, UUID voucherId) {
@@ -315,7 +337,8 @@ public class DefaultVoucherService implements VoucherService {
         if (idempotent && "POSTED".equals(state.status())) {
             return find(actorId, ledgerId, voucherId);
         }
-        String requiredStatus = state.approvalRequired() ? "APPROVED" : "VALIDATED";
+        String requiredStatus = "APPROVED".equals(state.status()) || state.approvalRequired()
+                ? "APPROVED" : "VALIDATED";
         if (!requiredStatus.equals(state.status())) {
             throw problem(409, "VOUCHER_STATE_INVALID", "Invalid voucher state",
                     "The voucher must be " + requiredStatus + " before posting");
@@ -375,7 +398,7 @@ public class DefaultVoucherService implements VoucherService {
         }
         audit(ledgerId, reversalId, "CREATE_REVERSAL", actorId, "reversal-of:" + voucherId,
                 null, snapshot(ledgerId, reversalId));
-        return find(actorId, ledgerId, reversalId);
+        return finalizeOnSave(actorId, ledgerId, reversalId, Set.of(LedgerRole.OWNER, LedgerRole.EDITOR));
     }
 
     @Transactional
@@ -404,7 +427,7 @@ public class DefaultVoucherService implements VoucherService {
         VoucherSnapshot before = snapshot(ledgerId, voucherId);
         vouchers.restoreDeleted(ledgerId, voucherId, actorId);
         audit(ledgerId, voucherId, "RESTORE_DELETED", actorId, null, before, snapshot(ledgerId, voucherId));
-        return find(actorId, ledgerId, voucherId);
+        return finalizeOnSave(actorId, ledgerId, voucherId, Set.of(LedgerRole.OWNER, LedgerRole.EDITOR));
     }
 
     @Transactional(readOnly = true)
@@ -432,7 +455,7 @@ public class DefaultVoucherService implements VoucherService {
         insertSnapshotLines(ledgerId, voucherId, target.lines());
         audit(ledgerId, voucherId, "RESTORE_REVISION", actorId, "revision:" + revision,
                 before, snapshot(ledgerId, voucherId));
-        return find(actorId, ledgerId, voucherId);
+        return finalizeOnSave(actorId, ledgerId, voucherId, Set.of(LedgerRole.OWNER, LedgerRole.EDITOR));
     }
 
     private VoucherState state(UUID ledgerId, UUID voucherId) {

@@ -1,19 +1,16 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import { createLocalSession, isLocalAuthEnabled } from './session'
 
 describe('local authentication', () => {
-  beforeEach(() => localStorage.clear())
-
   it('is enabled by default during development', () => {
     expect(isLocalAuthEnabled()).toBe(true)
   })
 
-  it('creates a stable browser-local identity from a username', () => {
+  it('leaves local user identity assignment to the backend', () => {
     const first = createLocalSession(' Alice ')
     const second = createLocalSession('alice')
 
-    expect(first).toMatchObject({ localUserName: 'Alice' })
-    expect(first.localUserId).toMatch(/^[0-9a-f-]{36}$/)
-    expect(second.localUserId).toBe(first.localUserId)
+    expect(first).toEqual({ localUserName: 'Alice' })
+    expect(second).toEqual({ localUserName: 'alice' })
   })
 })

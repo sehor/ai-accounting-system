@@ -25,7 +25,8 @@ public class JdbcLedgerBackupRepository implements LedgerBackupRepository {
             Map.entry("period_action_audit", "created_at, id"),
             Map.entry("report_formula_snapshot", "id"), Map.entry("audit_revision", "created_at, id"),
             Map.entry("document", "created_at, id"), Map.entry("document_extraction", "created_at, id"),
-            Map.entry("agent_tool_audit", "created_at, id"));
+            Map.entry("agent_tool_audit", "created_at, id"),
+            Map.entry("accounting_experience", "updated_at, id"));
 
     private final JdbcTemplate jdbc;
 

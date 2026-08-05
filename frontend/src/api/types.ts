@@ -1,5 +1,6 @@
 export type LedgerRole = 'OWNER' | 'EDITOR' | 'REVIEWER' | 'VIEWER' | 'AGENT'
 export type MembershipStatus = 'ACTIVE' | 'INACTIVE'
+export type UserType = 'HUMAN' | 'AGENT'
 
 export interface User {
   id: string
@@ -7,6 +8,7 @@ export interface User {
   subject: string
   displayName: string | null
   email: string | null
+  userType: UserType
   status: string
 }
 

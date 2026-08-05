@@ -5,6 +5,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import java.nio.charset.StandardCharsets;
 import java.util.UUID;
 import java.util.regex.Pattern;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -19,9 +20,18 @@ public class CurrentUserResolver {
     private static final String LOCAL_USER_NAME_HEADER = "X-User-Name";
     private static final Pattern LOCAL_USER_NAME = Pattern.compile("[A-Za-z0-9][A-Za-z0-9._-]{0,63}");
     private final boolean localHeaderEnabled;
+    private final IdentityService identityService;
 
-    public CurrentUserResolver(@Value("${app.security.local-user-header-enabled:false}") boolean localHeaderEnabled) {
+    @Autowired
+    public CurrentUserResolver(@Value("${app.security.local-user-header-enabled:false}") boolean localHeaderEnabled,
+                               IdentityService identityService) {
         this.localHeaderEnabled = localHeaderEnabled;
+        this.identityService = identityService;
+    }
+
+    public CurrentUserResolver(boolean localHeaderEnabled) {
+        this.localHeaderEnabled = localHeaderEnabled;
+        this.identityService = null;
     }
 
     public UUID resolve(HttpServletRequest request) {
@@ -30,17 +40,31 @@ public class CurrentUserResolver {
 
     public ResolvedUser resolveUser(HttpServletRequest request) {
         if (localHeaderEnabled) {
+            String displayName = request.getHeader(LOCAL_USER_NAME_HEADER);
+            if (displayName != null) {
+                displayName = displayName.trim();
+                if (!LOCAL_USER_NAME.matcher(displayName).matches()) {
+                    throw new ApiProblemException(400, "INVALID_USER_NAME", "Invalid user name",
+                            "X-User-Name contains unsupported characters", false);
+                }
+                if (identityService != null) {
+                    UserResponse user = identityService.findLocalUser(displayName).orElseThrow(() ->
+                            new ApiProblemException(401, "UNKNOWN_LOCAL_USER", "Unknown local user",
+                                    "The local user does not exist", false));
+                    return new ResolvedUser(user.id(), user.issuer(), user.subject(),
+                            user.displayName(), user.email(), user.userType());
+                }
+            }
             String header = request.getHeader(LOCAL_USER_HEADER);
             if (header != null) {
                 try {
                     UUID id = UUID.fromString(header);
-                    String displayName = request.getHeader(LOCAL_USER_NAME_HEADER);
-                    if (displayName != null) {
-                        displayName = displayName.trim();
-                        if (!LOCAL_USER_NAME.matcher(displayName).matches()) {
-                            throw new ApiProblemException(400, "INVALID_USER_NAME", "Invalid user name",
-                                    "X-User-Name contains unsupported characters", false);
-                        }
+                    if (identityService != null) {
+                        UserResponse user = identityService.findUser(id).orElseThrow(() ->
+                                new ApiProblemException(401, "UNKNOWN_LOCAL_USER", "Unknown local user",
+                                        "The local user does not exist", false));
+                        return new ResolvedUser(user.id(), user.issuer(), user.subject(),
+                                user.displayName(), user.email(), user.userType());
                     }
                     return new ResolvedUser(id, "local", header, displayName, null);
                 } catch (IllegalArgumentException exception) {
@@ -57,7 +81,7 @@ public class CurrentUserResolver {
         return resolveAuthenticatedUserDetails().id();
     }
 
-    private ResolvedUser resolveAuthenticatedUserDetails() {
+    public ResolvedUser resolveAuthenticatedUserDetails() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         if (authentication instanceof JwtAuthenticationToken token) {
             String issuer = token.getToken().getIssuer() == null ? "" : token.getToken().getIssuer().toString();
@@ -79,10 +103,15 @@ public class CurrentUserResolver {
                 "A valid user identity is required", false);
     }
 
-    public record ResolvedUser(UUID id, String issuer, String subject, String displayName, String email) {
+    public record ResolvedUser(UUID id, String issuer, String subject, String displayName, String email,
+                               UserType userType) {
 
         public ResolvedUser(UUID id, String issuer, String subject) {
-            this(id, issuer, subject, null, null);
+            this(id, issuer, subject, null, null, UserType.HUMAN);
+        }
+
+        public ResolvedUser(UUID id, String issuer, String subject, String displayName, String email) {
+            this(id, issuer, subject, displayName, email, UserType.HUMAN);
         }
     }
 }

@@ -19,6 +19,7 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.HexFormat;
@@ -44,9 +45,8 @@ public class LedgerBackupService {
     static final long MAX_ARCHIVE_BYTES = 100L * 1024 * 1024;
     static final long MAX_ATTACHMENT_BYTES = 20L * 1024 * 1024;
     private static final String FORMAT = "AI-ACCOUNTING-LEDGER-BACKUP";
-    private static final int FORMAT_VERSION = 1;
-    private static final Set<LedgerRole> OWNER = Set.of(LedgerRole.OWNER);
-    private static final List<TableDef> TABLES = List.of(
+    private static final int FORMAT_VERSION = 2;
+    private static final List<TableDef> V1_TABLES = List.of(
             new TableDef("cash_flow_item"),
             new TableDef("dimension_type"),
             new TableDef("dimension_value"),
@@ -64,6 +64,8 @@ public class LedgerBackupService {
             new TableDef("document"),
             new TableDef("document_extraction"),
             new TableDef("agent_tool_audit"));
+    private static final Set<LedgerRole> OWNER = Set.of(LedgerRole.OWNER);
+    private static final List<TableDef> TABLES = appendExperienceTable(V1_TABLES);
 
     private final LedgerAccessService access;
     private final IdentityService identities;
@@ -218,10 +220,10 @@ public class LedgerBackupService {
             createOwner(ledgerId, actor.id());
 
             ObjectNode tables = (ObjectNode) archive.data().path("tables");
-            Map<UUID, UUID> idMap = idMap(tables);
+            Map<UUID, UUID> idMap = idMap(tables, archive.tables());
             idMap.put(uuid(source, "id"), ledgerId);
             restoreAttachments((ArrayNode) tables.path("document"), archive.entries());
-            for (TableDef table : TABLES) {
+            for (TableDef table : archive.tables()) {
                 insertRows(table.name(), (ArrayNode) tables.path(table.name()),
                         ledgerId, actor.id(), idMap);
             }
@@ -264,9 +266,9 @@ public class LedgerBackupService {
         repository.createOwner(ledgerId, actorId);
     }
 
-    private Map<UUID, UUID> idMap(ObjectNode tables) {
+    private Map<UUID, UUID> idMap(ObjectNode tables, List<TableDef> tablesToRestore) {
         Map<UUID, UUID> result = new HashMap<>();
-        for (TableDef table : TABLES) {
+        for (TableDef table : tablesToRestore) {
             for (JsonNode row : tables.path(table.name())) {
                 if (row.hasNonNull("id")) {
                     UUID oldId = uuid(row, "id");
@@ -367,8 +369,23 @@ public class LedgerBackupService {
             case "date" -> LocalDate.parse(value.asText());
             case "timestamptz" -> OffsetDateTime.parse(value.asText());
             case "jsonb" -> value.toString();
+            case "_text" -> textArray(value);
             default -> value.asText();
         };
+    }
+
+    private String[] textArray(JsonNode value) {
+        if (!value.isArray()) {
+            throw invalid("A text array backup field is invalid");
+        }
+        List<String> result = new ArrayList<>();
+        for (JsonNode item : value) {
+            if (!item.isTextual()) {
+                throw invalid("A text array backup field contains a non-text value");
+            }
+            result.add(item.asText());
+        }
+        return result.toArray(String[]::new);
     }
 
     private void deleteFileIfTransactionRollsBack(Path target) {
@@ -421,8 +438,8 @@ public class LedgerBackupService {
         }
         ObjectNode manifest = object(manifestBytes, "manifest.json");
         ObjectNode data = object(dataBytes, "data.json");
-        validateArchive(manifest, data, dataBytes, entries);
-        return new Archive(data, entries);
+        List<TableDef> tables = validateArchive(manifest, data, dataBytes, entries);
+        return new Archive(data, entries, manifest.path("version").asInt(), tables);
     }
 
     private byte[] readBounded(InputStream input, long maximum) {
@@ -490,17 +507,20 @@ public class LedgerBackupService {
         }
     }
 
-    private void validateArchive(ObjectNode manifest, ObjectNode data, byte[] dataBytes,
-                                 Map<String, byte[]> entries) {
+    private List<TableDef> validateArchive(ObjectNode manifest, ObjectNode data, byte[] dataBytes,
+                                           Map<String, byte[]> entries) {
+        int version = manifest.path("version").asInt(-1);
         if (!FORMAT.equals(manifest.path("format").asText())
-                || manifest.path("version").asInt(-1) != FORMAT_VERSION
+                || (version != 1 && version != FORMAT_VERSION)
                 || !sha256(dataBytes).equals(requiredText(manifest, "dataSha256"))) {
             throw invalid("The backup format, version or data checksum is invalid");
         }
         if (!data.path("ledger").isObject() || !data.path("tables").isObject()) {
             throw invalid("The backup data structure is incomplete");
         }
-        Set<String> allowedTables = TABLES.stream().map(TableDef::name).collect(java.util.stream.Collectors.toSet());
+        List<TableDef> tables = version == 1 ? V1_TABLES : TABLES;
+        Set<String> allowedTables = tables.stream().map(TableDef::name)
+                .collect(java.util.stream.Collectors.toSet());
         Set<String> presentTables = new HashSet<>();
         data.path("tables").fieldNames().forEachRemaining(presentTables::add);
         if (!presentTables.equals(allowedTables)) {
@@ -549,6 +569,7 @@ public class LedgerBackupService {
         if (!dataDocuments.equals(declaredDocuments)) {
             throw invalid("The document data does not match the attachment manifest");
         }
+        return tables;
     }
 
     private JsonNode readJson(String json) {
@@ -596,10 +617,16 @@ public class LedgerBackupService {
         return new ApiProblemException(status, code, title, detail, false);
     }
 
+    private static List<TableDef> appendExperienceTable(List<TableDef> base) {
+        List<TableDef> result = new ArrayList<>(base);
+        result.add(new TableDef("accounting_experience"));
+        return List.copyOf(result);
+    }
+
     private record TableDef(String name) {
     }
 
-    private record Archive(ObjectNode data, Map<String, byte[]> entries) {
+    private record Archive(ObjectNode data, Map<String, byte[]> entries, int version, List<TableDef> tables) {
     }
 
     private record ColumnDef(String name, String type, boolean json) {

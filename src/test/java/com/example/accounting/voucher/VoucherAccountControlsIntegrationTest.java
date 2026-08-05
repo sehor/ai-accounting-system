@@ -26,7 +26,7 @@ class VoucherAccountControlsIntegrationTest {
     private VoucherService vouchers;
 
     @Test
-    void allowsIncompleteDraftThenRequiresCashQuantityAndDimensionsForValidation() {
+    void requiresCompleteControlsBeforeSavingAndPosting() {
         UUID owner = UUID.randomUUID();
         UUID ledgerId = ledgers.create(user(owner), new LedgerRequests.Create(
                 "voucher-controls", "SME", "2011-17", "CNY",
@@ -46,13 +46,11 @@ class VoucherAccountControlsIntegrationTest {
                 .filter(account -> account.code().equals("1001")).findFirst().orElseThrow();
         UUID periodId = ledgers.listPeriods(owner, ledgerId).getFirst().id();
 
-        VoucherResponses.Voucher draft = vouchers.create(owner, ledgerId, new VoucherRequests.Create(
+        assertThatThrownBy(() -> vouchers.create(owner, ledgerId, new VoucherRequests.Create(
                 periodId, LocalDate.of(2026, 1, 10), "记", UUID.randomUUID().toString().substring(0, 8),
-                "受控草稿", List.of(
+                "受控凭证", List.of(
                 line(controlled.id(), "DEBIT", "20"),
-                line(cash.id(), "CREDIT", "20"))));
-        assertThat(draft.status()).isEqualTo("DRAFT");
-        assertThatThrownBy(() -> vouchers.validate(owner, ledgerId, draft.id()))
+                line(cash.id(), "CREDIT", "20")))))
                 .isInstanceOfSatisfying(ApiProblemException.class,
                         exception -> assertThat(exception.code()).isEqualTo("VOUCHER_CONTROL_INCOMPLETE"));
 
@@ -60,15 +58,12 @@ class VoucherAccountControlsIntegrationTest {
                 controlled.id(), "DEBIT", "CNY", new BigDecimal("20"), BigDecimal.ONE,
                 "受控行", null, new BigDecimal("2"), new BigDecimal("10"),
                 List.of(new VoucherRequests.Dimension(customer.id(), customerValue.id())));
-        VoucherResponses.Voucher updated = vouchers.update(owner, ledgerId, draft.id(),
-                new VoucherRequests.Update(
-                        draft.version(), periodId, LocalDate.of(2026, 1, 10), "记",
-                        draft.voucherNumber(), "完整控制项",
-                        List.of(controlledLine, line(cash.id(), "CREDIT", "20"))));
-        VoucherResponses.Voucher validated = vouchers.validate(owner, ledgerId, updated.id());
+        VoucherResponses.Voucher posted = vouchers.create(owner, ledgerId, new VoucherRequests.Create(
+                periodId, LocalDate.of(2026, 1, 10), "记", UUID.randomUUID().toString().substring(0, 8),
+                "完整控制项", List.of(controlledLine, line(cash.id(), "CREDIT", "20"))));
 
-        assertThat(validated.status()).isEqualTo("VALIDATED");
-        VoucherResponses.Line saved = validated.lines().getFirst();
+        assertThat(posted.status()).isEqualTo("POSTED");
+        VoucherResponses.Line saved = posted.lines().getFirst();
         assertThat(saved.cashFlowItemId()).isEqualTo(cashFlow.id());
         assertThat(saved.quantity()).isEqualByComparingTo("2");
         assertThat(saved.unitPrice()).isEqualByComparingTo("10");

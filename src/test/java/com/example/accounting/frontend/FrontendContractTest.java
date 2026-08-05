@@ -1,13 +1,16 @@
 package com.example.accounting.frontend;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import com.example.accounting.documents.DocumentResponses;
 import com.example.accounting.documents.DocumentService;
 import com.example.accounting.identity.CurrentUserResolver;
 import com.example.accounting.identity.IdentityService;
+import com.example.accounting.identity.UserType;
 import com.example.accounting.ledger.LedgerRequests;
 import com.example.accounting.ledger.LedgerService;
+import com.example.accounting.shared.web.ApiProblemException;
 import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
@@ -15,6 +18,7 @@ import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.mock.web.MockHttpServletRequest;
 
 @SpringBootTest
 class FrontendContractTest {
@@ -27,6 +31,9 @@ class FrontendContractTest {
 
     @Autowired
     private IdentityService identityService;
+
+    @Autowired
+    private CurrentUserResolver currentUserResolver;
 
     @Test
     void listsDocumentsAndStreamsContentForMembers() throws Exception {
@@ -71,5 +78,65 @@ class FrontendContractTest {
                 secondId, "local", secondId.toString(), username.toUpperCase(), null));
 
         assertThat(repeated.id()).isEqualTo(firstId);
+    }
+
+    @Test
+    void resolvesAStaleBrowserIdToTheExistingLocalUserBeforeListingLedgers() {
+        String username = "local-" + UUID.randomUUID();
+        UUID ownerId = UUID.randomUUID();
+        identityService.ensureUser(new CurrentUserResolver.ResolvedUser(
+                ownerId, "local", ownerId.toString(), username, null));
+        UUID ledgerId = ledgerService.create(new CurrentUserResolver.ResolvedUser(
+                ownerId, "local", ownerId.toString(), username, null),
+                new LedgerRequests.Create("canonical-user-ledger", "SME", "v1", "CNY",
+                        LocalDate.of(2026, 1, 1), false)).id();
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.addHeader("X-User-Id", UUID.randomUUID().toString());
+        request.addHeader("X-User-Name", username.toUpperCase());
+
+        UUID resolvedUserId = currentUserResolver.resolve(request);
+
+        assertThat(resolvedUserId).isEqualTo(ownerId);
+        assertThat(ledgerService.list(resolvedUserId))
+                .extracting(ledger -> ledger.id()).containsExactly(ledgerId);
+    }
+
+    @Test
+    void rejectsAnUnknownLocalUsernameWithoutCreatingAnId() {
+        String username = "local-" + UUID.randomUUID();
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.addHeader("X-User-Name", username);
+
+        ApiProblemException exception = assertThrows(ApiProblemException.class,
+                () -> currentUserResolver.resolve(request));
+
+        assertThat(exception.status()).isEqualTo(401);
+        assertThat(exception.code()).isEqualTo("UNKNOWN_LOCAL_USER");
+    }
+
+    @Test
+    void rejectsAnUnknownLocalIdWithoutCreatingAUser() {
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.addHeader("X-User-Id", UUID.randomUUID().toString());
+
+        ApiProblemException exception = assertThrows(ApiProblemException.class,
+                () -> currentUserResolver.resolve(request));
+
+        assertThat(exception.status()).isEqualTo(401);
+        assertThat(exception.code()).isEqualTo("UNKNOWN_LOCAL_USER");
+    }
+
+    @Test
+    void storesWhetherAUserIsHumanOrAgent() {
+        UUID humanId = UUID.randomUUID();
+        UUID agentId = UUID.randomUUID();
+
+        var human = identityService.ensureUser(new CurrentUserResolver.ResolvedUser(
+                humanId, "test", humanId.toString()));
+        var agent = identityService.ensureUser(new CurrentUserResolver.ResolvedUser(
+                agentId, "test", agentId.toString(), "Agent", null, UserType.AGENT));
+
+        assertThat(human.userType()).isEqualTo(UserType.HUMAN);
+        assertThat(agent.userType()).isEqualTo(UserType.AGENT);
     }
 }

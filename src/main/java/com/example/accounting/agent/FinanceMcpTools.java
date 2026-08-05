@@ -2,9 +2,15 @@ package com.example.accounting.agent;
 
 import com.example.accounting.agent.internal.port.AgentToolAuditRepository;
 import com.example.accounting.identity.CurrentUserResolver;
+import com.example.accounting.identity.IdentityService;
 import com.example.accounting.ledger.LedgerResponses;
 import com.example.accounting.ledger.LedgerRequests;
+import com.example.accounting.ledger.AccountExchangeService;
+import com.example.accounting.ledger.AccountingStandard;
+import com.example.accounting.ledger.AccountingStandardCatalog;
+import com.example.accounting.ledger.LedgerBackupService;
 import com.example.accounting.ledger.LedgerService;
+import com.example.accounting.exchange.KingdeeExchange;
 import com.example.accounting.documents.DocumentResponses;
 import com.example.accounting.documents.DocumentService;
 import com.example.accounting.documents.ExtractionResponses;
@@ -12,17 +18,23 @@ import com.example.accounting.documents.ExtractionService;
 import com.example.accounting.documents.JobResponses;
 import com.example.accounting.documents.JobService;
 import com.example.accounting.shared.web.ApiProblemException;
+import com.example.accounting.reporting.FinanceQueryRequests;
 import com.example.accounting.reporting.ReportingService;
 import com.example.accounting.shared.audit.AuditContext;
 import com.example.accounting.voucher.VoucherRequests;
 import com.example.accounting.voucher.VoucherResponses;
 import com.example.accounting.voucher.VoucherService;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.ByteArrayInputStream;
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.Base64;
 import java.util.HexFormat;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 import java.util.UUID;
 import java.util.function.Supplier;
 import org.springframework.ai.mcp.annotation.McpTool;
@@ -36,20 +48,37 @@ import org.springframework.transaction.annotation.Transactional;
 public class FinanceMcpTools {
 
     private final CurrentUserResolver currentUserResolver;
+    private final IdentityService identityService;
+    private final AccountingExperienceService experienceService;
     private final LedgerService ledgerService;
+    private final AccountingStandardCatalog standardCatalog;
+    private final LedgerBackupService backupService;
+    private final AccountExchangeService accountExchange;
+    private final KingdeeExchange kingdeeExchange;
     private final ReportingService reportingService;
     private final VoucherService voucherService;
     private final DocumentService documentService;
     private final ExtractionService extractionService;
     private final JobService jobService;
     private final AgentToolAuditRepository audits;
+    private final ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
 
-    public FinanceMcpTools(CurrentUserResolver currentUserResolver, LedgerService ledgerService,
+    public FinanceMcpTools(CurrentUserResolver currentUserResolver, IdentityService identityService,
+                           AccountingExperienceService experienceService,
+                           LedgerService ledgerService, AccountingStandardCatalog standardCatalog,
+                           LedgerBackupService backupService,
+                           AccountExchangeService accountExchange, KingdeeExchange kingdeeExchange,
                            ReportingService reportingService, VoucherService voucherService,
                            DocumentService documentService, ExtractionService extractionService,
                            JobService jobService, AgentToolAuditRepository audits) {
         this.currentUserResolver = currentUserResolver;
+        this.identityService = identityService;
+        this.experienceService = experienceService;
         this.ledgerService = ledgerService;
+        this.standardCatalog = standardCatalog;
+        this.backupService = backupService;
+        this.accountExchange = accountExchange;
+        this.kingdeeExchange = kingdeeExchange;
         this.reportingService = reportingService;
         this.voucherService = voucherService;
         this.documentService = documentService;
@@ -65,6 +94,55 @@ public class FinanceMcpTools {
         return audited(actorId, "list_ledgers", null, "", () -> ledgerService.list(actorId));
     }
 
+    @McpTool(name = "create_accounting_experience",
+            description = "Save a general or ledger-specific accounting experience for future agent reference")
+    @PreAuthorize("isAuthenticated()")
+    public ExperienceResponses.Experience createAccountingExperience(
+            @McpToolParam(description = "Experience payload with GENERAL or LEDGER scope")
+            ExperienceRequests.Create request) {
+        UUID actorId = actor();
+        UUID ledgerId = request == null ? null : request.ledgerId();
+        return audited(actorId, "create_accounting_experience", ledgerId, String.valueOf(request),
+                () -> experienceService.create(actorId, request));
+    }
+
+    @McpTool(name = "search_accounting_experiences",
+            description = "Search active general experiences, or merge general and ledger experiences")
+    @PreAuthorize("isAuthenticated()")
+    public ExperienceResponses.Page searchAccountingExperiences(
+            @McpToolParam(description = "Search payload with optional ledgerId, query, tags and pagination",
+                    required = false)
+            ExperienceRequests.Search request) {
+        UUID actorId = actor();
+        UUID ledgerId = request == null ? null : request.ledgerId();
+        return audited(actorId, "search_accounting_experiences", ledgerId, String.valueOf(request),
+                () -> experienceService.search(actorId, request));
+    }
+
+    @McpTool(name = "update_accounting_experience",
+            description = "Revise an accounting experience using its expected version")
+    @PreAuthorize("isAuthenticated()")
+    public ExperienceResponses.Experience updateAccountingExperience(
+            @McpToolParam(description = "Experience identifier") UUID experienceId,
+            @McpToolParam(description = "Update payload with expectedVersion") ExperienceRequests.Update request) {
+        UUID actorId = actor();
+        return audited(actorId, "update_accounting_experience", null,
+                experienceId + ":" + String.valueOf(request),
+                () -> experienceService.update(actorId, experienceId, request));
+    }
+
+    @McpTool(name = "archive_accounting_experience",
+            description = "Archive an accounting experience so it is no longer returned by searches")
+    @PreAuthorize("isAuthenticated()")
+    public ExperienceResponses.Experience archiveAccountingExperience(
+            @McpToolParam(description = "Experience identifier") UUID experienceId,
+            @McpToolParam(description = "Expected experience version") long expectedVersion) {
+        UUID actorId = actor();
+        return audited(actorId, "archive_accounting_experience", null,
+                experienceId + ":" + expectedVersion,
+                () -> experienceService.archive(actorId, experienceId, expectedVersion));
+    }
+
     @McpTool(name = "list_periods", description = "List accounting periods available in a ledger")
     @PreAuthorize("isAuthenticated()")
     public List<LedgerResponses.Period> listPeriods(
@@ -72,6 +150,396 @@ public class FinanceMcpTools {
         UUID actorId = actor();
         return audited(actorId, "list_periods", ledgerId, "",
                 () -> ledgerService.listPeriods(actorId, ledgerId));
+    }
+
+    @McpTool(name = "get_current_user", description = "Get the authenticated application user")
+    @PreAuthorize("isAuthenticated()")
+    public com.example.accounting.identity.UserResponse getCurrentUser() {
+        UUID actorId = actor();
+        return audited(actorId, "get_current_user", null, "",
+                () -> identityService.ensureUser(currentUserResolver.resolveAuthenticatedUserDetails()));
+    }
+
+    @McpTool(name = "list_accounting_standards", description = "List installed accounting standard packages")
+    @PreAuthorize("isAuthenticated()")
+    public List<AccountingStandard.Package> listAccountingStandards() {
+        UUID actorId = actor();
+        return audited(actorId, "list_accounting_standards", null, "", standardCatalog::list);
+    }
+
+    @McpTool(name = "get_accounting_standard", description = "Get one installed accounting standard package")
+    @PreAuthorize("isAuthenticated()")
+    public AccountingStandard.Package getAccountingStandard(
+            @McpToolParam(description = "Accounting standard code") String code,
+            @McpToolParam(description = "Accounting standard version") String version) {
+        UUID actorId = actor();
+        return audited(actorId, "get_accounting_standard", null, code + "/" + version,
+                () -> standardCatalog.find(code, version).orElseThrow(() ->
+                        new ApiProblemException(404, "ACCOUNTING_STANDARD_NOT_FOUND", "Accounting standard not found",
+                                "The requested accounting standard version is not installed", false)));
+    }
+
+    @McpTool(name = "get_ledger", description = "Get one ledger visible to the authenticated user")
+    @PreAuthorize("isAuthenticated()")
+    public LedgerResponses.Ledger getLedger(
+            @McpToolParam(description = "Ledger identifier") UUID ledgerId) {
+        UUID actorId = actor();
+        return audited(actorId, "get_ledger", ledgerId, "",
+                () -> ledgerService.findLedger(actorId, ledgerId));
+    }
+
+    @McpTool(name = "get_ledger_role", description = "Get the authenticated user's role in a ledger")
+    @PreAuthorize("isAuthenticated()")
+    public Map<String, String> getLedgerRole(
+            @McpToolParam(description = "Ledger identifier") UUID ledgerId) {
+        UUID actorId = actor();
+        return audited(actorId, "get_ledger_role", ledgerId, "",
+                () -> Map.of("role", ledgerService.role(actorId, ledgerId).name()));
+    }
+
+    @McpTool(name = "list_accounts", description = "List all accounts in a ledger")
+    @PreAuthorize("isAuthenticated()")
+    public List<LedgerResponses.Account> listAccounts(
+            @McpToolParam(description = "Ledger identifier") UUID ledgerId) {
+        UUID actorId = actor();
+        return audited(actorId, "list_accounts", ledgerId, "",
+                () -> ledgerService.listAccounts(actorId, ledgerId));
+    }
+
+    @McpTool(name = "get_account", description = "Get one account in a ledger")
+    @PreAuthorize("isAuthenticated()")
+    public LedgerResponses.Account getAccount(
+            @McpToolParam(description = "Ledger identifier") UUID ledgerId,
+            @McpToolParam(description = "Account identifier") UUID accountId) {
+        UUID actorId = actor();
+        return audited(actorId, "get_account", ledgerId, accountId.toString(),
+                () -> ledgerService.findAccount(actorId, ledgerId, accountId));
+    }
+
+    @McpTool(name = "create_account", description = "Create an accounting account in a ledger")
+    @PreAuthorize("isAuthenticated()")
+    public LedgerResponses.Account createAccount(
+            @McpToolParam(description = "Ledger identifier") UUID ledgerId,
+            @McpToolParam(description = "Account creation payload") LedgerRequests.AccountCreate request) {
+        UUID actorId = actor();
+        return audited(actorId, "create_account", ledgerId, request.toString(),
+                () -> ledgerService.createAccount(actorId, ledgerId, request));
+    }
+
+    @McpTool(name = "update_account", description = "Update an accounting account in a ledger")
+    @PreAuthorize("isAuthenticated()")
+    public LedgerResponses.Account updateAccount(
+            @McpToolParam(description = "Ledger identifier") UUID ledgerId,
+            @McpToolParam(description = "Account identifier") UUID accountId,
+            @McpToolParam(description = "Account patch with expectedVersion") LedgerRequests.AccountPatch request) {
+        UUID actorId = actor();
+        return audited(actorId, "update_account", ledgerId, accountId + ":" + request,
+                () -> ledgerService.updateAccount(actorId, ledgerId, accountId, request));
+    }
+
+    @McpTool(name = "delete_account", description = "Delete an accounting account from a ledger")
+    @PreAuthorize("isAuthenticated()")
+    public boolean deleteAccount(
+            @McpToolParam(description = "Ledger identifier") UUID ledgerId,
+            @McpToolParam(description = "Account identifier") UUID accountId,
+            @McpToolParam(description = "Expected account version") long expectedVersion) {
+        UUID actorId = actor();
+        return audited(actorId, "delete_account", ledgerId, accountId + ":" + expectedVersion, () -> {
+            ledgerService.deleteAccount(actorId, ledgerId, accountId, expectedVersion);
+            return true;
+        });
+    }
+
+    @McpTool(name = "update_account_code_rule", description = "Update a ledger account code rule")
+    @PreAuthorize("isAuthenticated()")
+    public com.example.accounting.ledger.AccountCodeRule updateAccountCodeRule(
+            @McpToolParam(description = "Ledger identifier") UUID ledgerId,
+            @McpToolParam(description = "Account code rule") LedgerRequests.AccountCodeRuleUpdate request) {
+        UUID actorId = actor();
+        return audited(actorId, "update_account_code_rule", ledgerId, request.toString(),
+                () -> ledgerService.updateAccountCodeRule(actorId, ledgerId, request));
+    }
+
+    @McpTool(name = "list_cash_flow_items", description = "List cash flow items in a ledger")
+    @PreAuthorize("isAuthenticated()")
+    public List<LedgerResponses.CashFlowItem> listCashFlowItems(
+            @McpToolParam(description = "Ledger identifier") UUID ledgerId) {
+        UUID actorId = actor();
+        return audited(actorId, "list_cash_flow_items", ledgerId, "",
+                () -> ledgerService.listCashFlowItems(actorId, ledgerId));
+    }
+
+    @McpTool(name = "close_period", description = "Close an accounting period")
+    @PreAuthorize("isAuthenticated()")
+    public LedgerResponses.Period closePeriod(
+            @McpToolParam(description = "Ledger identifier") UUID ledgerId,
+            @McpToolParam(description = "Period identifier") UUID periodId,
+            @McpToolParam(description = "Close reason") LedgerRequests.PeriodAction request) {
+        UUID actorId = actor();
+        return audited(actorId, "close_period", ledgerId, periodId + ":" + request,
+                () -> ledgerService.closePeriod(actorId, ledgerId, periodId, request));
+    }
+
+    @McpTool(name = "reopen_period", description = "Reopen an accounting period")
+    @PreAuthorize("isAuthenticated()")
+    public LedgerResponses.Period reopenPeriod(
+            @McpToolParam(description = "Ledger identifier") UUID ledgerId,
+            @McpToolParam(description = "Period identifier") UUID periodId,
+            @McpToolParam(description = "Reopen reason") LedgerRequests.PeriodAction request) {
+        UUID actorId = actor();
+        return audited(actorId, "reopen_period", ledgerId, periodId + ":" + request,
+                () -> ledgerService.reopenPeriod(actorId, ledgerId, periodId, request));
+    }
+
+    @McpTool(name = "list_dimension_types", description = "List dimension types in a ledger")
+    @PreAuthorize("isAuthenticated()")
+    public List<LedgerResponses.DimensionType> listDimensionTypes(
+            @McpToolParam(description = "Ledger identifier") UUID ledgerId) {
+        UUID actorId = actor();
+        return audited(actorId, "list_dimension_types", ledgerId, "",
+                () -> ledgerService.listDimensionTypes(actorId, ledgerId));
+    }
+
+    @McpTool(name = "create_dimension_type", description = "Create a dimension type in a ledger")
+    @PreAuthorize("isAuthenticated()")
+    public LedgerResponses.DimensionType createDimensionType(
+            @McpToolParam(description = "Ledger identifier") UUID ledgerId,
+            @McpToolParam(description = "Dimension type payload") LedgerRequests.DimensionTypeCreate request) {
+        UUID actorId = actor();
+        return audited(actorId, "create_dimension_type", ledgerId, request.toString(),
+                () -> ledgerService.createDimensionType(actorId, ledgerId, request));
+    }
+
+    @McpTool(name = "list_dimension_values", description = "List values for a dimension type")
+    @PreAuthorize("isAuthenticated()")
+    public List<LedgerResponses.DimensionValue> listDimensionValues(
+            @McpToolParam(description = "Ledger identifier") UUID ledgerId,
+            @McpToolParam(description = "Dimension type identifier") UUID typeId) {
+        UUID actorId = actor();
+        return audited(actorId, "list_dimension_values", ledgerId, typeId.toString(),
+                () -> ledgerService.listDimensionValues(actorId, ledgerId, typeId));
+    }
+
+    @McpTool(name = "create_dimension_value", description = "Create a value for a dimension type")
+    @PreAuthorize("isAuthenticated()")
+    public LedgerResponses.DimensionValue createDimensionValue(
+            @McpToolParam(description = "Ledger identifier") UUID ledgerId,
+            @McpToolParam(description = "Dimension type identifier") UUID typeId,
+            @McpToolParam(description = "Dimension value payload") LedgerRequests.DimensionValueCreate request) {
+        UUID actorId = actor();
+        return audited(actorId, "create_dimension_value", ledgerId, typeId + ":" + request,
+                () -> ledgerService.createDimensionValue(actorId, ledgerId, typeId, request));
+    }
+
+    @McpTool(name = "list_opening_balances", description = "List opening balances in a ledger")
+    @PreAuthorize("isAuthenticated()")
+    public List<LedgerResponses.OpeningBalance> listOpeningBalances(
+            @McpToolParam(description = "Ledger identifier") UUID ledgerId) {
+        UUID actorId = actor();
+        return audited(actorId, "list_opening_balances", ledgerId, "",
+                () -> ledgerService.listOpeningBalances(actorId, ledgerId));
+    }
+
+    @McpTool(name = "replace_opening_balances", description = "Replace opening balances in a ledger")
+    @PreAuthorize("isAuthenticated()")
+    public List<LedgerResponses.OpeningBalance> replaceOpeningBalances(
+            @McpToolParam(description = "Ledger identifier") UUID ledgerId,
+            @McpToolParam(description = "Opening balance lines") List<LedgerRequests.OpeningBalanceLine> lines) {
+        UUID actorId = actor();
+        return audited(actorId, "replace_opening_balances", ledgerId, lines.toString(),
+                () -> ledgerService.replaceOpeningBalances(actorId, ledgerId, lines));
+    }
+
+    @McpTool(name = "import_opening_balances", description = "Import opening balances from a base64 encoded CSV file")
+    @PreAuthorize("isAuthenticated()")
+    public List<LedgerResponses.OpeningBalance> importOpeningBalances(
+            @McpToolParam(description = "Ledger identifier") UUID ledgerId,
+            @McpToolParam(description = "Base64 encoded CSV content") String base64Content) {
+        UUID actorId = actor();
+        byte[] content = decode(base64Content, "OPENING_BALANCE_CONTENT_INVALID");
+        return audited(actorId, "import_opening_balances", ledgerId, hash(base64Content),
+                () -> ledgerService.importOpeningBalances(actorId, ledgerId, new ByteArrayInputStream(content)));
+    }
+
+    @McpTool(name = "confirm_opening_balances", description = "Confirm opening balances in a ledger")
+    @PreAuthorize("isAuthenticated()")
+    public Map<String, Integer> confirmOpeningBalances(
+            @McpToolParam(description = "Ledger identifier") UUID ledgerId) {
+        UUID actorId = actor();
+        return audited(actorId, "confirm_opening_balances", ledgerId, "",
+                () -> Map.of("confirmedCount", ledgerService.confirmOpeningBalances(actorId, ledgerId)));
+    }
+
+    @McpTool(name = "export_accounts", description = "Export ledger accounts as a base64 encoded Excel workbook")
+    @PreAuthorize("isAuthenticated()")
+    public ExportedFile exportAccounts(
+            @McpToolParam(description = "Ledger identifier") UUID ledgerId,
+            @McpToolParam(description = "Export format: STANDARD or KINGDEE") AccountExchangeService.Format format) {
+        UUID actorId = actor();
+        return audited(actorId, "export_accounts", ledgerId, format.name(),
+                () -> file("accounts-" + format.name().toLowerCase(Locale.ROOT) + ".xlsx",
+                        XLSX_CONTENT_TYPE, accountExchange.export(actorId, ledgerId, format)));
+    }
+
+    @McpTool(name = "export_account_template", description = "Export an account import template as Excel")
+    @PreAuthorize("isAuthenticated()")
+    public ExportedFile exportAccountTemplate(
+            @McpToolParam(description = "Ledger identifier") UUID ledgerId,
+            @McpToolParam(description = "Template format: STANDARD or KINGDEE") AccountExchangeService.Format format) {
+        UUID actorId = actor();
+        return audited(actorId, "export_account_template", ledgerId, format.name(),
+                () -> file("account-import-" + format.name().toLowerCase(Locale.ROOT) + ".xlsx",
+                        XLSX_CONTENT_TYPE, accountExchange.template(actorId, ledgerId, format)));
+    }
+
+    @McpTool(name = "preview_account_import", description = "Preview a base64 encoded account Excel import")
+    @PreAuthorize("isAuthenticated()")
+    public AccountExchangeService.Preview previewAccountImport(
+            @McpToolParam(description = "Ledger identifier") UUID ledgerId,
+            @McpToolParam(description = "Import format: STANDARD or KINGDEE") AccountExchangeService.Format format,
+            @McpToolParam(description = "Original workbook file name") String fileName,
+            @McpToolParam(description = "Base64 encoded workbook content") String base64Content) {
+        UUID actorId = actor();
+        byte[] content = decode(base64Content, "ACCOUNT_IMPORT_CONTENT_INVALID");
+        return audited(actorId, "preview_account_import", ledgerId, format + ":" + fileName + ":" + hash(base64Content),
+                () -> accountExchange.preview(actorId, ledgerId, format, fileName, content.length,
+                        new ByteArrayInputStream(content)));
+    }
+
+    @McpTool(name = "get_account_import", description = "Get an account import preview")
+    @PreAuthorize("isAuthenticated()")
+    public AccountExchangeService.Preview getAccountImport(
+            @McpToolParam(description = "Ledger identifier") UUID ledgerId,
+            @McpToolParam(description = "Account import identifier") UUID importId) {
+        UUID actorId = actor();
+        return audited(actorId, "get_account_import", ledgerId, importId.toString(),
+                () -> accountExchange.get(actorId, ledgerId, importId));
+    }
+
+    @McpTool(name = "decide_account_import_row", description = "Set the action for one account import row")
+    @PreAuthorize("isAuthenticated()")
+    public AccountExchangeService.Preview decideAccountImportRow(
+            @McpToolParam(description = "Ledger identifier") UUID ledgerId,
+            @McpToolParam(description = "Account import identifier") UUID importId,
+            @McpToolParam(description = "Row number") int rowNo,
+            @McpToolParam(description = "Import row decision") AccountExchangeService.Decision decision) {
+        UUID actorId = actor();
+        return audited(actorId, "decide_account_import_row", ledgerId, importId + ":" + rowNo + ":" + decision,
+                () -> accountExchange.decide(actorId, ledgerId, importId, rowNo, decision));
+    }
+
+    @McpTool(name = "commit_account_import", description = "Commit a reviewed account import")
+    @PreAuthorize("isAuthenticated()")
+    public AccountExchangeService.Preview commitAccountImport(
+            @McpToolParam(description = "Ledger identifier") UUID ledgerId,
+            @McpToolParam(description = "Account import identifier") UUID importId) {
+        UUID actorId = actor();
+        return audited(actorId, "commit_account_import", ledgerId, importId.toString(),
+                () -> accountExchange.commit(actorId, ledgerId, importId));
+    }
+
+    @McpTool(name = "export_kingdee_vouchers",
+            description = "Export ledger vouchers in the Kingdee Excel format as base64")
+    @PreAuthorize("isAuthenticated()")
+    public ExportedFile exportKingdeeVouchers(
+            @McpToolParam(description = "Ledger identifier") UUID ledgerId) {
+        UUID actorId = actor();
+        return audited(actorId, "export_kingdee_vouchers", ledgerId, "",
+                () -> file("kingdee-vouchers.xlsx", XLSX_CONTENT_TYPE,
+                        kingdeeExchange.exportKingdee(actorId, ledgerId)));
+    }
+
+    @McpTool(name = "import_kingdee_vouchers", description = "Import a base64 encoded Kingdee voucher workbook")
+    @PreAuthorize("isAuthenticated()")
+    public KingdeeExchange.ImportResult importKingdeeVouchers(
+            @McpToolParam(description = "Ledger identifier") UUID ledgerId,
+            @McpToolParam(description = "Base64 encoded Kingdee workbook") String base64Content,
+            @McpToolParam(description = "Unique retry key, optional", required = false) String idempotencyKey) {
+        UUID actorId = actor();
+        byte[] content = decode(base64Content, "KINGDEE_CONTENT_INVALID");
+        String key = idempotencyKey == null || idempotencyKey.isBlank() ? null : idempotencyKey.trim();
+        return audited(actorId, "import_kingdee_vouchers", ledgerId, hash(base64Content) + ":" + key,
+                () -> kingdeeExchange.importKingdee(actorId, ledgerId, key, content.length,
+                        new ByteArrayInputStream(content)));
+    }
+
+    @McpTool(name = "backup_ledger", description = "Create a base64 encoded ledger backup archive")
+    @PreAuthorize("isAuthenticated()")
+    public ExportedFile backupLedger(
+            @McpToolParam(description = "Ledger identifier") UUID ledgerId) {
+        UUID actorId = actor();
+        return audited(actorId, "backup_ledger", ledgerId, "",
+                () -> file("ledger-" + ledgerId + ".aibackup",
+                        "application/vnd.ai-accounting.ledger-backup+zip",
+                        backupService.backup(actorId, ledgerId)));
+    }
+
+    @McpTool(name = "restore_ledger", description = "Restore a ledger from a base64 encoded backup archive")
+    @PreAuthorize("isAuthenticated()")
+    public LedgerResponses.Ledger restoreLedger(
+            @McpToolParam(description = "Base64 encoded ledger backup archive") String base64Content,
+            @McpToolParam(description = "Optional restored ledger name", required = false) String name) {
+        UUID actorId = actor();
+        byte[] content = decode(base64Content, "LEDGER_BACKUP_CONTENT_INVALID");
+        return audited(actorId, "restore_ledger", null, hash(base64Content) + ":" + name,
+                () -> backupService.restore(currentUserResolver.resolveAuthenticatedUserDetails(), name,
+                        content.length, new ByteArrayInputStream(content)));
+    }
+
+    @McpTool(name = "list_documents", description = "List documents in a ledger")
+    @PreAuthorize("isAuthenticated()")
+    public List<DocumentResponses.Document> listDocuments(
+            @McpToolParam(description = "Ledger identifier") UUID ledgerId,
+            @McpToolParam(description = "Maximum number of documents", required = false) Integer limit,
+            @McpToolParam(description = "Number of documents to skip", required = false) Integer offset) {
+        UUID actorId = actor();
+        int actualLimit = limit == null ? 50 : limit;
+        int actualOffset = offset == null ? 0 : offset;
+        return audited(actorId, "list_documents", ledgerId, actualLimit + ":" + actualOffset,
+                () -> documentService.list(actorId, ledgerId, actualLimit, actualOffset));
+    }
+
+    @McpTool(name = "get_document", description = "Get one document in a ledger")
+    @PreAuthorize("isAuthenticated()")
+    public DocumentResponses.Document getDocument(
+            @McpToolParam(description = "Ledger identifier") UUID ledgerId,
+            @McpToolParam(description = "Document identifier") UUID documentId) {
+        UUID actorId = actor();
+        return audited(actorId, "get_document", ledgerId, documentId.toString(),
+                () -> documentService.find(actorId, ledgerId, documentId));
+    }
+
+    @McpTool(name = "download_document", description = "Download a document as a base64 encoded file")
+    @PreAuthorize("isAuthenticated()")
+    public ExportedFile downloadDocument(
+            @McpToolParam(description = "Ledger identifier") UUID ledgerId,
+            @McpToolParam(description = "Document identifier") UUID documentId) {
+        UUID actorId = actor();
+        return audited(actorId, "download_document", ledgerId, documentId.toString(), () -> {
+            DocumentResponses.Content content = documentService.content(actorId, ledgerId, documentId);
+            return file(content.fileName(), content.contentType(), content.bytes());
+        });
+    }
+
+    @McpTool(name = "list_document_extractions", description = "List extraction results for a document")
+    @PreAuthorize("isAuthenticated()")
+    public List<ExtractionResponses.Extraction> listDocumentExtractions(
+            @McpToolParam(description = "Ledger identifier") UUID ledgerId,
+            @McpToolParam(description = "Document identifier") UUID documentId) {
+        UUID actorId = actor();
+        return audited(actorId, "list_document_extractions", ledgerId, documentId.toString(),
+                () -> extractionService.list(actorId, ledgerId, documentId));
+    }
+
+    @McpTool(name = "create_voucher_draft_from_document_standard",
+            description = "Save, automatically approve, and post a voucher from a document")
+    @PreAuthorize("isAuthenticated()")
+    public VoucherResponses.Voucher createVoucherDraftFromDocumentStandard(
+            @McpToolParam(description = "Ledger identifier") UUID ledgerId,
+            @McpToolParam(description = "Document identifier") UUID documentId) {
+        UUID actorId = actor();
+        return audited(actorId, "create_voucher_draft_from_document_standard", ledgerId, documentId.toString(),
+                () -> extractionService.createVoucherDraft(actorId, ledgerId, documentId));
     }
 
     @McpTool(name = "ensure_account",
@@ -93,15 +561,60 @@ public class FinanceMcpTools {
             @McpToolParam(description = "One of trial_balance, balance_sheet, income_statement, general_ledger, sub_ledger") String report,
             @McpToolParam(description = "Accounting period code, or null for all periods", required = false) String periodCode) {
         UUID actorId = actor();
-        return audited(actorId, "finance_query", ledgerId, report + ":" + periodCode, () -> switch (report) {
-            case "trial_balance" -> reportingService.trialBalance(actorId, ledgerId, periodCode);
-            case "balance_sheet" -> reportingService.balanceSheet(actorId, ledgerId, periodCode);
-            case "income_statement" -> reportingService.incomeStatement(actorId, ledgerId, periodCode);
-            case "general_ledger" -> reportingService.generalLedger(actorId, ledgerId, periodCode);
-            case "sub_ledger" -> reportingService.subLedger(actorId, ledgerId, periodCode);
-            default -> throw new ApiProblemException(422, "FINANCE_QUERY_INVALID", "Invalid finance query",
-                    "The report is not in the whitelist", false);
-        });
+        return audited(actorId, "finance_query", ledgerId, report + ":" + periodCode,
+                () -> queryReport(actorId, ledgerId, report, periodCode, false));
+    }
+
+    @McpTool(name = "export_report",
+            description = "Export a whitelisted finance report as a UTF-8 JSON file encoded in base64")
+    @PreAuthorize("isAuthenticated()")
+    public ExportedFile exportReport(
+            @McpToolParam(description = "Ledger identifier") UUID ledgerId,
+            @McpToolParam(description = "One of trial_balance, balance_sheet, income_statement, general_ledger, sub_ledger")
+            String report,
+            @McpToolParam(description = "Accounting period code, or null for all periods", required = false)
+            String periodCode,
+            @McpToolParam(description = "Include parent accounts for trial_balance", required = false)
+            boolean includeParents) {
+        UUID actorId = actor();
+        String normalizedPeriod = periodCode == null || periodCode.isBlank() ? null : periodCode.trim();
+        return audited(actorId, "export_report", ledgerId, report + ":" + normalizedPeriod + ":" + includeParents,
+                () -> {
+                    Object data = queryReport(actorId, ledgerId, report, normalizedPeriod, includeParents);
+                    Map<String, Object> payload = new LinkedHashMap<>();
+                    payload.put("ledgerId", ledgerId);
+                    payload.put("report", report);
+                    payload.put("periodCode", normalizedPeriod);
+                    payload.put("includeParents", includeParents);
+                    payload.put("data", data);
+                    try {
+                        return file(report.replace('_', '-') + "-"
+                                        + (normalizedPeriod == null ? "all" : normalizedPeriod) + ".json",
+                                "application/json; charset=UTF-8",
+                                objectMapper.writeValueAsBytes(payload));
+                    } catch (IOException exception) {
+                        throw new ApiProblemException(500, "REPORT_EXPORT_FAILED", "Report export failed",
+                                "The report file could not be generated", false);
+                    }
+                });
+    }
+
+    @McpTool(name = "finance_query_advanced",
+            description = "Run the REST finance query with metric, period range, grouping, and filters")
+    @PreAuthorize("isAuthenticated()")
+    public List<com.example.accounting.reporting.ReportResponses.FinanceQueryLine> financeQueryAdvanced(
+            @McpToolParam(description = "Ledger identifier") UUID ledgerId,
+            @McpToolParam(description = "Metric: DEBIT, CREDIT, NET, or BALANCE") String metric,
+            @McpToolParam(description = "Starting accounting period, optional", required = false) String periodFrom,
+            @McpToolParam(description = "Ending accounting period, optional", required = false) String periodTo,
+            @McpToolParam(description = "Group by ACCOUNT, MONTH, CURRENCY, or DIMENSION") List<String> groupBy,
+            @McpToolParam(description = "Optional accountCodes and currency filters", required = false)
+            FinanceQueryRequests.Filters filters) {
+        UUID actorId = actor();
+        FinanceQueryRequests.Query request = new FinanceQueryRequests.Query(
+                metric, periodFrom, periodTo, groupBy, filters);
+        return audited(actorId, "finance_query_advanced", ledgerId, request.toString(),
+                () -> reportingService.financeQuery(actorId, ledgerId, request));
     }
 
     @McpTool(name = "get_voucher", description = "Get one voucher visible in a ledger")
@@ -114,7 +627,162 @@ public class FinanceMcpTools {
                 () -> voucherService.find(actorId, ledgerId, voucherId));
     }
 
-    @McpTool(name = "create_voucher_draft", description = "Create a draft voucher; validation and posting are separate actions")
+    @McpTool(name = "list_vouchers", description = "List vouchers visible in a ledger")
+    @PreAuthorize("isAuthenticated()")
+    public List<VoucherResponses.Voucher> listVouchers(
+            @McpToolParam(description = "Ledger identifier") UUID ledgerId,
+            @McpToolParam(description = "Maximum number of vouchers", required = false) Integer limit,
+            @McpToolParam(description = "Number of vouchers to skip", required = false) Integer offset) {
+        UUID actorId = actor();
+        int actualLimit = limit == null ? 100 : limit;
+        int actualOffset = offset == null ? 0 : offset;
+        return audited(actorId, "list_vouchers", ledgerId, actualLimit + ":" + actualOffset,
+                () -> voucherService.list(actorId, ledgerId, actualLimit, actualOffset));
+    }
+
+    @McpTool(name = "create_voucher", description = "Save, automatically approve, and post a voucher")
+    @PreAuthorize("isAuthenticated()")
+    public VoucherResponses.Voucher createVoucher(
+            @McpToolParam(description = "Voucher payload") VoucherRequests.Create request,
+            @McpToolParam(description = "Ledger identifier") UUID ledgerId,
+            @McpToolParam(description = "Unique retry key, optional", required = false) String idempotencyKey) {
+        UUID actorId = actor();
+        String key = idempotencyKey == null || idempotencyKey.isBlank() ? null : idempotencyKey.trim();
+        return audited(actorId, "create_voucher", ledgerId, request + ":" + key,
+                () -> voucherService.create(actorId, ledgerId, request, key));
+    }
+
+    @McpTool(name = "update_voucher", description = "Update a draft voucher using standard ledger permissions")
+    @PreAuthorize("isAuthenticated()")
+    public VoucherResponses.Voucher updateVoucher(
+            @McpToolParam(description = "Ledger identifier") UUID ledgerId,
+            @McpToolParam(description = "Voucher identifier") UUID voucherId,
+            @McpToolParam(description = "Voucher update payload") VoucherRequests.Update request) {
+        UUID actorId = actor();
+        return audited(actorId, "update_voucher", ledgerId, voucherId + ":" + request,
+                () -> voucherService.update(actorId, ledgerId, voucherId, request));
+    }
+
+    @McpTool(name = "validate_voucher_standard",
+            description = "Validate a voucher using standard owner/editor permissions")
+    @PreAuthorize("isAuthenticated()")
+    public VoucherResponses.Voucher validateVoucherStandard(
+            @McpToolParam(description = "Ledger identifier") UUID ledgerId,
+            @McpToolParam(description = "Voucher identifier") UUID voucherId) {
+        UUID actorId = actor();
+        return audited(actorId, "validate_voucher_standard", ledgerId, voucherId.toString(),
+                () -> voucherService.validate(actorId, ledgerId, voucherId));
+    }
+
+    @McpTool(name = "submit_voucher", description = "Submit a validated voucher for approval")
+    @PreAuthorize("isAuthenticated()")
+    public VoucherResponses.Voucher submitVoucher(
+            @McpToolParam(description = "Ledger identifier") UUID ledgerId,
+            @McpToolParam(description = "Voucher identifier") UUID voucherId) {
+        UUID actorId = actor();
+        return audited(actorId, "submit_voucher", ledgerId, voucherId.toString(),
+                () -> voucherService.submit(actorId, ledgerId, voucherId));
+    }
+
+    @McpTool(name = "approve_voucher", description = "Approve a submitted voucher")
+    @PreAuthorize("isAuthenticated()")
+    public VoucherResponses.Voucher approveVoucher(
+            @McpToolParam(description = "Ledger identifier") UUID ledgerId,
+            @McpToolParam(description = "Voucher identifier") UUID voucherId,
+            @McpToolParam(description = "Approval comment") String comment) {
+        UUID actorId = actor();
+        return audited(actorId, "approve_voucher", ledgerId, voucherId + ":" + comment,
+                () -> voucherService.approve(actorId, ledgerId, voucherId, comment));
+    }
+
+    @McpTool(name = "reject_voucher", description = "Reject a submitted voucher")
+    @PreAuthorize("isAuthenticated()")
+    public VoucherResponses.Voucher rejectVoucher(
+            @McpToolParam(description = "Ledger identifier") UUID ledgerId,
+            @McpToolParam(description = "Voucher identifier") UUID voucherId,
+            @McpToolParam(description = "Rejection comment") String comment) {
+        UUID actorId = actor();
+        return audited(actorId, "reject_voucher", ledgerId, voucherId + ":" + comment,
+                () -> voucherService.reject(actorId, ledgerId, voucherId, comment));
+    }
+
+    @McpTool(name = "post_voucher_standard",
+            description = "Post a voucher using standard owner/editor permissions")
+    @PreAuthorize("isAuthenticated()")
+    public VoucherResponses.Voucher postVoucherStandard(
+            @McpToolParam(description = "Ledger identifier") UUID ledgerId,
+            @McpToolParam(description = "Voucher identifier") UUID voucherId) {
+        UUID actorId = actor();
+        return audited(actorId, "post_voucher_standard", ledgerId, voucherId.toString(),
+                () -> voucherService.post(actorId, ledgerId, voucherId));
+    }
+
+    @McpTool(name = "unpost_voucher", description = "Unpost a posted voucher")
+    @PreAuthorize("isAuthenticated()")
+    public VoucherResponses.Voucher unpostVoucher(
+            @McpToolParam(description = "Ledger identifier") UUID ledgerId,
+            @McpToolParam(description = "Voucher identifier") UUID voucherId,
+            @McpToolParam(description = "Unpost reason") String reason) {
+        UUID actorId = actor();
+        return audited(actorId, "unpost_voucher", ledgerId, voucherId + ":" + reason,
+                () -> voucherService.unpost(actorId, ledgerId, voucherId, reason));
+    }
+
+    @McpTool(name = "reverse_voucher", description = "Create a reversal voucher for a posted voucher")
+    @PreAuthorize("isAuthenticated()")
+    public VoucherResponses.Voucher reverseVoucher(
+            @McpToolParam(description = "Ledger identifier") UUID ledgerId,
+            @McpToolParam(description = "Posted voucher identifier") UUID voucherId) {
+        UUID actorId = actor();
+        return audited(actorId, "reverse_voucher", ledgerId, voucherId.toString(),
+                () -> voucherService.reverse(actorId, ledgerId, voucherId));
+    }
+
+    @McpTool(name = "delete_voucher", description = "Delete a voucher")
+    @PreAuthorize("isAuthenticated()")
+    public boolean deleteVoucher(
+            @McpToolParam(description = "Ledger identifier") UUID ledgerId,
+            @McpToolParam(description = "Voucher identifier") UUID voucherId) {
+        UUID actorId = actor();
+        return audited(actorId, "delete_voucher", ledgerId, voucherId.toString(), () -> {
+            voucherService.delete(actorId, ledgerId, voucherId);
+            return true;
+        });
+    }
+
+    @McpTool(name = "restore_deleted_voucher", description = "Restore a deleted voucher")
+    @PreAuthorize("isAuthenticated()")
+    public VoucherResponses.Voucher restoreDeletedVoucher(
+            @McpToolParam(description = "Ledger identifier") UUID ledgerId,
+            @McpToolParam(description = "Voucher identifier") UUID voucherId) {
+        UUID actorId = actor();
+        return audited(actorId, "restore_deleted_voucher", ledgerId, voucherId.toString(),
+                () -> voucherService.restoreDeleted(actorId, ledgerId, voucherId));
+    }
+
+    @McpTool(name = "list_voucher_revisions", description = "List revisions for a voucher")
+    @PreAuthorize("isAuthenticated()")
+    public List<VoucherResponses.Revision> listVoucherRevisions(
+            @McpToolParam(description = "Ledger identifier") UUID ledgerId,
+            @McpToolParam(description = "Voucher identifier") UUID voucherId) {
+        UUID actorId = actor();
+        return audited(actorId, "list_voucher_revisions", ledgerId, voucherId.toString(),
+                () -> voucherService.listRevisions(actorId, ledgerId, voucherId));
+    }
+
+    @McpTool(name = "restore_voucher_revision", description = "Restore a voucher revision")
+    @PreAuthorize("isAuthenticated()")
+    public VoucherResponses.Voucher restoreVoucherRevision(
+            @McpToolParam(description = "Ledger identifier") UUID ledgerId,
+            @McpToolParam(description = "Voucher identifier") UUID voucherId,
+            @McpToolParam(description = "Revision number") int revision) {
+        UUID actorId = actor();
+        return audited(actorId, "restore_voucher_revision", ledgerId, voucherId + ":" + revision,
+                () -> voucherService.restoreRevision(actorId, ledgerId, voucherId, revision));
+    }
+
+    @McpTool(name = "create_voucher_draft",
+            description = "Save, automatically approve, and post a voucher with agent permissions")
     @PreAuthorize("isAuthenticated()")
     public VoucherResponses.Voucher createVoucherDraft(
             @McpToolParam(description = "Draft voucher payload") VoucherRequests.Create request,
@@ -191,7 +859,8 @@ public class FinanceMcpTools {
                 () -> jobService.find(actorId, ledgerId, jobId));
     }
 
-    @McpTool(name = "create_voucher_draft_from_document", description = "Create an idempotent voucher draft from a document extraction")
+    @McpTool(name = "create_voucher_draft_from_document",
+            description = "Save, automatically approve, and post an idempotent voucher from a document extraction")
     @PreAuthorize("isAuthenticated()")
     public VoucherResponses.Voucher createVoucherDraftFromDocument(
             @McpToolParam(description = "Ledger identifier") UUID ledgerId,
@@ -204,6 +873,43 @@ public class FinanceMcpTools {
     private UUID actor() {
         return currentUserResolver.resolveAuthenticatedUser();
     }
+
+    private Object queryReport(UUID actorId, UUID ledgerId, String report, String periodCode,
+                               boolean includeParents) {
+        if ("trial_balance".equals(report)) {
+            return reportingService.trialBalance(actorId, ledgerId, periodCode, includeParents);
+        }
+        return switch (report) {
+            case "balance_sheet" -> reportingService.balanceSheet(actorId, ledgerId, periodCode);
+            case "income_statement" -> reportingService.incomeStatement(actorId, ledgerId, periodCode);
+            case "general_ledger" -> reportingService.generalLedger(actorId, ledgerId, periodCode);
+            case "sub_ledger" -> reportingService.subLedger(actorId, ledgerId, periodCode);
+            default -> throw new ApiProblemException(422, "FINANCE_QUERY_INVALID", "Invalid finance query",
+                    "The report is not in the whitelist", false);
+        };
+    }
+
+    private ExportedFile file(String fileName, String contentType, byte[] content) {
+        return new ExportedFile(fileName, contentType, Base64.getEncoder().encodeToString(content), content.length);
+    }
+
+    private byte[] decode(String content, String errorCode) {
+        if (content == null) {
+            throw new ApiProblemException(400, errorCode, "Invalid base64 content", "The file content is required", false);
+        }
+        try {
+            return Base64.getDecoder().decode(content);
+        } catch (IllegalArgumentException exception) {
+            throw new ApiProblemException(400, errorCode, "Invalid base64 content",
+                    "The file content must be base64", false);
+        }
+    }
+
+    public record ExportedFile(String fileName, String contentType, String base64Content, long byteLength) {
+    }
+
+    private static final String XLSX_CONTENT_TYPE =
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 
     private String requiredIdempotencyKey(String key) {
         if (key == null || key.isBlank()) {

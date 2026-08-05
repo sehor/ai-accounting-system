@@ -1273,6 +1273,7 @@ export interface components {
             subject?: string;
             displayName?: string;
             email?: string;
+            userType?: "HUMAN" | "AGENT";
             status?: string;
         };
         Revision: {

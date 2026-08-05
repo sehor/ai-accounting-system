@@ -7,8 +7,6 @@ export interface Session {
 }
 
 const SESSION_KEY = 'ai-accounting.session'
-const LOCAL_USER_KEY_PREFIX = 'ai-accounting.local-user.'
-const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
 export function getSession(): Session | null {
   const raw = sessionStorage.getItem(SESSION_KEY)
@@ -38,15 +36,7 @@ export function isLocalAuthEnabled(): boolean {
 }
 
 export function createLocalSession(username: string): Session {
-  const localUserName = username.trim()
-  const storageKey = `${LOCAL_USER_KEY_PREFIX}${localUserName.toLowerCase()}`
-  let localUserId = localStorage.getItem(storageKey)
-  if (!localUserId || !UUID_PATTERN.test(localUserId)) {
-    // ponytail: browser-local identity is enough for dev login; move mapping server-side if cross-browser identity matters.
-    localUserId = crypto.randomUUID()
-    localStorage.setItem(storageKey, localUserId)
-  }
-  return { localUserId, localUserName }
+  return { localUserName: username.trim() }
 }
 
 function oidcManager(): UserManager {

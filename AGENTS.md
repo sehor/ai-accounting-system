@@ -13,5 +13,6 @@ Rules:
 
 ## Verification
 
-- Default frontend checks: `pnpm lint`, `pnpm typecheck`, and `pnpm test`.
-- `pnpm build` is intentionally excluded from default verification because it is slow; run it only after the user explicitly confirms.
+- Default verification must stay scoped to the change: run only directly relevant test files/cases and lint only changed files.
+- Do not run repository-wide `pnpm test`, `pnpm lint`, `pnpm typecheck`, or `pnpm build` unless the user explicitly approves it for the current task.
+- If no targeted verification exists, report that limitation and ask before running a broader check.

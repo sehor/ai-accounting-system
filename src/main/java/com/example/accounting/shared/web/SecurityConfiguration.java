@@ -20,6 +20,12 @@ public class SecurityConfiguration {
     @Value("${app.security.local-user-header-enabled:false}")
     private boolean localUserHeaderEnabled;
 
+    @Value("${app.security.dev-bearer-token:}")
+    private String devBearerToken;
+
+    @Value("${app.security.dev-bearer-user-id:}")
+    private String devBearerUserId;
+
     @Bean
     SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http.csrf(csrf -> csrf.disable())
@@ -33,7 +39,8 @@ public class SecurityConfiguration {
                     auth.anyRequest().permitAll();
                 })
                 .addFilterBefore(new LocalUserHeaderAuthenticationFilter(
-                        localUserHeaderEnabled && !StringUtils.hasText(issuerUri)),
+                        localUserHeaderEnabled && !StringUtils.hasText(issuerUri),
+                        devBearerToken, devBearerUserId),
                         AnonymousAuthenticationFilter.class);
         if (StringUtils.hasText(issuerUri)) {
             http.oauth2ResourceServer(oauth2 -> oauth2.jwt(jwt -> { }));

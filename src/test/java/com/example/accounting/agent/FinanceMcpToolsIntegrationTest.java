@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.example.accounting.identity.CurrentUserResolver;
 import com.example.accounting.identity.IdentityService;
+import com.example.accounting.ledger.AccountExchangeService;
 import com.example.accounting.ledger.LedgerRequests;
 import com.example.accounting.ledger.LedgerRole;
 import com.example.accounting.ledger.LedgerService;
@@ -51,7 +52,7 @@ class FinanceMcpToolsIntegrationTest {
     }
 
     @Test
-    void agentCanCreateAndValidateDraftOnlyThroughMcpTools() {
+    void agentCanSaveAPostedVoucherThroughMcpTools() {
         UUID ownerId = UUID.randomUUID();
         UUID agentId = UUID.randomUUID();
         identityService.ensureUser(user(agentId));
@@ -73,18 +74,14 @@ class FinanceMcpToolsIntegrationTest {
         var retriedDocument = tools.uploadDocument(
                 ledgerId, "invoice.pdf", "application/pdf", content, "upload-key");
 
-        assertThat(draft.status()).isEqualTo("DRAFT");
+        assertThat(draft.status()).isEqualTo("POSTED");
         assertThat(retriedDraft.id()).isEqualTo(draft.id());
         assertThat(retriedDocument.id()).isEqualTo(document.id());
-        assertThat(tools.validateVoucher(ledgerId, draft.id()).status()).isEqualTo("VALIDATED");
         assertThatThrownBy(() -> voucherService.post(agentId, ledgerId, draft.id()))
                 .isInstanceOf(ApiProblemException.class);
-        var posted = tools.postVoucher(ledgerId, draft.id());
-        assertThat(posted.status()).isEqualTo("POSTED");
-        assertThat(tools.postVoucher(ledgerId, draft.id()).id()).isEqualTo(posted.id());
         assertThat(jdbc.queryForObject("""
                 select count(*) from agent_tool_audit where trace_id = ? and outcome = 'SUCCESS'
-                """, Long.class, traceId)).isEqualTo(7L);
+                """, Long.class, traceId)).isEqualTo(4L);
     }
 
     @Test
@@ -109,7 +106,7 @@ class FinanceMcpToolsIntegrationTest {
     }
 
     @Test
-    void agentCannotBypassApprovalWhenPosting() {
+    void agentSaveAutomaticallyApprovesAndPosts() {
         UUID ownerId = UUID.randomUUID();
         UUID agentId = UUID.randomUUID();
         identityService.ensureUser(user(agentId));
@@ -118,11 +115,12 @@ class FinanceMcpToolsIntegrationTest {
         ledgerService.addMember(ownerId, ledgerId, new LedgerRequests.AddMember(agentId, LedgerRole.AGENT));
         authenticate(agentId);
 
-        var draft = tools.createVoucherDraft(request(ledgerId), ledgerId, "approval-draft");
-        tools.validateVoucher(ledgerId, draft.id());
+        var voucher = tools.createVoucherDraft(request(ledgerId), ledgerId, "approval-draft");
 
-        assertThatThrownBy(() -> tools.postVoucher(ledgerId, draft.id()))
-                .isInstanceOf(ApiProblemException.class);
+        assertThat(voucher.status()).isEqualTo("POSTED");
+        assertThat(jdbc.queryForObject(
+                "select count(*) from voucher_approval where voucher_id = ? and action = 'APPROVE'",
+                Long.class, voucher.id())).isEqualTo(1L);
     }
 
     @Test
@@ -146,6 +144,36 @@ class FinanceMcpToolsIntegrationTest {
         assertThatThrownBy(() -> tools.ensureAccount(ledgerId, new LedgerRequests.AccountCreate(
                 "100201", "冲突科目", "ASSET", "DEBIT")))
                 .isInstanceOf(ApiProblemException.class);
+    }
+
+    @Test
+    void agentCanExportAccountsVouchersAndReportsThroughMcpTools() {
+        UUID ownerId = UUID.randomUUID();
+        UUID ledgerId = ledgerService.create(user(ownerId), new LedgerRequests.Create(
+                "agent-exports", "SME", "v1", "CNY", LocalDate.of(2026, 1, 1), false)).id();
+        authenticate(ownerId);
+
+        var accounts = tools.exportAccounts(ledgerId, AccountExchangeService.Format.STANDARD);
+        var vouchers = tools.exportKingdeeVouchers(ledgerId);
+        var report = tools.exportReport(ledgerId, "trial_balance", "2026-01", false);
+
+        assertThat(accounts.fileName()).isEqualTo("accounts-standard.xlsx");
+        assertThat(accounts.contentType())
+                .isEqualTo("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+        assertThat(Base64.getDecoder().decode(accounts.base64Content())).startsWith((byte) 'P', (byte) 'K');
+        assertThat(vouchers.fileName()).isEqualTo("kingdee-vouchers.xlsx");
+        assertThat(Base64.getDecoder().decode(vouchers.base64Content())).startsWith((byte) 'P', (byte) 'K');
+        assertThat(report.fileName()).isEqualTo("trial-balance-2026-01.json");
+        assertThat(report.contentType()).isEqualTo("application/json; charset=UTF-8");
+        assertThat(new String(Base64.getDecoder().decode(report.base64Content()), StandardCharsets.UTF_8))
+                .contains("trial_balance", ledgerId.toString());
+
+        for (String reportName : List.of("balance_sheet", "income_statement", "general_ledger", "sub_ledger")) {
+            var exported = tools.exportReport(ledgerId, reportName, "2026-01", false);
+            assertThat(exported.fileName()).isEqualTo(reportName.replace('_', '-') + "-2026-01.json");
+            assertThat(new String(Base64.getDecoder().decode(exported.base64Content()), StandardCharsets.UTF_8))
+                    .contains('"' + reportName + '"');
+        }
     }
 
     private VoucherRequests.Create request(UUID ledgerId) {

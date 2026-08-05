@@ -1,3 +1,6 @@
 app:
   security:
     local-user-header-enabled: true
+    # Dev-only bearer token; disabled automatically when an OIDC issuer is configured.
+    dev-bearer-token: ${DEV_BEARER_TOKEN:dev-admin-token}
+    dev-bearer-user-id: ${DEV_BEARER_USER_ID:00000000-0000-4000-8000-000000000001}

@@ -91,6 +91,25 @@ class Stage0HttpSupportTest {
     }
 
     @Test
+    void localDevBearerTokenAuthenticatesTheConfiguredUser() throws Exception {
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.addHeader("Authorization", "Bearer dev-token");
+
+        new LocalUserHeaderAuthenticationFilter(true, "dev-token",
+                "00000000-0000-4000-8000-000000000001").doFilter(
+                request, new MockHttpServletResponse(), new MockFilterChain() {
+                    @Override
+                    public void doFilter(jakarta.servlet.ServletRequest servletRequest,
+                                         jakarta.servlet.ServletResponse servletResponse) {
+                        assertEquals("00000000-0000-4000-8000-000000000001",
+                                SecurityContextHolder.getContext().getAuthentication().getName());
+                    }
+                });
+
+        assertTrue(SecurityContextHolder.getContext().getAuthentication() == null);
+    }
+
+    @Test
     void localAuthenticationDoesNotRepeatARequestWhenDownstreamFails() {
         var calls = new AtomicInteger();
         MockHttpServletRequest request = new MockHttpServletRequest();

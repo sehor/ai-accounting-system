@@ -47,9 +47,7 @@ class Stage4ReportingTest {
                 periodId, LocalDate.of(2026, 1, 15), "记", "1", "Posted",
                 List.of(line(cashId, "DEBIT", "100"), line(capitalId, "CREDIT", "50"),
                         line(revenueId, "CREDIT", "50"))));
-        assertThat(reportingService.trialBalance(userId, ledgerId, "2026-01")).isEmpty();
-        voucherService.validate(userId, ledgerId, voucher.id());
-        voucherService.post(userId, ledgerId, voucher.id());
+        assertThat(voucher.status()).isEqualTo("POSTED");
 
         List<ReportResponses.TrialBalanceLine> lines = reportingService.trialBalance(userId, ledgerId, "2026-01");
         assertThat(lines).hasSize(3);
@@ -93,8 +91,7 @@ class Stage4ReportingTest {
                 .containsExactly("1001");
 
         VoucherResponses.Voucher reversal = voucherService.reverse(userId, ledgerId, voucher.id());
-        voucherService.validate(userId, ledgerId, reversal.id());
-        voucherService.post(userId, ledgerId, reversal.id());
+        assertThat(reversal.status()).isEqualTo("POSTED");
         assertThat(reportingService.trialBalance(userId, ledgerId, "2026-01"))
                 .allSatisfy(line -> assertThat(line.balance()).isEqualByComparingTo(BigDecimal.ZERO));
     }
@@ -112,8 +109,7 @@ class Stage4ReportingTest {
         VoucherResponses.Voucher voucher = voucherService.create(userId, ledgerId, new VoucherRequests.Create(
                 periodId, LocalDate.of(2026, 1, 15), "记", "2", "Parent rollup",
                 List.of(line(cash, "DEBIT", "100"), line(capital, "CREDIT", "100"))));
-        voucherService.validate(userId, ledgerId, voucher.id());
-        voucherService.post(userId, ledgerId, voucher.id());
+        assertThat(voucher.status()).isEqualTo("POSTED");
 
         assertThat(reportingService.trialBalance(userId, ledgerId, "2026-01"))
                 .extracting(ReportResponses.TrialBalanceLine::code)
