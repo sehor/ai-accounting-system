@@ -14,6 +14,7 @@ import com.example.accounting.ledger.LedgerResponses;
 import com.example.accounting.ledger.LedgerRole;
 import com.example.accounting.ledger.LedgerService;
 import com.example.accounting.ledger.MembershipStatus;
+import com.example.accounting.ledger.PeriodCloseGuard;
 import com.example.accounting.ledger.internal.persistence.AccountManagementRepository;
 import com.example.accounting.ledger.internal.port.LedgerRepository;
 import com.example.accounting.shared.web.ApiProblemException;
@@ -35,6 +36,7 @@ import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -57,16 +59,18 @@ public class DefaultLedgerService implements LedgerService {
     private final LedgerAccessService ledgerAccess;
     private final IdentityService identityService;
     private final AccountingStandardCatalog standards;
+    private final ObjectProvider<PeriodCloseGuard> periodCloseGuard;
     private final ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
 
     public DefaultLedgerService(LedgerRepository ledgers, AccountManagementRepository accounts,
                                 LedgerAccessService ledgerAccess, IdentityService identityService,
-                                AccountingStandardCatalog standards) {
+                                AccountingStandardCatalog standards, ObjectProvider<PeriodCloseGuard> periodCloseGuard) {
         this.ledgers = ledgers;
         this.accounts = accounts;
         this.ledgerAccess = ledgerAccess;
         this.identityService = identityService;
         this.standards = standards;
+        this.periodCloseGuard = periodCloseGuard;
     }
 
     @Override
@@ -495,6 +499,15 @@ public class DefaultLedgerService implements LedgerService {
         if (!expectedStatus.equals(period.status())) {
             throw problem(409, "PERIOD_STATE_INVALID", "Invalid period state",
                     "The period must be " + expectedStatus + " before it can be changed");
+        }
+        if ("CLOSED".equals(nextStatus)) {
+            List<String> blockers = periodCloseGuard.orderedStream()
+                    .flatMap(guard -> guard.blockers(actorId, ledgerId, periodId).stream())
+                    .distinct().toList();
+            if (!blockers.isEmpty()) {
+                throw problem(409, "FIXED_ASSET_PERIOD_INCOMPLETE", "Period close is blocked",
+                        String.join("; ", blockers));
+            }
         }
         String reason = request.reason() == null ? "" : request.reason().trim();
         if (reason.isEmpty()) {

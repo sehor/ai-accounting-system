@@ -65,7 +65,8 @@ public class LedgerBackupService {
             new TableDef("document_extraction"),
             new TableDef("agent_tool_audit"));
     private static final Set<LedgerRole> OWNER = Set.of(LedgerRole.OWNER);
-    private static final List<TableDef> TABLES = appendExperienceTable(V1_TABLES);
+    private static final List<TableDef> V1_WITH_FIXED_ASSETS = appendFixedAssetTables(V1_TABLES);
+    private static final List<TableDef> TABLES = appendExperienceTable(V1_WITH_FIXED_ASSETS);
 
     private final LedgerAccessService access;
     private final IdentityService identities;
@@ -518,12 +519,18 @@ public class LedgerBackupService {
         if (!data.path("ledger").isObject() || !data.path("tables").isObject()) {
             throw invalid("The backup data structure is incomplete");
         }
-        List<TableDef> tables = version == 1 ? V1_TABLES : TABLES;
-        Set<String> allowedTables = tables.stream().map(TableDef::name)
-                .collect(java.util.stream.Collectors.toSet());
         Set<String> presentTables = new HashSet<>();
         data.path("tables").fieldNames().forEachRemaining(presentTables::add);
-        if (!presentTables.equals(allowedTables)) {
+        Set<String> legacyTables = tableNames(V1_TABLES);
+        Set<String> legacyWithFixedAssets = tableNames(V1_WITH_FIXED_ASSETS);
+        List<TableDef> tables;
+        if (version == 1 && presentTables.equals(legacyTables)) {
+            tables = V1_TABLES;
+        } else if (version == 1 && presentTables.equals(legacyWithFixedAssets)) {
+            tables = V1_WITH_FIXED_ASSETS;
+        } else if (version == FORMAT_VERSION && presentTables.equals(tableNames(TABLES))) {
+            tables = TABLES;
+        } else {
             throw invalid("The backup table set is incomplete or unsupported");
         }
         for (String table : presentTables) {
@@ -621,6 +628,23 @@ public class LedgerBackupService {
         List<TableDef> result = new ArrayList<>(base);
         result.add(new TableDef("accounting_experience"));
         return List.copyOf(result);
+    }
+
+    private static List<TableDef> appendFixedAssetTables(List<TableDef> base) {
+        List<TableDef> result = new ArrayList<>(base);
+        result.add(new TableDef("fixed_asset_category"));
+        result.add(new TableDef("fixed_asset"));
+        result.add(new TableDef("fixed_asset_change"));
+        result.add(new TableDef("fixed_asset_depreciation_run"));
+        result.add(new TableDef("fixed_asset_depreciation_line"));
+        result.add(new TableDef("fixed_asset_disposal"));
+        result.add(new TableDef("fixed_asset_import_batch"));
+        result.add(new TableDef("fixed_asset_import_row"));
+        return List.copyOf(result);
+    }
+
+    private static Set<String> tableNames(List<TableDef> tables) {
+        return tables.stream().map(TableDef::name).collect(java.util.stream.Collectors.toSet());
     }
 
     private record TableDef(String name) {

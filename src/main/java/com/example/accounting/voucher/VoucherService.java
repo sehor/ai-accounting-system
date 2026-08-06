@@ -10,6 +10,9 @@ public interface VoucherService {
     VoucherResponses.Voucher create(UUID actorId, UUID ledgerId, VoucherRequests.Create request,
                                     String idempotencyKey);
 
+    VoucherResponses.Voucher createGenerated(UUID actorId, UUID ledgerId, VoucherRequests.Create request,
+                                             String idempotencyKey, String sourceType, UUID sourceId);
+
     VoucherResponses.Voucher createAgentDraft(UUID actorId, UUID ledgerId, VoucherRequests.Create request,
                                               String idempotencyKey);
 
@@ -38,6 +41,9 @@ public interface VoucherService {
     VoucherResponses.Voucher unpost(UUID actorId, UUID ledgerId, UUID voucherId, String reason);
 
     VoucherResponses.Voucher reverse(UUID actorId, UUID ledgerId, UUID voucherId);
+
+    VoucherResponses.Voucher reverseGenerated(UUID actorId, UUID ledgerId, UUID voucherId,
+                                              String sourceType, UUID sourceId);
 
     void delete(UUID actorId, UUID ledgerId, UUID voucherId);
 

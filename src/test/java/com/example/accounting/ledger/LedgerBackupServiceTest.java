@@ -43,7 +43,9 @@ class LedgerBackupServiceTest {
             "ledger_account_dimension", "accounting_period", "opening_balance", "voucher",
             "voucher_line", "voucher_line_dimension", "voucher_approval", "period_action_audit",
             "report_formula_snapshot", "audit_revision", "document", "document_extraction",
-            "agent_tool_audit", "accounting_experience");
+            "agent_tool_audit", "accounting_experience", "fixed_asset_category", "fixed_asset",
+            "fixed_asset_change", "fixed_asset_depreciation_run", "fixed_asset_depreciation_line",
+            "fixed_asset_disposal", "fixed_asset_import_batch", "fixed_asset_import_row");
 
     @Autowired
     private LedgerBackupService backups;

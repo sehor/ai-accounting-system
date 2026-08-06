@@ -190,7 +190,74 @@ export interface Voucher {
   approvalRequired: boolean
   version: number
   lines: VoucherLine[]
+  sourceType?: string | null
+  sourceId?: string | null
 }
+
+export interface FixedAssetCategory {
+  id: string
+  ledgerId: string
+  code: string
+  name: string
+  usefulLifeMonths: number
+  residualRate: string
+  status: string
+  assetAccountId: string
+  accumulatedDepreciationAccountId: string
+  depreciationExpenseAccountId: string
+  impairmentAccountId: string
+  clearingAccountId: string
+  disposalGainAccountId: string
+  disposalLossAccountId: string
+  version: number
+}
+
+export interface FixedAsset {
+  id: string
+  ledgerId: string
+  categoryId: string
+  categoryCode: string
+  categoryName: string
+  code: string
+  name: string
+  status: string
+  quantity: number
+  serviceDate: string
+  originalCost: string
+  inputTax: string
+  usefulLifeMonths: number
+  residualRate: string
+  residualAmount: string
+  openingAccumulatedDepreciation: string
+  openingDepreciatedMonths: number
+  impairmentAmount: string
+  monthlyDepreciation: string
+  periodDepreciation: string
+  endingAccumulatedDepreciation: string
+  openingNetValue: string
+  endingNetValue: string
+  departmentValueId: string | null
+  acquisitionVoucherId: string | null
+  assetAccountId: string
+  accumulatedDepreciationAccountId: string
+  depreciationExpenseAccountId: string
+  impairmentAccountId: string
+  clearingAccountId: string
+  disposalGainAccountId: string
+  disposalLossAccountId: string
+  disposalDate: string | null
+  note: string | null
+  version: number
+}
+
+export interface FixedAssetPage { data: FixedAsset[]; page: number; pageSize: number; totalItems: number; totalPages: number }
+export interface FixedAssetPreviewLine { assetId: string; code: string; name: string; amount: string; status: string; detail: string | null }
+export interface FixedAssetPreview {
+  periodId: string; periodCode: string; totalAmount: string; eligibleCount: number; completedCount: number; pendingCount: number
+  readyToClose: boolean; blockers: string[]; lines: FixedAssetPreviewLine[]
+}
+export interface FixedAssetRun { id: string; periodId: string; runType: string; status: string; voucherId: string; totalAmount: string; inputFingerprint: string; createdAt: string }
+export interface FixedAssetDisposal { id: string; assetId: string; periodId: string; depreciationVoucherId: string | null; transferVoucherId: string; settlementVoucherId: string; carryingAmount: string; gainOrLoss: string }
 
 export interface VoucherRevision {
   id: string
