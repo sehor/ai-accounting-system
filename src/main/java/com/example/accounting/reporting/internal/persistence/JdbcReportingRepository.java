@@ -1,26 +1,54 @@
 package com.example.accounting.reporting.internal.persistence;
 
 import com.example.accounting.reporting.ReportResponses;
+import com.example.accounting.reporting.BalanceProjectionService;
+import com.example.accounting.reporting.BalanceReadMetadata;
+import com.example.accounting.reporting.internal.port.BalanceProjectionRepository;
 import com.example.accounting.reporting.internal.port.ReportingRepository;
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.Duration;
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Repository;
 
 @Repository
 public class JdbcReportingRepository implements ReportingRepository {
 
     private final JdbcTemplate jdbc;
+    private final BalanceProjectionRepository projection;
+    private final String readMode;
+    private final Duration maxLag;
 
+    @Autowired
+    public JdbcReportingRepository(JdbcTemplate jdbc, BalanceProjectionRepository projection,
+                                   @Value("${accounting.balance.read-mode:legacy}") String readMode,
+                                   @Value("${accounting.balance.max-lag:5s}") Duration maxLag) {
+        this.jdbc = jdbc;
+        this.projection = projection;
+        this.readMode = readMode;
+        this.maxLag = maxLag;
+    }
+
+    /** Compatibility constructor for repository-focused tests. */
     public JdbcReportingRepository(JdbcTemplate jdbc) {
         this.jdbc = jdbc;
+        this.projection = null;
+        this.readMode = "legacy";
+        this.maxLag = Duration.ofSeconds(5);
     }
 
     @Override
     public List<ReportResponses.TrialBalanceLine> trialBalance(UUID ledgerId, String periodCode) {
+        if (useProjection(ledgerId, periodCode)) {
+            return projection.trialBalance(ledgerId, periodCode);
+        }
+        markFallback(ledgerId, periodCode);
         return jdbc.query("""
                 select a.id, a.code, a.name, a.category,
                     coalesce(sum(x.debit), 0) debit, coalesce(sum(x.credit), 0) credit
@@ -56,6 +84,10 @@ public class JdbcReportingRepository implements ReportingRepository {
 
     @Override
     public List<ReportResponses.TrialBalanceLine> trialBalanceWithParents(UUID ledgerId, String periodCode) {
+        if (useProjection(ledgerId, periodCode)) {
+            return projection.trialBalanceWithParents(ledgerId, periodCode);
+        }
+        markFallback(ledgerId, periodCode);
         return jdbc.query("""
                 with recursive account_path as (
                     select id source_id, id account_id, parent_id
@@ -138,5 +170,34 @@ public class JdbcReportingRepository implements ReportingRepository {
     @Override
     public String baseCurrency(UUID ledgerId) {
         return jdbc.queryForObject("select base_currency from ledger where id = ?", String.class, ledgerId);
+    }
+
+    private boolean useProjection(UUID ledgerId, String periodCode) {
+        if (projection == null || "legacy".equalsIgnoreCase(readMode)) {
+            return false;
+        }
+        BalanceProjectionService.ProjectionStatus status = projection.status(ledgerId, periodCode);
+        boolean fresh = status.fresh(maxLag, OffsetDateTime.now());
+        if (fresh) {
+            BalanceReadMetadata.set("projection", status.projectedAt() == null
+                    ? (status.lastEnqueuedAt() == null ? OffsetDateTime.now() : status.lastEnqueuedAt())
+                    : status.projectedAt(), lagMs(status));
+        }
+        return fresh;
+    }
+
+    private void markFallback(UUID ledgerId, String periodCode) {
+        OffsetDateTime now = OffsetDateTime.now();
+        if (projection == null) {
+            BalanceReadMetadata.set("live-fallback", now, 0);
+            return;
+        }
+        BalanceProjectionService.ProjectionStatus status = projection.status(ledgerId, periodCode);
+        BalanceReadMetadata.set("live-fallback", status.projectedAt() == null ? now : status.projectedAt(), lagMs(status));
+    }
+
+    private long lagMs(BalanceProjectionService.ProjectionStatus status) {
+        return status.lastEnqueuedAt() == null ? 0
+                : Math.max(0, Duration.between(status.lastEnqueuedAt(), OffsetDateTime.now()).toMillis());
     }
 }

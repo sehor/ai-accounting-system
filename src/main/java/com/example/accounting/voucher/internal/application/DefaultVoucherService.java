@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.example.accounting.ledger.LedgerAccessService;
 import com.example.accounting.ledger.LedgerRole;
+import com.example.accounting.reporting.BalanceProjectionService;
 import com.example.accounting.shared.web.ApiProblemException;
 import com.example.accounting.voucher.VoucherRequests;
 import com.example.accounting.voucher.VoucherResponses;
@@ -34,11 +35,14 @@ public class DefaultVoucherService implements VoucherService {
 
     private final VoucherRepository vouchers;
     private final LedgerAccessService ledgerAccess;
+    private final BalanceProjectionService balanceProjection;
     private final ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
 
-    public DefaultVoucherService(VoucherRepository vouchers, LedgerAccessService ledgerAccess) {
+    public DefaultVoucherService(VoucherRepository vouchers, LedgerAccessService ledgerAccess,
+                                 BalanceProjectionService balanceProjection) {
         this.vouchers = vouchers;
         this.ledgerAccess = ledgerAccess;
+        this.balanceProjection = balanceProjection;
     }
 
     @Transactional
@@ -377,9 +381,13 @@ public class DefaultVoucherService implements VoucherService {
         }
         ensureControlsComplete(ledgerId, voucherId);
         VoucherSnapshot before = snapshot(ledgerId, voucherId);
+        balanceProjection.requireOpenPeriod(ledgerId, before.periodId());
         if (!vouchers.post(ledgerId, voucherId, requiredStatus, actorId)) {
             throw problem(409, "VOUCHER_STATE_INVALID", "Invalid voucher state", "The voucher state has changed");
         }
+        balanceProjection.publishVoucher(new BalanceProjectionService.VoucherEvent(
+                ledgerId, before.periodId(), voucherId, state.version() + 1,
+                BalanceProjectionService.EventType.POST, balanceEntries(before.lines(), BigDecimal.ONE)));
         audit(ledgerId, voucherId, "POST", actorId, null, before, snapshot(ledgerId, voucherId));
         markOriginalReversed(actorId, ledgerId, voucherId);
         return find(actorId, ledgerId, voucherId);
@@ -390,9 +398,14 @@ public class DefaultVoucherService implements VoucherService {
     public VoucherResponses.Voucher unpost(UUID actorId, UUID ledgerId, UUID voucherId, String reason) {
         requireRole(actorId, ledgerId, Set.of(LedgerRole.OWNER, LedgerRole.EDITOR));
         ensureReason(reason);
-        ensureManual(state(ledgerId, voucherId));
+        VoucherState state = state(ledgerId, voucherId);
+        ensureManual(state);
         VoucherSnapshot before = snapshot(ledgerId, voucherId);
+        balanceProjection.requireOpenPeriod(ledgerId, before.periodId());
         changeStatus(ledgerId, voucherId, "POSTED", "DRAFT", actorId);
+        balanceProjection.publishVoucher(new BalanceProjectionService.VoucherEvent(
+                ledgerId, before.periodId(), voucherId, state.version() + 1,
+                BalanceProjectionService.EventType.UNPOST, balanceEntries(before.lines(), BigDecimal.ONE.negate())));
         audit(ledgerId, voucherId, "UNPOST", actorId, reason.trim(), before, snapshot(ledgerId, voucherId));
         return find(actorId, ledgerId, voucherId);
     }
@@ -538,6 +551,16 @@ public class DefaultVoucherService implements VoucherService {
             throw problem(409, "VOUCHER_MANAGED_BY_SOURCE", "Voucher is managed by a source process",
                     "Generated vouchers can only be changed by their owning asset or settlement workflow");
         }
+    }
+
+    private List<BalanceProjectionService.Entry> balanceEntries(List<VoucherLineSnapshot> lines,
+                                                                BigDecimal sign) {
+        return lines.stream().map(line -> {
+            BigDecimal debit = "DEBIT".equals(line.side()) ? line.baseAmount().multiply(sign) : BigDecimal.ZERO;
+            BigDecimal credit = "CREDIT".equals(line.side()) ? line.baseAmount().multiply(sign) : BigDecimal.ZERO;
+            return new BalanceProjectionService.Entry(line.accountId(), BigDecimal.ZERO, BigDecimal.ZERO,
+                    debit, credit);
+        }).toList();
     }
 
     private void changeStatus(UUID ledgerId, UUID voucherId, String expected, String next, UUID actorId) {

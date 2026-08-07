@@ -15,6 +15,7 @@ import com.example.accounting.ledger.LedgerRole;
 import com.example.accounting.ledger.LedgerService;
 import com.example.accounting.ledger.MembershipStatus;
 import com.example.accounting.ledger.PeriodCloseGuard;
+import com.example.accounting.reporting.BalanceProjectionService;
 import com.example.accounting.ledger.internal.persistence.AccountManagementRepository;
 import com.example.accounting.ledger.internal.port.LedgerRepository;
 import com.example.accounting.shared.web.ApiProblemException;
@@ -37,6 +38,7 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -61,12 +63,15 @@ public class DefaultLedgerService implements LedgerService {
     private final AccountingStandardCatalog standards;
     private final ObjectProvider<PeriodCloseGuard> periodCloseGuard;
     private final LocalSuperAgentPolicy localSuperAgent;
+    private final BalanceProjectionService balanceProjection;
     private final ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
 
+    @Autowired
     public DefaultLedgerService(LedgerRepository ledgers, AccountManagementRepository accounts,
                                 LedgerAccessService ledgerAccess, IdentityService identityService,
                                 AccountingStandardCatalog standards, ObjectProvider<PeriodCloseGuard> periodCloseGuard,
-                                LocalSuperAgentPolicy localSuperAgent) {
+                                LocalSuperAgentPolicy localSuperAgent,
+                                BalanceProjectionService balanceProjection) {
         this.ledgers = ledgers;
         this.accounts = accounts;
         this.ledgerAccess = ledgerAccess;
@@ -74,6 +79,16 @@ public class DefaultLedgerService implements LedgerService {
         this.standards = standards;
         this.periodCloseGuard = periodCloseGuard;
         this.localSuperAgent = localSuperAgent;
+        this.balanceProjection = balanceProjection;
+    }
+
+    /** Compatibility constructor for focused unit tests that do not load the projection module. */
+    public DefaultLedgerService(LedgerRepository ledgers, AccountManagementRepository accounts,
+                                LedgerAccessService ledgerAccess, IdentityService identityService,
+                                AccountingStandardCatalog standards, ObjectProvider<PeriodCloseGuard> periodCloseGuard,
+                                LocalSuperAgentPolicy localSuperAgent) {
+        this(ledgers, accounts, ledgerAccess, identityService, standards, periodCloseGuard,
+                localSuperAgent, new NoopBalanceProjectionService());
     }
 
     @Override
@@ -403,6 +418,7 @@ public class DefaultLedgerService implements LedgerService {
         }
         ledgers.deleteUnconfirmedOpeningBalances(ledgerId);
         for (LedgerRequests.OpeningBalanceLine line : lines) {
+            balanceProjection.requireOpenPeriod(ledgerId, line.periodId());
             validateOpeningBalanceLine(ledgerId, line);
             BigDecimal debit = money(line.debitOriginal());
             BigDecimal credit = money(line.creditOriginal());
@@ -430,7 +446,17 @@ public class DefaultLedgerService implements LedgerService {
             throw problem(422, "OPENING_BALANCE_UNBALANCED", "Opening balance is not balanced",
                     "Opening balance debit and credit totals must balance");
         }
-        return ledgers.confirmOpeningBalances(ledgerId);
+        int confirmed = ledgers.confirmOpeningBalances(ledgerId);
+        if (confirmed > 0) {
+            ledgers.listOpeningBalances(ledgerId).stream().filter(LedgerResponses.OpeningBalance::confirmed)
+                    .forEach(balance -> balanceProjection.publishOpeningBalances(
+                            new BalanceProjectionService.OpeningBalanceEvent(
+                                    ledgerId, balance.periodId(), balance.id(), 1,
+                                    List.of(new BalanceProjectionService.Entry(balance.accountId(),
+                                            balance.debitBase(), balance.creditBase(), BigDecimal.ZERO,
+                                            BigDecimal.ZERO)))));
+        }
+        return confirmed;
     }
 
     @Override
@@ -542,7 +568,13 @@ public class DefaultLedgerService implements LedgerService {
             throw problem(409, "PERIOD_STATE_INVALID", "Invalid period state",
                     "The period must be " + expectedStatus + " before it can be changed");
         }
+        String reason = request.reason() == null ? "" : request.reason().trim();
+        if (reason.isEmpty()) {
+            throw problem(422, "PERIOD_REASON_REQUIRED", "Reason is required",
+                    "A reason is required for period changes");
+        }
         if ("CLOSED".equals(nextStatus)) {
+            balanceProjection.requireReadyForClose(ledgerId, periodId);
             List<String> blockers = periodCloseGuard.orderedStream()
                     .flatMap(guard -> guard.blockers(actorId, ledgerId, periodId).stream())
                     .distinct().toList();
@@ -551,12 +583,10 @@ public class DefaultLedgerService implements LedgerService {
                         String.join("; ", blockers));
             }
         }
-        String reason = request.reason() == null ? "" : request.reason().trim();
-        if (reason.isEmpty()) {
-            throw problem(422, "PERIOD_REASON_REQUIRED", "Reason is required",
-                    "A reason is required for period changes");
-        }
         ledgers.updatePeriodStatus(ledgerId, periodId, nextStatus);
+        if ("OPEN".equals(nextStatus)) {
+            balanceProjection.markReopened(ledgerId, periodId);
+        }
         ledgers.recordPeriodAction(ledgerId, periodId, action, reason, actorId);
         return new LedgerResponses.Period(period.id(), period.ledgerId(), period.periodCode(), period.startDate(),
                 period.endDate(), nextStatus);
@@ -826,6 +856,17 @@ public class DefaultLedgerService implements LedgerService {
 
     private ApiProblemException problem(int status, String code, String title, String detail) {
         return new ApiProblemException(status, code, title, detail, false);
+    }
+
+    private static final class NoopBalanceProjectionService implements BalanceProjectionService {
+        @Override public void publishVoucher(VoucherEvent event) { }
+        @Override public void publishOpeningBalances(OpeningBalanceEvent event) { }
+        @Override public void requireOpenPeriod(UUID ledgerId, UUID periodId) { }
+        @Override public void requireReadyForClose(UUID ledgerId, UUID periodId) { }
+        @Override public void markReopened(UUID ledgerId, UUID periodId) { }
+        @Override public ProjectionStatus status(UUID ledgerId, String periodCode) {
+            return new ProjectionStatus("READY", 0, 0, null, null);
+        }
     }
 
     private record ParentResolution(
