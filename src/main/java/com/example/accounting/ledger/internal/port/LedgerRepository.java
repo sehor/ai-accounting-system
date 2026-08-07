@@ -26,6 +26,8 @@ public interface LedgerRepository {
 
     List<LedgerResponses.Ledger> list(UUID actorId);
 
+    List<LedgerResponses.Ledger> listAllActive();
+
     List<UUID> listAllLedgerIds();
 
     Optional<LedgerResponses.Ledger> findLedger(UUID ledgerId);

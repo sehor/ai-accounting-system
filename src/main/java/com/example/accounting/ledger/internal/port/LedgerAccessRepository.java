@@ -7,4 +7,6 @@ import java.util.UUID;
 public interface LedgerAccessRepository {
 
     Optional<LedgerRole> findRole(UUID actorId, UUID ledgerId);
+
+    boolean activeLedgerExists(UUID ledgerId);
 }

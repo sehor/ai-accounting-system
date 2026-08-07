@@ -1,5 +1,6 @@
 package com.example.accounting.ledger.internal.application;
 
+import com.example.accounting.administration.PlatformAdminPolicy;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.example.accounting.identity.CurrentUserResolver;
@@ -63,6 +64,7 @@ public class DefaultLedgerService implements LedgerService {
     private final AccountingStandardCatalog standards;
     private final ObjectProvider<PeriodCloseGuard> periodCloseGuard;
     private final LocalSuperAgentPolicy localSuperAgent;
+    private final PlatformAdminPolicy platformAdmin;
     private final BalanceProjectionService balanceProjection;
     private final ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
 
@@ -71,6 +73,7 @@ public class DefaultLedgerService implements LedgerService {
                                 LedgerAccessService ledgerAccess, IdentityService identityService,
                                 AccountingStandardCatalog standards, ObjectProvider<PeriodCloseGuard> periodCloseGuard,
                                 LocalSuperAgentPolicy localSuperAgent,
+                                PlatformAdminPolicy platformAdmin,
                                 BalanceProjectionService balanceProjection) {
         this.ledgers = ledgers;
         this.accounts = accounts;
@@ -79,6 +82,7 @@ public class DefaultLedgerService implements LedgerService {
         this.standards = standards;
         this.periodCloseGuard = periodCloseGuard;
         this.localSuperAgent = localSuperAgent;
+        this.platformAdmin = platformAdmin;
         this.balanceProjection = balanceProjection;
     }
 
@@ -86,9 +90,9 @@ public class DefaultLedgerService implements LedgerService {
     public DefaultLedgerService(LedgerRepository ledgers, AccountManagementRepository accounts,
                                 LedgerAccessService ledgerAccess, IdentityService identityService,
                                 AccountingStandardCatalog standards, ObjectProvider<PeriodCloseGuard> periodCloseGuard,
-                                LocalSuperAgentPolicy localSuperAgent) {
+                                LocalSuperAgentPolicy localSuperAgent, PlatformAdminPolicy platformAdmin) {
         this(ledgers, accounts, ledgerAccess, identityService, standards, periodCloseGuard,
-                localSuperAgent, new NoopBalanceProjectionService());
+                localSuperAgent, platformAdmin, new NoopBalanceProjectionService());
     }
 
     @Override
@@ -113,7 +117,7 @@ public class DefaultLedgerService implements LedgerService {
     @Override
     @Transactional(readOnly = true)
     public List<LedgerResponses.Ledger> list(UUID actorId) {
-        return ledgers.list(actorId);
+        return platformAdmin.isPlatformAdmin(actorId) ? ledgers.listAllActive() : ledgers.list(actorId);
     }
 
     @Override

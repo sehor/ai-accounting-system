@@ -81,9 +81,22 @@ public class JdbcLedgerRepository implements LedgerRepository {
                     l.base_currency, l.start_date, l.approval_enabled, l.status
                 from ledger l
                 join ledger_membership m on m.ledger_id = l.id
+                join app_user u on u.id = m.user_id
                 where m.user_id = ? and m.status = 'ACTIVE' and l.status = 'ACTIVE' and l.deleted_at is null
+                    and u.status = 'ACTIVE' and u.deleted_at is null
                 order by l.name, l.id
                 """, (rs, rowNum) -> mapLedger(rs), actorId);
+    }
+
+    @Override
+    public List<LedgerResponses.Ledger> listAllActive() {
+        return jdbc.query("""
+                select id, name, accounting_standard_code, accounting_standard_version,
+                    base_currency, start_date, approval_enabled, status
+                from ledger
+                where status = 'ACTIVE' and deleted_at is null
+                order by name, id
+                """, (rs, rowNum) -> mapLedger(rs));
     }
 
     @Override
