@@ -1,4 +1,4 @@
-import { Alert, App as AntApp, Button, Card, Col, DatePicker, Empty, Form, Input, Modal, Row, Select, Space, Table, Tag, Typography, Upload } from 'antd'
+import { Alert, App as AntApp, Button, Card, Checkbox, Col, DatePicker, Empty, Form, Input, Modal, Row, Select, Space, Table, Tag, Typography, Upload } from 'antd'
 import type { FormInstance } from 'antd'
 import { DownloadOutlined, PlusOutlined, ReloadOutlined, UploadOutlined } from '@ant-design/icons'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -16,13 +16,13 @@ const decimalRule = { pattern: /^\d+(?:\.\d+)?$/, message: '请输入有效数�
 
 export function VoucherListPage() {
   const { ledgerId = '' } = useParams(); const { session } = useAuth(); const navigate = useNavigate(); const client = useQueryClient(); const { message } = AntApp.useApp(); const [search, setSearch] = useSearchParams()
-  const limit = Number(search.get('limit') || 20); const offset = Number(search.get('offset') || 0); const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]); const [bulkAction, setBulkAction] = useState<'approve' | 'post' | null>(null); const [bulkComment, setBulkComment] = useState('')
+  const limit = Number(search.get('limit') || 20); const offset = Number(search.get('offset') || 0); const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]); const [bulkAction, setBulkAction] = useState<'approve' | 'post' | null>(null); const [bulkComment, setBulkComment] = useState(''); const [exportOpen, setExportOpen] = useState(false); const [mergeEntries, setMergeEntries] = useState(false)
   const query = useQuery({ queryKey: ['vouchers', ledgerId, limit, offset], queryFn: () => apiFetch<Voucher[]>(`/ledgers/${ledgerId}/vouchers?limit=${limit}&offset=${offset}`, session!), enabled: Boolean(session && ledgerId) })
   const accounts = useQuery({ queryKey: ['accounts', ledgerId], queryFn: () => apiFetch<Account[]>(`/ledgers/${ledgerId}/accounts`, session!), enabled: Boolean(session && ledgerId) })
   const accountById = useMemo(() => new Map((accounts.data || []).map((account) => [account.id, account])), [accounts.data])
   const rows = query.data || []; const selectedRows = rows.filter((row) => selectedRowKeys.includes(row.id)); const reviewableRows = selectedRows.filter((row) => row.status === 'SUBMITTED'); const postableRows = selectedRows.filter((row) => row.status === 'APPROVED' || (row.status === 'VALIDATED' && !row.approvalRequired))
   const importKingdee = useMutation({ mutationFn: (file: File) => { const body = new FormData(); body.append('file', file); return apiFetch<KingdeeImportResult>(`/ledgers/${ledgerId}/data-exchange/kingdee:import`, session!, { method: 'POST', headers: { 'Idempotency-Key': createIdempotencyKey() }, body }) }, onSuccess: (result) => { message.success(`已导入 ${result.voucherCount} 张凭证、${result.rowCount} 条分录`); void client.invalidateQueries({ queryKey: ['vouchers', ledgerId] }) }, onError: (error) => message.error(error instanceof ApiError ? error.message : '金蝶凭证导入失败') })
-  const exportKingdee = useMutation({ mutationFn: () => apiFetch<Blob>(`/ledgers/${ledgerId}/data-exchange/kingdee:export`, session!), onSuccess: (blob) => { const url = URL.createObjectURL(blob); const anchor = document.createElement('a'); anchor.href = url; anchor.download = 'kingdee-vouchers.xlsx'; anchor.click(); URL.revokeObjectURL(url) }, onError: (error) => message.error(error instanceof ApiError ? error.message : '金蝶凭证导出失败') })
+  const exportKingdee = useMutation({ mutationFn: (shouldMerge: boolean) => apiFetch<Blob>(`/ledgers/${ledgerId}/data-exchange/kingdee:export?mergeEntries=${shouldMerge}`, session!), onSuccess: (blob) => { setExportOpen(false); const url = URL.createObjectURL(blob); const anchor = document.createElement('a'); anchor.href = url; anchor.download = 'kingdee-vouchers.xlsx'; anchor.click(); URL.revokeObjectURL(url) }, onError: (error) => message.error(error instanceof ApiError ? error.message : '金蝶凭证导出失败') })
   const batch = useMutation({ mutationFn: async ({ action, selected, comment }: { action: 'approve' | 'post'; selected: Voucher[]; comment?: string }) => {
     const results = await Promise.allSettled(selected.map((row) => apiFetch<Voucher>(`/ledgers/${ledgerId}/vouchers/${row.id}:${action}`, session!, { method: 'POST', body: action === 'approve' ? jsonBody({ comment }) : undefined })))
     return { succeeded: results.filter((result) => result.status === 'fulfilled').length, failed: results.filter((result) => result.status === 'rejected').length }
@@ -32,7 +32,7 @@ export function VoucherListPage() {
   const accountLabel = (accountId: string) => { const account = accountById.get(accountId); return account ? `${account.code} ${account.name}` : accountId }
   const runBulkAction = () => { if (!bulkAction) return; const selected = bulkAction === 'approve' ? reviewableRows : postableRows; if (selected.length) batch.mutate({ action: bulkAction, selected, comment: bulkComment.trim() }) }
   return <Space direction="vertical" size={16} style={{ width: '100%' }}>
-    <div className="page-heading"><div><Typography.Title level={1}>凭证工作台</Typography.Title><Typography.Text type="secondary">保存或导入成功后自动审批并记账。</Typography.Text></div><Space wrap><Upload accept=".xls,.xlsx" showUploadList={false} beforeUpload={(file) => { const name = file.name.toLowerCase(); if ((!name.endsWith('.xls') && !name.endsWith('.xlsx')) || file.size > 10 * 1024 * 1024) { message.error('仅支持不超过 10 MiB 的 .xls/.xlsx 文件'); return Upload.LIST_IGNORE } importKingdee.mutate(file); return false }}><Button icon={<UploadOutlined />} loading={importKingdee.isPending}>导入金蝶凭证</Button></Upload><Button icon={<DownloadOutlined />} loading={exportKingdee.isPending} onClick={() => exportKingdee.mutate()}>导出金蝶凭证</Button><Button type="primary" icon={<PlusOutlined />} onClick={() => navigate(`/ledgers/${ledgerId}/vouchers/new`)}>新建凭证</Button></Space></div>
+    <div className="page-heading"><div><Typography.Title level={1}>凭证工作台</Typography.Title><Typography.Text type="secondary">保存或导入成功后自动审批并记账。</Typography.Text></div><Space wrap><Upload accept=".xls,.xlsx" showUploadList={false} beforeUpload={(file) => { const name = file.name.toLowerCase(); if ((!name.endsWith('.xls') && !name.endsWith('.xlsx')) || file.size > 10 * 1024 * 1024) { message.error('仅支持不超过 10 MiB 的 .xls/.xlsx 文件'); return Upload.LIST_IGNORE } importKingdee.mutate(file); return false }}><Button icon={<UploadOutlined />} loading={importKingdee.isPending}>导入金蝶凭证</Button></Upload><Button icon={<DownloadOutlined />} loading={exportKingdee.isPending} onClick={() => setExportOpen(true)}>导出金蝶凭证</Button><Button type="primary" icon={<PlusOutlined />} onClick={() => navigate(`/ledgers/${ledgerId}/vouchers/new`)}>新建凭证</Button></Space></div>
     {query.isError && <Alert type="error" showIcon message="凭证列表读取失败" action={<Button icon={<ReloadOutlined />} onClick={() => void query.refetch()}>重试</Button>} />}
     <Card className="voucher-list-card" extra={selectedRows.length ? <Space><Typography.Text type="secondary">已选 {selectedRows.length} 张</Typography.Text>{reviewableRows.length > 0 && <Button disabled={batch.isPending} onClick={() => { setBulkAction('approve'); setBulkComment('') }}>批量审核</Button>}{postableRows.length > 0 && <Button type="primary" disabled={batch.isPending} loading={batch.isPending && bulkAction === 'post'} onClick={() => { setBulkAction('post'); setBulkComment(''); batch.mutate({ action: 'post', selected: postableRows }) }}>批量记账</Button>}</Space> : null}>
       <Table rowKey="id" className="financial-table" loading={query.isLoading} dataSource={rows} locale={{ emptyText: <Empty description="暂无凭证" /> }} rowSelection={{ selectedRowKeys, onChange: (keys) => setSelectedRowKeys(keys as string[]) }} expandable={{
@@ -44,6 +44,12 @@ export function VoucherListPage() {
       ]} />
     </Card>
     <Modal open={bulkAction === 'approve'} title={`批量审核（${reviewableRows.length} 张）`} okText="确认审核" cancelText="取消" confirmLoading={batch.isPending} okButtonProps={{ disabled: !bulkComment.trim() }} onCancel={() => setBulkAction(null)} onOk={runBulkAction}><Input.TextArea rows={3} value={bulkComment} onChange={(event) => setBulkComment(event.target.value)} placeholder="请输入审核意见（必填）" /></Modal>
+    <Modal open={exportOpen} title="导出金蝶凭证" okText="导出" cancelText="取消" confirmLoading={exportKingdee.isPending} onCancel={() => setExportOpen(false)} onOk={() => exportKingdee.mutate(mergeEntries)}>
+      <Space direction="vertical" size={4}>
+        <Checkbox checked={mergeEntries} onChange={(event) => setMergeEntries(event.target.checked)}>合并同类分录</Checkbox>
+        <Typography.Text type="secondary">仅合并同月、同业务类别且使用相同银行的凭证；不同银行的业务始终分开。</Typography.Text>
+      </Space>
+    </Modal>
   </Space>
 }
 

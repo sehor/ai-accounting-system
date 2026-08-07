@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { App } from 'antd'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
@@ -34,7 +34,7 @@ beforeAll(() => {
 
 beforeEach(() => {
   vi.mocked(apiFetch).mockImplementation((path) => Promise.resolve(
-    path.endsWith('kingdee:export') ? new Blob(['xlsx']) : [],
+    path.includes('kingdee:export') ? new Blob(['xlsx']) : [],
   ))
 })
 
@@ -141,7 +141,7 @@ describe('VoucherListPage', () => {
     ))
   })
 
-  it('downloads vouchers as kingdee-vouchers.xlsx', async () => {
+  it('lets the user choose whether to merge entries before downloading', async () => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
     const createObjectUrl = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:kingdee-vouchers')
     const revokeObjectUrl = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {})
@@ -163,10 +163,13 @@ describe('VoucherListPage', () => {
     )
 
     fireEvent.click(screen.getByRole('button', { name: /导出金蝶凭证/ }))
+    fireEvent.click(screen.getByRole('checkbox', { name: '合并同类分录' }))
+    fireEvent.click(within(screen.getByRole('dialog', { name: '导出金蝶凭证' }))
+      .getByRole('button', { name: /^导\s*出$/ }))
 
     await waitFor(() => expect(downloadedFileName).toBe('kingdee-vouchers.xlsx'))
     expect(apiFetch).toHaveBeenCalledWith(
-      '/ledgers/ledger-1/data-exchange/kingdee:export',
+      '/ledgers/ledger-1/data-exchange/kingdee:export?mergeEntries=true',
       { localUserId: 'user-1', localUserName: 'admin' },
     )
     expect(createObjectUrl).toHaveBeenCalledWith(expect.any(Blob))

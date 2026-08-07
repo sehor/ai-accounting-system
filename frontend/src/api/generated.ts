@@ -2889,7 +2889,9 @@ export interface operations {
     };
     exportKingdee: {
         parameters: {
-            query?: never;
+            query?: {
+                mergeEntries?: boolean;
+            };
             header?: never;
             path: {
                 ledgerId: string;
