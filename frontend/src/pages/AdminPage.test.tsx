@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { App as AntApp } from 'antd'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -41,6 +41,7 @@ describe('AdminPage', () => {
           accountingStandardVersion: '2011-17', baseCurrency: 'CNY', startDate: '2026-01-01',
           approvalEnabled: false, status: 'ACTIVE', deleted: false },
       ]
+      if (path === '/ledgers/ledger-id/members') return []
       return undefined
     })
   })
@@ -57,6 +58,20 @@ describe('AdminPage', () => {
     expect(await screen.findByText('tester')).toBeInTheDocument()
     expect(screen.getByText('admin')).toBeInTheDocument()
     await waitFor(() => expect(apiFetch).toHaveBeenCalledWith('/admin/ledgers', { localUserName: 'admin' }))
+  })
+
+  it('opens permission assignment for any ledger', async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    render(<QueryClientProvider client={client}><AntApp><AdminPage /></AntApp></QueryClientProvider>)
+
+    fireEvent.click(await screen.findByRole('tab', { name: '账套（1）' }))
+    fireEvent.click(await screen.findByRole('button', { name: '分配权限' }))
+
+    expect(await screen.findByText('分配账套权限：测试账套')).toBeInTheDocument()
+    await waitFor(() => expect(apiFetch).toHaveBeenCalledWith(
+      '/ledgers/ledger-id/members',
+      { localUserName: 'admin' },
+    ))
   })
 
 })

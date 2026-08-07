@@ -74,7 +74,7 @@ codex mcp add accounting --url http://127.0.0.1:8080/mcp --bearer-token-env-var 
 
 `local` profile 会自动创建 `super-agent`（`UserType.AGENT`），将其关联到全部账套，并在 MCP 请求未携带认证头时默认使用该用户。该用户拥有完整业务权限（权限检查等效 `OWNER`），但不能查找、添加、修改或删除账套成员。该开发便利功能不会在 OIDC profile 中启用。
 
-`local` profile 同时将固定本地用户 `admin`（默认 ID `a2757c7a-fb97-4979-8f4f-abe3e401dacc`）设为平台管理员。`admin` 对全部活动账套等效 `OWNER`，并可在前端“平台管理”页面查看、删除和恢复全部用户与账套。删除使用现有 `status`/`deleted_at` 软删除；`admin` 自身和 `super-agent` 不可删除。可通过 `PLATFORM_ADMIN_USER_ID` 和 `PLATFORM_ADMIN_USERNAME` 覆盖默认身份。
+`local` profile 同时将固定本地用户 `admin`（默认 ID `a2757c7a-fb97-4979-8f4f-abe3e401dacc`）设为平台管理员。`admin` 对全部活动账套等效 `OWNER`，并可在前端“平台管理”页面查看、删除和恢复全部用户与账套，以及把任意账套按 `OWNER`、`EDITOR`、`REVIEWER` 或 `VIEWER` 角色分配给同事。删除使用现有 `status`/`deleted_at` 软删除；`admin` 自身和 `super-agent` 不可删除。可通过 `PLATFORM_ADMIN_USER_ID` 和 `PLATFORM_ADMIN_USERNAME` 覆盖默认身份。
 
 生产环境才切换为 OIDC Bearer JWT。
 
