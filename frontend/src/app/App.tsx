@@ -13,6 +13,7 @@ import { ReportsPage } from '../pages/ReportsPage'
 import { SettingsPage } from '../pages/SettingsPage'
 import { VoucherEditorPage, VoucherListPage } from '../pages/VoucherPages'
 import { FixedAssetEditorPage, FixedAssetListPage } from '../pages/FixedAssetPages'
+import { AdminPage } from '../pages/AdminPage'
 
 const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: 15_000, retry: 1 } } })
 
@@ -28,6 +29,7 @@ function AppRoutes() {
     <Route path="/" element={<RequireAuth><AppShell /></RequireAuth>}>
       <Route index element={<Navigate to="/ledgers" replace />} />
       <Route path="ledgers" element={<LedgerListPage />} />
+      <Route path="admin" element={<AdminPage />} />
       <Route path="ledgers/:ledgerId/overview" element={<LedgerOverviewPage />} />
       <Route path="ledgers/:ledgerId/vouchers" element={<VoucherListPage />} />
       <Route path="ledgers/:ledgerId/vouchers/:voucherId" element={<VoucherEditorPage />} />

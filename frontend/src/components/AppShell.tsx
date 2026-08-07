@@ -1,5 +1,5 @@
 import { App as AntApp, Avatar, Button, Layout, Menu, Select, Space, Spin, Typography } from 'antd'
-import { BankOutlined, BookOutlined, FileSearchOutlined, FileTextOutlined, LogoutOutlined, SettingOutlined, HddOutlined } from '@ant-design/icons'
+import { BankOutlined, BookOutlined, FileSearchOutlined, FileTextOutlined, LogoutOutlined, SettingOutlined, HddOutlined, TeamOutlined } from '@ant-design/icons'
 import { useQuery } from '@tanstack/react-query'
 import { Outlet, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { apiFetch } from '../api/client'
@@ -25,8 +25,10 @@ export function AppShell() {
     enabled: Boolean(session),
   })
 
-  const selectedKey = location.pathname.includes('/vouchers')
-    ? 'vouchers'
+  const selectedKey = location.pathname.startsWith('/admin')
+    ? 'admin'
+    : location.pathname.includes('/vouchers')
+      ? 'vouchers'
     : location.pathname.includes('/fixed-assets')
       ? 'fixed-assets'
     : location.pathname.includes('/reports')
@@ -67,6 +69,9 @@ export function AppShell() {
               { key: 'documents', icon: <FileSearchOutlined />, label: '附件与提取', onClick: () => ledgerId && navigate(`/ledgers/${ledgerId}/documents`) },
               { key: 'settings', icon: <SettingOutlined />, label: '账套设置', onClick: () => ledgerId && navigate(`/ledgers/${ledgerId}/settings/periods`) },
               { key: 'audit', icon: <FileSearchOutlined />, label: '审计日志', onClick: () => ledgerId && navigate(`/ledgers/${ledgerId}/audit`) },
+              ...(me.data?.displayName?.toLowerCase() === 'admin'
+                ? [{ key: 'admin', icon: <TeamOutlined />, label: '平台管理', onClick: () => navigate('/admin') }]
+                : []),
             ]}
           />
         </Sider>

@@ -12,6 +12,11 @@ export interface User {
   status: string
 }
 
+export interface AdminUser extends User {
+  deleted: boolean
+  protectedUser: boolean
+}
+
 export interface Ledger {
   id: string
   name: string
@@ -21,6 +26,10 @@ export interface Ledger {
   startDate: string
   approvalEnabled: boolean
   status: string
+}
+
+export interface AdminLedger extends Ledger {
+  deleted: boolean
 }
 
 export interface Member {
