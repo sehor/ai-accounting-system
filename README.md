@@ -66,9 +66,13 @@ codex mcp remove accounting
 codex mcp add accounting --url http://127.0.0.1:8080/mcp --bearer-token-env-var ACCOUNTING_MCP_TOKEN
 ```
 
+`local` profile 会自动创建 `super-agent`（`UserType.AGENT`），将其关联到全部账套，并在 MCP 请求未携带认证头时默认使用该用户。该用户拥有完整业务权限（权限检查等效 `OWNER`），但不能查找、添加、修改或删除账套成员。该开发便利功能不会在 OIDC profile 中启用。
+
 生产环境才切换为 OIDC Bearer JWT。
 
 MCP 使用 `POST /mcp`。本地联调启用上述开关后，`X-User-Id` 同时建立 MCP 认证身份；Agent 可使用除账套创建、成员管理和审计日志查询外的 REST 能力，包括账套设置、科目、期间、期初、维度、凭证、附件、导入导出、备份恢复和报表查询。文件导出工具返回 `fileName`、`contentType`、`base64Content` 和 `byteLength`。
+
+固定资产 Excel 可通过 `import_fixed_assets(ledgerId, fileName, base64Content)` 导入；文件格式、大小限制、类别编码和行校验规则与 REST 固定资产导入接口一致，存在任意行错误时整批不提交。
 
 你提供的 `postgresql+asyncpg://...` 是 Python 异步客户端格式；本项目 Spring JDBC 对应使用 `DB_URL=jdbc:postgresql://localhost:5432/ai-accounting`。
 ## Agent 做账经验

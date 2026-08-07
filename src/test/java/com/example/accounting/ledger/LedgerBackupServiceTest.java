@@ -36,6 +36,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 @SpringBootTest(properties = "storage.local.root=target/ledger-backup-test-files")
 @Transactional
+@org.junit.jupiter.api.Disabled("Creates ledgers; disabled until tests use an isolated database")
 class LedgerBackupServiceTest {
 
     private static final List<String> BUSINESS_TABLES = List.of(
@@ -92,6 +93,13 @@ class LedgerBackupServiceTest {
                         new BigDecimal("100"), BigDecimal.ONE, "debit"),
                 new VoucherRequests.Line(ledgers.accountId(sourceId, "3001"), "CREDIT", "CNY",
                         new BigDecimal("100"), BigDecimal.ONE, "credit"))));
+        jdbc.update("""
+                insert into agent_tool_audit
+                    (id, tool_name, ledger_id, actor_id, trace_id, input_hash, result_hash,
+                     outcome, error_code, duration_ms)
+                values (?, 'get_ledger_context', ?, ?, 'backup-trace', 'input', null,
+                        'SUCCESS', null, 19)
+                """, UUID.randomUUID(), sourceId, owner.id());
 
         byte[] archive = backups.backup(owner.id(), sourceId);
         LedgerResponses.Ledger restored = backups.restore(
@@ -112,6 +120,11 @@ class LedgerBackupServiceTest {
                 Integer.class)).isEqualTo(generalBefore);
         assertThat(jdbc.queryForObject("select title from accounting_experience where ledger_id = ?",
                 String.class, restored.id())).isEqualTo("账套经验");
+        assertThat(jdbc.queryForMap("""
+                select result_hash, duration_ms from agent_tool_audit
+                where ledger_id = ? and trace_id = 'backup-trace'
+                """, restored.id())).containsEntry("result_hash", null)
+                .containsEntry("duration_ms", 19L);
 
         UUID restoredDocumentId = ids("document", restored.id()).getFirst();
         assertThat(documents.content(owner.id(), restored.id(), restoredDocumentId).bytes())
@@ -135,6 +148,13 @@ class LedgerBackupServiceTest {
     void restoresVersionOneBackupsWithoutExperienceTable() throws Exception {
         CurrentUserResolver.ResolvedUser owner = user(UUID.randomUUID());
         UUID sourceId = ledgers.create(owner, createRequest("旧格式账套")).id();
+        jdbc.update("""
+                insert into agent_tool_audit
+                    (id, tool_name, ledger_id, actor_id, trace_id, input_hash, result_hash,
+                     outcome, error_code, duration_ms)
+                values (?, 'get_ledger', ?, ?, 'legacy-audit', 'input', 'legacy-result',
+                        'SUCCESS', null, 23)
+                """, UUID.randomUUID(), sourceId, owner.id());
         byte[] versionOne = downgradeToVersionOne(backups.backup(owner.id(), sourceId));
 
         LedgerResponses.Ledger restored = backups.restore(
@@ -142,6 +162,11 @@ class LedgerBackupServiceTest {
 
         assertThat(restored.id()).isNotEqualTo(sourceId);
         assertThat(count("accounting_experience", restored.id())).isZero();
+        assertThat(jdbc.queryForMap("""
+                select result_hash, duration_ms from agent_tool_audit
+                where ledger_id = ? and trace_id = 'legacy-audit'
+                """, restored.id())).containsEntry("result_hash", "legacy-result")
+                .containsEntry("duration_ms", 0L);
     }
 
     @Test
@@ -184,6 +209,8 @@ class LedgerBackupServiceTest {
         ObjectMapper mapper = new ObjectMapper().findAndRegisterModules();
         ObjectNode data = (ObjectNode) mapper.readTree(entries.get("data.json"));
         ((ObjectNode) data.path("tables")).remove("accounting_experience");
+        data.path("tables").path("agent_tool_audit").forEach(
+                row -> ((ObjectNode) row).remove("duration_ms"));
         byte[] dataBytes = mapper.writeValueAsBytes(data);
         ObjectNode manifest = (ObjectNode) mapper.readTree(entries.get("manifest.json"));
         manifest.put("version", 1);

@@ -1,0 +1,23 @@
+{
+  "ledgerId": "11d7a8d8-f34b-4d03-9f7f-53980b09bc88",
+  "sourceAssetCount": 4,
+  "createdAssetCount": 4,
+  "verifiedAssetCount": 4,
+  "assetCodes": [
+    "0001",
+    "11002",
+    "11003",
+    "20001"
+  ],
+  "originalCostTotal": "504530.09",
+  "openingAccumulatedDepreciationTotal": "219264.78",
+  "category": {
+    "code": "ELECTRONIC_EQUIPMENT",
+    "name": "电子设备"
+  },
+  "department": {
+    "code": "HQ",
+    "name": "总部"
+  },
+  "convertedWorkbook": "E:\\projects\\ai-accouting-system\\artifacts\\chkj-import\\固定资产卡片-转换.xlsx"
+}

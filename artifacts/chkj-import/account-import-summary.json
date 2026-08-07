@@ -1,0 +1,11 @@
+{
+  "ledgerId": "11d7a8d8-f34b-4d03-9f7f-53980b09bc88",
+  "sourceRows": 892,
+  "importId": "c6ff9f55-2922-4902-b01b-bce2b5d90a99",
+  "importStatus": "COMMITTED",
+  "confirmedRows": 892,
+  "finalAccountCount": 892,
+  "missingCodes": [],
+  "unexpectedCodes": [],
+  "convertedWorkbook": "E:\\projects\\ai-accouting-system\\artifacts\\chkj-import\\科目列表-转换.xlsx"
+}

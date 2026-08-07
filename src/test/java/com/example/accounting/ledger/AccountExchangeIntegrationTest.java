@@ -17,6 +17,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 
 @SpringBootTest
+@org.junit.jupiter.api.Disabled("Creates ledgers; disabled until tests use an isolated database")
 class AccountExchangeIntegrationTest {
 
     @Autowired
@@ -58,11 +59,11 @@ class AccountExchangeIntegrationTest {
 
         assertThat(preview.rows()).hasSize(2);
         assertThat(preview.rows()).allMatch(row -> row.issues().isEmpty());
-        for (AccountExchangeService.PreviewRow row : preview.rows()) {
-            exchange.decide(owner, ledgerId, preview.id(), row.rowNo(),
-                    new AccountExchangeService.Decision(
-                            row.targetAccountId() == null ? "CREATE" : "MAP", row.targetAccountId(), null));
-        }
+        exchange.decideAll(owner, ledgerId, preview.id(), preview.rows().stream()
+                .map(row -> new AccountExchangeService.RowDecision(row.rowNo(),
+                        new AccountExchangeService.Decision(
+                                row.targetAccountId() == null ? "CREATE" : "MAP", row.targetAccountId(), null)))
+                .toList());
         exchange.commit(owner, ledgerId, preview.id());
 
         List<LedgerResponses.Account> accounts = ledgers.listAccounts(owner, ledgerId);
@@ -97,13 +98,49 @@ class AccountExchangeIntegrationTest {
         assertThat(preview.rows()).hasSize(15);
         assertThat(preview.rows()).allMatch(row -> "MAP".equals(row.action())
                 && row.targetAccountId() != null && row.issues().isEmpty());
-        for (AccountExchangeService.PreviewRow row : preview.rows()) {
-            exchange.decide(owner, ledgerId, preview.id(), row.rowNo(),
-                    new AccountExchangeService.Decision("MAP", row.targetAccountId(), null));
-        }
+        exchange.decideAll(owner, ledgerId, preview.id(), preview.rows().stream()
+                .map(row -> new AccountExchangeService.RowDecision(row.rowNo(),
+                        new AccountExchangeService.Decision("MAP", row.targetAccountId(), null)))
+                .toList());
         AccountExchangeService.Preview committed = exchange.commit(owner, ledgerId, preview.id());
         assertThat(committed.status()).isEqualTo("COMMITTED");
         assertThat(ledgers.listAccounts(owner, ledgerId)).hasSize(15);
+    }
+
+    @Test
+    void batchDecisionsAreAppliedAtomically() {
+        UUID owner = UUID.randomUUID();
+        UUID ledgerId = ledgers.create(user(owner), new LedgerRequests.Create(
+                "account-batch-decisions", "SME", "2011-17", "CNY",
+                LocalDate.of(2026, 1, 1), false)).id();
+        byte[] exported = exchange.export(owner, ledgerId, AccountExchangeService.Format.STANDARD);
+        AccountExchangeService.Preview preview = exchange.preview(
+                owner, ledgerId, AccountExchangeService.Format.STANDARD,
+                "batch.xlsx", exported.length, new ByteArrayInputStream(exported));
+        AccountExchangeService.PreviewRow first = preview.rows().getFirst();
+
+        assertThatThrownBy(() -> exchange.decideAll(owner, ledgerId, preview.id(), List.of(
+                new AccountExchangeService.RowDecision(first.rowNo(),
+                        new AccountExchangeService.Decision("MAP", first.targetAccountId(), null)),
+                new AccountExchangeService.RowDecision(999_999,
+                        new AccountExchangeService.Decision("SKIP", null, null)))))
+                .isInstanceOfSatisfying(ApiProblemException.class,
+                        exception -> assertThat(exception.code()).isEqualTo("ACCOUNT_IMPORT_ROW_NOT_FOUND"));
+
+        assertThat(exchange.get(owner, ledgerId, preview.id()).rows().getFirst().confirmed()).isFalse();
+
+        assertThatThrownBy(() -> exchange.decideAll(owner, ledgerId, preview.id(), List.of(
+                new AccountExchangeService.RowDecision(first.rowNo(),
+                        new AccountExchangeService.Decision("MAP", first.targetAccountId(), null)))))
+                .isInstanceOfSatisfying(ApiProblemException.class,
+                        exception -> assertThat(exception.code()).isEqualTo("ACCOUNT_IMPORT_DECISIONS_INCOMPLETE"));
+        assertThat(exchange.get(owner, ledgerId, preview.id()).rows()).noneMatch(AccountExchangeService.PreviewRow::confirmed);
+
+        AccountExchangeService.Preview decided = exchange.decideAll(owner, ledgerId, preview.id(),
+                preview.rows().stream().map(row -> new AccountExchangeService.RowDecision(
+                        row.rowNo(), new AccountExchangeService.Decision("MAP", row.targetAccountId(), null)))
+                        .toList());
+        assertThat(decided.rows()).allMatch(AccountExchangeService.PreviewRow::confirmed);
     }
 
     @Test

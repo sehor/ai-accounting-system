@@ -1,0 +1,15 @@
+{
+  "ledgerId": "11d7a8d8-f34b-4d03-9f7f-53980b09bc88",
+  "sourcePeriod": "2026-05",
+  "openingPeriod": "2026-06",
+  "importedLeafBalances": 445,
+  "verifiedBalances": 445,
+  "confirmedBalances": 445,
+  "debitTotal": "66364327.12",
+  "creditTotal": "66364327.12",
+  "balanced": true,
+  "confirmation": {
+    "confirmedCount": 445
+  },
+  "csv": "E:\\projects\\ai-accouting-system\\artifacts\\chkj-import\\opening-balances-2026-06.csv"
+}

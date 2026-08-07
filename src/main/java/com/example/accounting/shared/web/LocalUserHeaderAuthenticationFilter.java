@@ -19,16 +19,30 @@ final class LocalUserHeaderAuthenticationFilter extends OncePerRequestFilter {
     private final boolean enabled;
     private final byte[] devBearerToken;
     private final UUID devBearerUserId;
+    private final boolean autoLoginEnabled;
+    private final UUID autoLoginUserId;
 
     LocalUserHeaderAuthenticationFilter(boolean enabled) {
-        this(enabled, "", "");
+        this(enabled, "", "", false);
     }
 
     LocalUserHeaderAuthenticationFilter(boolean enabled, String devBearerToken, String devBearerUserId) {
+        this(enabled, devBearerToken, devBearerUserId, false);
+    }
+
+    LocalUserHeaderAuthenticationFilter(boolean enabled, String devBearerToken, String devBearerUserId,
+                                        boolean autoLoginEnabled) {
+        this(enabled, devBearerToken, devBearerUserId, autoLoginEnabled, devBearerUserId);
+    }
+
+    LocalUserHeaderAuthenticationFilter(boolean enabled, String devBearerToken, String devBearerUserId,
+                                        boolean autoLoginEnabled, String autoLoginUserId) {
         this.enabled = enabled;
         this.devBearerToken = devBearerToken == null ? new byte[0]
                 : devBearerToken.getBytes(StandardCharsets.UTF_8);
         this.devBearerUserId = parseUserId(devBearerUserId);
+        this.autoLoginEnabled = autoLoginEnabled;
+        this.autoLoginUserId = parseUserId(autoLoginUserId);
     }
 
     @Override
@@ -37,6 +51,9 @@ final class LocalUserHeaderAuthenticationFilter extends OncePerRequestFilter {
         String value = enabled ? request.getHeader(HEADER) : null;
         if (enabled && isDevBearerToken(request.getHeader("Authorization"))) {
             value = devBearerUserId == null ? null : devBearerUserId.toString();
+        }
+        if (enabled && autoLoginEnabled && value == null && autoLoginUserId != null) {
+            value = autoLoginUserId.toString();
         }
         if (value == null || SecurityContextHolder.getContext().getAuthentication() != null) {
             filterChain.doFilter(request, response);

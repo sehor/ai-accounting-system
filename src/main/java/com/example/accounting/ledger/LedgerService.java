@@ -14,6 +14,8 @@ public interface LedgerService {
 
     LedgerResponses.Ledger findLedger(UUID actorId, UUID ledgerId);
 
+    LedgerResponses.Ledger renameLedger(UUID actorId, UUID ledgerId, LedgerRequests.Rename request);
+
     LedgerRole role(UUID actorId, UUID ledgerId);
 
     List<LedgerResponses.Member> listMembers(UUID actorId, UUID ledgerId);
@@ -21,6 +23,9 @@ public interface LedgerService {
     List<UserResponse> findMemberCandidates(UUID actorId, UUID ledgerId, String email);
 
     List<LedgerResponses.Account> listAccounts(UUID actorId, UUID ledgerId);
+
+    List<LedgerResponses.AccountSearchResult> searchAccounts(
+            UUID actorId, UUID ledgerId, String query, LedgerRequests.AccountMatchMode matchMode, Integer limit);
 
     LedgerResponses.Account findAccount(UUID actorId, UUID ledgerId, UUID accountId);
 

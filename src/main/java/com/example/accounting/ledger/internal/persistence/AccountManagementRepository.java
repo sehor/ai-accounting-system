@@ -7,10 +7,13 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 
@@ -84,6 +87,52 @@ public class AccountManagementRepository {
                 ACCOUNT_SELECT + " where a.ledger_id = ? order by a.code",
                 (rs, row) -> mapAccount(rs, List.of()), ledgerId);
         return attachDimensions(ledgerId, accounts);
+    }
+
+    public List<LedgerResponses.AccountSearchResult> search(
+            UUID ledgerId, String query, LedgerRequests.AccountMatchMode matchMode, int limit) {
+        List<LedgerResponses.Account> matches = switch (matchMode) {
+            case EXACT -> jdbc.query(ACCOUNT_SELECT + """
+                     where a.ledger_id = ?
+                       and (lower(a.code) = lower(?) or lower(a.name) = lower(?))
+                     order by case when lower(a.code) = lower(?) then 0 else 1 end, a.code
+                     limit ?
+                    """, (rs, row) -> mapAccount(rs, List.of()),
+                    ledgerId, query, query, query, limit);
+            case FUZZY -> jdbc.query(ACCOUNT_SELECT + """
+                     where a.ledger_id = ?
+                       and (position(lower(?) in lower(a.code)) > 0
+                            or position(lower(?) in lower(a.name)) > 0)
+                     order by case
+                         when lower(a.code) = lower(?) then 0
+                         when lower(a.name) = lower(?) then 1
+                         when position(lower(?) in lower(a.code)) = 1 then 2
+                         when position(lower(?) in lower(a.name)) = 1 then 3
+                         else 4
+                     end, a.code
+                     limit ?
+                    """, (rs, row) -> mapAccount(rs, List.of()),
+                    ledgerId, query, query, query, query, query, query, limit);
+        };
+        if (matches.isEmpty()) {
+            return List.of();
+        }
+
+        List<LedgerResponses.Account> accounts = attachDimensionsForAccounts(ledgerId, matches);
+        Set<UUID> parentIds = accounts.stream()
+                .map(LedgerResponses.Account::parentId)
+                .filter(java.util.Objects::nonNull)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+        Set<UUID> accountIds = accounts.stream()
+                .map(LedgerResponses.Account::id)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+        Map<UUID, LedgerResponses.AccountSummary> parents = summariesByIds(ledgerId, parentIds);
+        Map<UUID, List<LedgerResponses.AccountSummary>> children = childrenByParentIds(ledgerId, accountIds);
+
+        return accounts.stream().map(account -> new LedgerResponses.AccountSearchResult(
+                account,
+                account.parentId() == null ? null : parents.get(account.parentId()),
+                children.getOrDefault(account.id(), List.of()))).toList();
     }
 
     public Optional<LedgerResponses.Account> find(UUID ledgerId, UUID accountId) {
@@ -303,10 +352,92 @@ public class AccountManagementRepository {
             byAccount.computeIfAbsent(accountId, ignored -> new ArrayList<>()).add(
                     mapDimension(rs));
         }, ledgerId);
+        return withDimensions(accounts, byAccount);
+    }
+
+    private List<LedgerResponses.Account> attachDimensionsForAccounts(
+            UUID ledgerId, List<LedgerResponses.Account> accounts) {
+        if (accounts.isEmpty()) {
+            return List.of();
+        }
+        Map<UUID, List<LedgerResponses.DimensionRequirement>> byAccount = new LinkedHashMap<>();
+        Object[] arguments = new Object[accounts.size() + 1];
+        arguments[0] = ledgerId;
+        for (int index = 0; index < accounts.size(); index++) {
+            arguments[index + 1] = accounts.get(index).id();
+        }
+        jdbc.query("""
+                select ad.account_id, dt.id, dt.code, dt.name, ad.required
+                from ledger_account_dimension ad
+                join dimension_type dt
+                  on dt.ledger_id = ad.ledger_id and dt.id = ad.dimension_type_id
+                where ad.ledger_id = ? and ad.account_id in (%s)
+                order by ad.account_id, dt.code
+                """.formatted(placeholders(accounts.size())), rs -> {
+            UUID accountId = rs.getObject("account_id", UUID.class);
+            byAccount.computeIfAbsent(accountId, ignored -> new ArrayList<>()).add(mapDimension(rs));
+        }, arguments);
+        return withDimensions(accounts, byAccount);
+    }
+
+    private List<LedgerResponses.Account> withDimensions(
+            List<LedgerResponses.Account> accounts,
+            Map<UUID, List<LedgerResponses.DimensionRequirement>> byAccount) {
         return accounts.stream()
                 .map(account -> copyWithDimensions(account,
                         byAccount.getOrDefault(account.id(), List.of())))
                 .toList();
+    }
+
+    private Map<UUID, LedgerResponses.AccountSummary> summariesByIds(UUID ledgerId, Set<UUID> accountIds) {
+        if (accountIds.isEmpty()) {
+            return Map.of();
+        }
+        Object[] arguments = arguments(ledgerId, accountIds);
+        Map<UUID, LedgerResponses.AccountSummary> summaries = new LinkedHashMap<>();
+        jdbc.query("""
+                select id, code, name, status
+                from ledger_account
+                where ledger_id = ? and id in (%s)
+                order by code
+                """.formatted(placeholders(accountIds.size())), rs -> {
+            LedgerResponses.AccountSummary summary = mapSummary(rs);
+            summaries.put(summary.id(), summary);
+        }, arguments);
+        return summaries;
+    }
+
+    private Map<UUID, List<LedgerResponses.AccountSummary>> childrenByParentIds(
+            UUID ledgerId, Set<UUID> parentIds) {
+        if (parentIds.isEmpty()) {
+            return Map.of();
+        }
+        Object[] arguments = arguments(ledgerId, parentIds);
+        Map<UUID, List<LedgerResponses.AccountSummary>> children = new LinkedHashMap<>();
+        jdbc.query("""
+                select id, parent_id, code, name, status
+                from ledger_account
+                where ledger_id = ? and parent_id in (%s)
+                order by code
+                """.formatted(placeholders(parentIds.size())), rs -> {
+            UUID parentId = rs.getObject("parent_id", UUID.class);
+            children.computeIfAbsent(parentId, ignored -> new ArrayList<>()).add(mapSummary(rs));
+        }, arguments);
+        return children;
+    }
+
+    private Object[] arguments(UUID ledgerId, Set<UUID> accountIds) {
+        Object[] arguments = new Object[accountIds.size() + 1];
+        arguments[0] = ledgerId;
+        int index = 1;
+        for (UUID accountId : accountIds) {
+            arguments[index++] = accountId;
+        }
+        return arguments;
+    }
+
+    private String placeholders(int count) {
+        return String.join(", ", java.util.Collections.nCopies(count, "?"));
     }
 
     private List<LedgerResponses.DimensionRequirement> dimensions(UUID ledgerId, UUID accountId) {
@@ -324,6 +455,12 @@ public class AccountManagementRepository {
         return new LedgerResponses.DimensionRequirement(
                 rs.getObject("id", UUID.class), rs.getString("code"),
                 rs.getString("name"), rs.getBoolean("required"));
+    }
+
+    private LedgerResponses.AccountSummary mapSummary(ResultSet rs) throws SQLException {
+        return new LedgerResponses.AccountSummary(
+                rs.getObject("id", UUID.class), rs.getString("code"),
+                rs.getString("name"), rs.getString("status"));
     }
 
     private LedgerResponses.Account mapAccount(

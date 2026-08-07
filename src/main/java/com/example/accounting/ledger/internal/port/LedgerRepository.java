@@ -26,7 +26,11 @@ public interface LedgerRepository {
 
     List<LedgerResponses.Ledger> list(UUID actorId);
 
+    List<UUID> listAllLedgerIds();
+
     Optional<LedgerResponses.Ledger> findLedger(UUID ledgerId);
+
+    void updateLedgerName(UUID ledgerId, String name, UUID actorId);
 
     List<LedgerResponses.Member> listMembers(UUID ledgerId);
 

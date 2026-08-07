@@ -26,6 +26,12 @@ public class SecurityConfiguration {
     @Value("${app.security.dev-bearer-user-id:}")
     private String devBearerUserId;
 
+    @Value("${app.security.local-auto-login-enabled:false}")
+    private boolean localAutoLoginEnabled;
+
+    @Value("${app.security.local-auto-login-user-id:}")
+    private String localAutoLoginUserId;
+
     @Bean
     SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http.csrf(csrf -> csrf.disable())
@@ -40,7 +46,7 @@ public class SecurityConfiguration {
                 })
                 .addFilterBefore(new LocalUserHeaderAuthenticationFilter(
                         localUserHeaderEnabled && !StringUtils.hasText(issuerUri),
-                        devBearerToken, devBearerUserId),
+                        devBearerToken, devBearerUserId, localAutoLoginEnabled, localAutoLoginUserId),
                         AnonymousAuthenticationFilter.class);
         if (StringUtils.hasText(issuerUri)) {
             http.oauth2ResourceServer(oauth2 -> oauth2.jwt(jwt -> { }));

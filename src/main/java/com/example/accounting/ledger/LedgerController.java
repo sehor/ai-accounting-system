@@ -75,6 +75,16 @@ public class LedgerController {
         return ledgerService.listAccounts(user(request), ledgerId);
     }
 
+    @GetMapping("/{ledgerId}/accounts/search")
+    public List<LedgerResponses.AccountSearchResult> searchAccounts(
+            HttpServletRequest request,
+            @PathVariable UUID ledgerId,
+            @RequestParam String query,
+            @RequestParam(defaultValue = "FUZZY") LedgerRequests.AccountMatchMode matchMode,
+            @RequestParam(defaultValue = "20") Integer limit) {
+        return ledgerService.searchAccounts(user(request), ledgerId, query, matchMode, limit);
+    }
+
     @GetMapping("/{ledgerId}/accounts/{accountId}")
     public LedgerResponses.Account getAccount(HttpServletRequest request, @PathVariable UUID ledgerId,
                                                @PathVariable UUID accountId) {

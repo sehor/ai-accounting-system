@@ -47,6 +47,15 @@ public final class LedgerResponses {
         }
     }
 
+    public record AccountSummary(UUID id, String code, String name, String status) {
+    }
+
+    public record AccountSearchResult(
+            Account account,
+            AccountSummary parent,
+            List<AccountSummary> children) {
+    }
+
     public record DimensionRequirement(UUID dimensionTypeId, String code, String name, boolean required) {
     }
 

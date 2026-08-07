@@ -94,6 +94,35 @@ class LedgerControllerTest {
     }
 
     @Test
+    void searchesAccountsWithParentAndChildren() throws Exception {
+        UUID userId = UUID.randomUUID();
+        UUID ledgerId = UUID.randomUUID();
+        UUID accountId = UUID.randomUUID();
+        LedgerResponses.Account account = new LedgerResponses.Account(
+                accountId, ledgerId, "1002", "Bank deposits", "ASSET", "DEBIT", "ACTIVE");
+        LedgerResponses.AccountSummary parent = new LedgerResponses.AccountSummary(
+                UUID.randomUUID(), "1000", "Cash and bank", "ACTIVE");
+        LedgerResponses.AccountSummary child = new LedgerResponses.AccountSummary(
+                UUID.randomUUID(), "100201", "Bank deposit - CCB", "ACTIVE");
+        when(ledgerService.searchAccounts(
+                userId, ledgerId, "1002", LedgerRequests.AccountMatchMode.EXACT, 5))
+                .thenReturn(List.of(new LedgerResponses.AccountSearchResult(account, parent, List.of(child))));
+
+        mockMvc.perform(get("/v1/ledgers/{ledgerId}/accounts/search", ledgerId)
+                        .header("X-User-Id", userId)
+                        .queryParam("query", "1002")
+                        .queryParam("matchMode", "EXACT")
+                        .queryParam("limit", "5"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].account.code").value("1002"))
+                .andExpect(jsonPath("$[0].parent.code").value("1000"))
+                .andExpect(jsonPath("$[0].children[0].code").value("100201"));
+
+        verify(ledgerService).searchAccounts(
+                userId, ledgerId, "1002", LedgerRequests.AccountMatchMode.EXACT, 5);
+    }
+
+    @Test
     void exposesDimensionAndOpeningBalanceEndpoints() throws Exception {
         UUID userId = UUID.randomUUID();
         UUID ledgerId = UUID.randomUUID();

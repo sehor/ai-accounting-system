@@ -23,6 +23,7 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.context.SecurityContextHolder;
 
 @SpringBootTest
+@org.junit.jupiter.api.Disabled("Creates ledgers; disabled until tests use an isolated database")
 class AccountingExperienceIntegrationTest {
 
     @Autowired

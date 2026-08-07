@@ -16,6 +16,11 @@ public final class LedgerRequests {
     private LedgerRequests() {
     }
 
+    public enum AccountMatchMode {
+        EXACT,
+        FUZZY
+    }
+
     public record Create(@NotBlank String name,
                          @NotBlank String accountingStandardCode,
                          @NotBlank String accountingStandardVersion,
@@ -32,6 +37,9 @@ public final class LedgerRequests {
     }
 
     public record AddMember(@NotNull UUID userId, @NotNull LedgerRole role) {
+    }
+
+    public record Rename(@NotBlank @Size(max = 200) String name) {
     }
 
     public record UpdateMember(@NotNull LedgerRole role, @NotNull MembershipStatus status) {

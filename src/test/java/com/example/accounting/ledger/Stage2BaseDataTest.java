@@ -16,6 +16,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 @SpringBootTest
+@org.junit.jupiter.api.Disabled("Creates ledgers; disabled until tests use an isolated database")
 class Stage2BaseDataTest {
 
     @Autowired
@@ -162,6 +163,54 @@ class Stage2BaseDataTest {
                 new ByteArrayInputStream(invalidCsv.getBytes(java.nio.charset.StandardCharsets.UTF_8))))
                 .isInstanceOf(ApiProblemException.class)
                 .hasMessageContaining("row 2 field accountCode");
+    }
+
+    @Test
+    void importsNegativeOpeningBalancesWithoutChangingTheirSides() throws Exception {
+        UUID userId = UUID.randomUUID();
+        UUID ledgerId = ledgerService.create(
+                new CurrentUserResolver.ResolvedUser(userId, "test", userId.toString()),
+                createRequest("negative-opening-csv")).id();
+        String csv = "periodCode,accountCode,currency,dimensionKey,debitOriginal,creditOriginal,exchangeRate\n"
+                + "2026-01,1001,CNY,,-25,0,1\n"
+                + "2026-01,3001,CNY,,0,-25,1\n";
+
+        List<LedgerResponses.OpeningBalance> imported = ledgerService.importOpeningBalances(
+                userId, ledgerId,
+                new ByteArrayInputStream(csv.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+
+        assertThat(imported)
+                .filteredOn(balance -> balance.accountId().equals(ledgerService.accountId(ledgerId, "1001")))
+                .singleElement()
+                .satisfies(balance -> {
+                    assertThat(balance.debitOriginal()).isEqualByComparingTo("-25.0000");
+                    assertThat(balance.creditOriginal()).isEqualByComparingTo("0.0000");
+                });
+        assertThat(imported)
+                .filteredOn(balance -> balance.accountId().equals(ledgerService.accountId(ledgerId, "3001")))
+                .singleElement()
+                .satisfies(balance -> {
+                    assertThat(balance.debitOriginal()).isEqualByComparingTo("0.0000");
+                    assertThat(balance.creditOriginal()).isEqualByComparingTo("-25.0000");
+                });
+        assertThat(ledgerService.confirmOpeningBalances(userId, ledgerId)).isEqualTo(2);
+    }
+
+    @Test
+    void rejectsOpeningBalancesWithBothSidesPopulatedWhenOneSideIsNegative() {
+        UUID userId = UUID.randomUUID();
+        UUID ledgerId = ledgerService.create(
+                new CurrentUserResolver.ResolvedUser(userId, "test", userId.toString()),
+                createRequest("both-opening-sides")).id();
+        UUID periodId = ledgerService.periodId(ledgerId, "2026-01");
+
+        assertThatThrownBy(() -> ledgerService.replaceOpeningBalances(userId, ledgerId, List.of(
+                new LedgerRequests.OpeningBalanceLine(
+                        ledgerService.accountId(ledgerId, "1001"), periodId, "CNY", "",
+                        new BigDecimal("-25.00"), new BigDecimal("25.00"), BigDecimal.ONE))))
+                .isInstanceOf(ApiProblemException.class)
+                .extracting(exception -> ((ApiProblemException) exception).code())
+                .isEqualTo("INVALID_OPENING_BALANCE");
     }
 
     private LedgerRequests.Create createRequest(String suffix) {

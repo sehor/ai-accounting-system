@@ -1,0 +1,15 @@
+interface:
+  display_name: "AI Accounting System"
+  short_description: "Operate local accounting MCP through super-agent."
+  default_prompt: "Use $operate-ai-accounting through the local super-agent to inspect or update accounting data."
+
+dependencies:
+  tools:
+    - type: "mcp"
+      value: "accounting"
+      description: "Local ai-accounting-system MCP service"
+      transport: "streamable_http"
+      url: "http://127.0.0.1:8080/mcp"
+
+policy:
+  allow_implicit_invocation: true

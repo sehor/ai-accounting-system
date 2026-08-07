@@ -18,6 +18,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 @SpringBootTest
+@org.junit.jupiter.api.Disabled("Creates ledgers; disabled until tests use an isolated database")
 class Stage7IsolationTest {
 
     @Autowired

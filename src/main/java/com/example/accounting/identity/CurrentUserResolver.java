@@ -3,6 +3,7 @@ package com.example.accounting.identity;
 import com.example.accounting.shared.web.ApiProblemException;
 import jakarta.servlet.http.HttpServletRequest;
 import java.nio.charset.StandardCharsets;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.regex.Pattern;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -94,6 +95,14 @@ public class CurrentUserResolver {
         if (authentication != null && authentication.isAuthenticated()) {
             try {
                 UUID id = UUID.fromString(authentication.getName());
+                if (identityService != null) {
+                    Optional<UserResponse> existing = identityService.findUser(id);
+                    if (existing.isPresent()) {
+                        UserResponse user = existing.get();
+                        return new ResolvedUser(user.id(), user.issuer(), user.subject(),
+                                user.displayName(), user.email(), user.userType());
+                    }
+                }
                 return new ResolvedUser(id, "local", id.toString(), null, null);
             } catch (IllegalArgumentException ignored) {
                 // A non-UUID principal is not a local application user identifier.

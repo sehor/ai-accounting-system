@@ -60,17 +60,20 @@ public class DefaultLedgerService implements LedgerService {
     private final IdentityService identityService;
     private final AccountingStandardCatalog standards;
     private final ObjectProvider<PeriodCloseGuard> periodCloseGuard;
+    private final LocalSuperAgentPolicy localSuperAgent;
     private final ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
 
     public DefaultLedgerService(LedgerRepository ledgers, AccountManagementRepository accounts,
                                 LedgerAccessService ledgerAccess, IdentityService identityService,
-                                AccountingStandardCatalog standards, ObjectProvider<PeriodCloseGuard> periodCloseGuard) {
+                                AccountingStandardCatalog standards, ObjectProvider<PeriodCloseGuard> periodCloseGuard,
+                                LocalSuperAgentPolicy localSuperAgent) {
         this.ledgers = ledgers;
         this.accounts = accounts;
         this.ledgerAccess = ledgerAccess;
         this.identityService = identityService;
         this.standards = standards;
         this.periodCloseGuard = periodCloseGuard;
+        this.localSuperAgent = localSuperAgent;
     }
 
     @Override
@@ -106,6 +109,20 @@ public class DefaultLedgerService implements LedgerService {
     }
 
     @Override
+    @Transactional
+    public LedgerResponses.Ledger renameLedger(
+            UUID actorId, UUID ledgerId, LedgerRequests.Rename request) {
+        requireRole(actorId, ledgerId, WRITE_ROLES);
+        String name = request == null || request.name() == null ? "" : request.name().trim();
+        if (name.isEmpty() || name.length() > 200) {
+            throw problem(422, "INVALID_LEDGER_NAME", "Invalid ledger name",
+                    "Ledger name must contain between 1 and 200 characters");
+        }
+        ledgers.updateLedgerName(ledgerId, name, actorId);
+        return requireLedger(ledgerId);
+    }
+
+    @Override
     @Transactional(readOnly = true)
     public LedgerRole role(UUID actorId, UUID ledgerId) {
         return ledgerAccess.requireMembership(actorId, ledgerId);
@@ -121,6 +138,7 @@ public class DefaultLedgerService implements LedgerService {
     @Override
     @Transactional(readOnly = true)
     public List<UserResponse> findMemberCandidates(UUID actorId, UUID ledgerId, String email) {
+        localSuperAgent.requireUserManagementAllowed(actorId);
         requireRole(actorId, ledgerId, OWNER_ROLE);
         if (email == null || email.isBlank() || email.length() > 320 || !email.contains("@")) {
             throw problem(400, "EMAIL_INVALID", "Invalid email", "A valid email is required");
@@ -133,6 +151,27 @@ public class DefaultLedgerService implements LedgerService {
     public List<LedgerResponses.Account> listAccounts(UUID actorId, UUID ledgerId) {
         requireRole(actorId, ledgerId, VIEW_ROLES);
         return accounts.list(ledgerId);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<LedgerResponses.AccountSearchResult> searchAccounts(
+            UUID actorId, UUID ledgerId, String query,
+            LedgerRequests.AccountMatchMode matchMode, Integer limit) {
+        requireRole(actorId, ledgerId, VIEW_ROLES);
+        String normalizedQuery = query == null ? "" : query.trim();
+        if (normalizedQuery.isEmpty() || normalizedQuery.length() > 200) {
+            throw problem(422, "ACCOUNT_SEARCH_QUERY_INVALID", "Invalid account search query",
+                    "The account search query must contain 1 to 200 characters");
+        }
+        int actualLimit = limit == null ? 20 : limit;
+        if (actualLimit < 1 || actualLimit > 100) {
+            throw problem(422, "ACCOUNT_SEARCH_LIMIT_INVALID", "Invalid account search limit",
+                    "The account search limit must be between 1 and 100");
+        }
+        LedgerRequests.AccountMatchMode actualMode = matchMode == null
+                ? LedgerRequests.AccountMatchMode.FUZZY : matchMode;
+        return accounts.search(ledgerId, normalizedQuery, actualMode, actualLimit);
     }
 
     @Override
@@ -452,6 +491,7 @@ public class DefaultLedgerService implements LedgerService {
     @Override
     @Transactional
     public LedgerResponses.Member addMember(UUID actorId, UUID ledgerId, LedgerRequests.AddMember request) {
+        localSuperAgent.requireUserManagementAllowed(actorId);
         requireRole(actorId, ledgerId, OWNER_ROLE);
         if (!ledgers.userExists(request.userId())) {
             throw problem(404, "USER_NOT_FOUND", "User not found",
@@ -465,6 +505,7 @@ public class DefaultLedgerService implements LedgerService {
     @Transactional
     public LedgerResponses.Member updateMember(
             UUID actorId, UUID ledgerId, UUID userId, LedgerRequests.UpdateMember request) {
+        localSuperAgent.requireUserManagementAllowed(actorId);
         requireRole(actorId, ledgerId, OWNER_ROLE);
         ledgers.lockLedger(ledgerId);
         requireRole(actorId, ledgerId, OWNER_ROLE);
@@ -478,6 +519,7 @@ public class DefaultLedgerService implements LedgerService {
     @Override
     @Transactional
     public void removeMember(UUID actorId, UUID ledgerId, UUID userId) {
+        localSuperAgent.requireUserManagementAllowed(actorId);
         requireRole(actorId, ledgerId, OWNER_ROLE);
         ledgers.lockLedger(ledgerId);
         requireRole(actorId, ledgerId, OWNER_ROLE);
@@ -529,11 +571,10 @@ public class DefaultLedgerService implements LedgerService {
     }
 
     private void validateOpeningBalanceLine(UUID ledgerId, LedgerRequests.OpeningBalanceLine line) {
-        if (line.debitOriginal().signum() < 0 || line.creditOriginal().signum() < 0
-                || (line.debitOriginal().signum() > 0 && line.creditOriginal().signum() > 0)
+        if ((line.debitOriginal().signum() != 0 && line.creditOriginal().signum() != 0)
                 || line.exchangeRate().signum() <= 0) {
             throw problem(422, "INVALID_OPENING_BALANCE", "Invalid opening balance",
-                    "Amounts must be non-negative with one side populated and exchange rate must be positive");
+                    "Only one side may be populated and exchange rate must be positive");
         }
         if (!ledgers.validOpeningReference(ledgerId, line.accountId(), line.periodId())) {
             throw problem(422, "INVALID_OPENING_BALANCE_REFERENCE", "Invalid opening balance reference",

@@ -12,16 +12,20 @@ import org.springframework.transaction.annotation.Transactional;
 public class DefaultLedgerAccessService implements LedgerAccessService {
 
     private final LedgerAccessRepository memberships;
+    private final LocalSuperAgentPolicy localSuperAgent;
 
-    public DefaultLedgerAccessService(LedgerAccessRepository memberships) {
+    public DefaultLedgerAccessService(
+            LedgerAccessRepository memberships, LocalSuperAgentPolicy localSuperAgent) {
         this.memberships = memberships;
+        this.localSuperAgent = localSuperAgent;
     }
 
     @Override
     @Transactional(readOnly = true)
     public LedgerRole requireMembership(UUID actorId, UUID ledgerId) {
-        return memberships.findRole(actorId, ledgerId).orElseThrow(() ->
+        LedgerRole storedRole = memberships.findRole(actorId, ledgerId).orElseThrow(() ->
                 new ApiProblemException(404, "LEDGER_NOT_FOUND", "Ledger not found",
                         "The ledger is not available to this user", false));
+        return localSuperAgent.effectiveRole(actorId, storedRole);
     }
 }

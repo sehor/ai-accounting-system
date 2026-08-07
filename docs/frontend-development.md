@@ -57,6 +57,8 @@ pnpm test:e2e:business
 periodCode,accountCode,currency,dimensionKey,debitOriginal,creditOriginal,exchangeRate
 ```
 
+借方和贷方金额按 CSV 原值保存，允许负数且不自动转移方向；同一行仍只能有一侧为非零值。
+
 设置页支持期初余额逐行编辑、CSV 导入、借贷合计和最终确认；辅助核算页支持类型和值维护；凭证详情的历史版本区域支持恢复指定修订。
 
 后端 OpenAPI 变化后，后端运行在 8080 时执行：
