@@ -38,6 +38,11 @@ public interface VoucherRepository {
                           String voucherNumber, String summary, boolean approvalRequired, UUID actorId,
                           long expectedVersion);
 
+    boolean replaceGeneratedVoucher(UUID ledgerId, UUID voucherId, UUID periodId, LocalDate voucherDate,
+                                    String voucherType, String voucherNumber, String summary,
+                                    boolean approvalRequired, UUID actorId, long expectedVersion,
+                                    String sourceType, UUID expectedSourceId, UUID nextSourceId);
+
     void deleteLines(UUID ledgerId, UUID voucherId);
 
     void createLine(UUID lineId, UUID ledgerId, UUID voucherId, int lineNo, UUID accountId, String side,
@@ -72,8 +77,6 @@ public interface VoucherRepository {
 
     void recordApproval(UUID ledgerId, UUID voucherId, String action, String comment, UUID actorId);
 
-    boolean reversalExists(UUID ledgerId, UUID voucherId);
-
     void markDeleted(UUID ledgerId, UUID voucherId);
 
     void restoreDeleted(UUID ledgerId, UUID voucherId, UUID actorId);
@@ -89,10 +92,6 @@ public interface VoucherRepository {
 
     void recordRevision(UUID ledgerId, UUID voucherId, int revision, String action, UUID actorId, String reason,
                         String beforeData, String afterData);
-
-    Optional<UUID> reversalOf(UUID ledgerId, UUID voucherId);
-
-    void markReversedBy(UUID ledgerId, UUID voucherId, UUID reversalId, UUID actorId);
 
     record Idempotency(String requestHash, UUID voucherId) {
     }

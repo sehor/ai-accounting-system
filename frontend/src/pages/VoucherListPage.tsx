@@ -19,11 +19,11 @@ type DisplayRow = {
 
 const statusLabel = (status: string) => ({
   DRAFT: '草稿', VALIDATED: '已校验', SUBMITTED: '待审核', APPROVED: '已审核',
-  POSTED: '已记账', REVERSED: '已冲销', DELETED: '已删除',
+  POSTED: '已记账', DELETED: '已删除',
 }[status] || status)
 const statusColor = (status: string) => ({
   DRAFT: 'default', VALIDATED: 'blue', SUBMITTED: 'orange', APPROVED: 'cyan',
-  POSTED: 'green', REVERSED: 'purple', DELETED: 'red',
+  POSTED: 'green', DELETED: 'red',
 }[status] || 'default')
 const amount = (value?: string) => value
   ? Number(value).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })

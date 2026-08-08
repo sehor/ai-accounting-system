@@ -103,19 +103,6 @@ public class VoucherController {
         return voucherService.post(user(request), ledgerId, voucherId);
     }
 
-    @PostMapping("/{voucherId}:unpost")
-    public VoucherResponses.Voucher unpost(HttpServletRequest request, @PathVariable UUID ledgerId,
-                                           @PathVariable UUID voucherId,
-                                           @Valid @RequestBody VoucherRequests.Reason body) {
-        return voucherService.unpost(user(request), ledgerId, voucherId, body.reason());
-    }
-
-    @PostMapping("/{voucherId}:reverse")
-    public VoucherResponses.Voucher reverse(HttpServletRequest request, @PathVariable UUID ledgerId,
-                                            @PathVariable UUID voucherId) {
-        return voucherService.reverse(user(request), ledgerId, voucherId);
-    }
-
     @DeleteMapping("/{voucherId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void delete(HttpServletRequest request, @PathVariable UUID ledgerId, @PathVariable UUID voucherId) {

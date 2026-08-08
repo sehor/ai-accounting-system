@@ -40,8 +40,8 @@ storage:
 
 accounting:
   balance:
-    read-mode: ${ACCOUNTING_BALANCE_READ_MODE:legacy}
-    worker-enabled: ${ACCOUNTING_BALANCE_WORKER_ENABLED:false}
+    read-mode: ${ACCOUNTING_BALANCE_READ_MODE:auto}
+    worker-enabled: ${ACCOUNTING_BALANCE_WORKER_ENABLED:true}
     max-lag: ${ACCOUNTING_BALANCE_MAX_LAG:5s}
     worker-delay-ms: ${ACCOUNTING_BALANCE_WORKER_DELAY_MS:250}
 

@@ -143,6 +143,23 @@ public class JdbcVoucherRepository implements VoucherRepository {
     }
 
     @Override
+    public boolean replaceGeneratedVoucher(UUID ledgerId, UUID voucherId, UUID periodId, LocalDate voucherDate,
+                                           String voucherType, String voucherNumber, String summary,
+                                           boolean approvalRequired, UUID actorId, long expectedVersion,
+                                           String sourceType, UUID expectedSourceId, UUID nextSourceId) {
+        return jdbcTemplate.update("""
+                update voucher set period_id = ?, voucher_date = ?, voucher_type = ?, voucher_number = ?,
+                    summary = ?, approval_required = ?, source_type = ?, source_id = ?,
+                    current_revision = current_revision + 1, version = version + 1,
+                    updated_at = now(), updated_by = ?
+                where ledger_id = ? and id = ? and status = 'POSTED'
+                    and source_type = ? and source_id = ? and version = ?
+                """, periodId, voucherDate, voucherType, voucherNumber, summary, approvalRequired,
+                sourceType, nextSourceId, actorId, ledgerId, voucherId, sourceType, expectedSourceId,
+                expectedVersion) == 1;
+    }
+
+    @Override
     public void deleteLines(UUID ledgerId, UUID voucherId) {
         jdbcTemplate.update("delete from voucher_line where ledger_id = ? and voucher_id = ?", ledgerId, voucherId);
     }
@@ -370,15 +387,6 @@ public class JdbcVoucherRepository implements VoucherRepository {
     }
 
     @Override
-    public boolean reversalExists(UUID ledgerId, UUID voucherId) {
-        return Boolean.TRUE.equals(jdbcTemplate.queryForObject("""
-                select exists (
-                    select 1 from voucher
-                    where ledger_id = ? and reversal_of_id = ? and deleted_at is null)
-                """, Boolean.class, ledgerId, voucherId));
-    }
-
-    @Override
     public void markDeleted(UUID ledgerId, UUID voucherId) {
         jdbcTemplate.update("update voucher set deleted_at = now() where ledger_id = ? and id = ?",
                 ledgerId, voucherId);
@@ -442,21 +450,6 @@ public class JdbcVoucherRepository implements VoucherRepository {
                 values (?, ?, 'VOUCHER', ?, ?, ?, ?, ?, ?::jsonb, ?::jsonb)
                 """, UUID.randomUUID(), ledgerId, voucherId, revision, action, actorId, reason,
                 beforeData, afterData);
-    }
-
-    @Override
-    public Optional<UUID> reversalOf(UUID ledgerId, UUID voucherId) {
-        return Optional.ofNullable(jdbcTemplate.query("""
-                select reversal_of_id from voucher where ledger_id = ? and id = ?
-                """, rs -> rs.next() ? rs.getObject(1, UUID.class) : null, ledgerId, voucherId));
-    }
-
-    @Override
-    public void markReversedBy(UUID ledgerId, UUID voucherId, UUID reversalId, UUID actorId) {
-        jdbcTemplate.update("""
-                update voucher set reversed_by_id = ?, updated_at = now(), updated_by = ?
-                where ledger_id = ? and id = ?
-                """, reversalId, actorId, ledgerId, voucherId);
     }
 
     private VoucherResponses.Voucher voucher(UUID id, UUID ledgerId, UUID periodId, LocalDate voucherDate,

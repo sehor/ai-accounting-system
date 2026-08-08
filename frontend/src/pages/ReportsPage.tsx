@@ -1,8 +1,9 @@
-import { Alert, Card, Empty, Space, Switch, Table, Typography } from 'antd'
+import { Alert, Card, Empty, Space, Switch, Table, Tag, Typography } from 'antd'
 import type { TableProps } from 'antd'
 import { useQuery } from '@tanstack/react-query'
 import { useParams } from 'react-router-dom'
-import { apiFetch } from '../api/client'
+import { useState } from 'react'
+import { apiFetchWithHeaders } from '../api/client'
 import type { Statement, TrialBalanceLine } from '../api/types'
 import { useAuth } from '../auth/AuthProvider'
 import { PeriodSelector, usePeriodFilter } from '../components/PeriodSelector'
@@ -25,14 +26,19 @@ export function ReportsPage() {
   const [search, setSearch] = useWorkspaceSearchParams()
   const { periods, periodCode, setPeriodCode } = usePeriodFilter(ledgerId)
   const includeParents = search.get('includeParents') === 'true'
+  const [balanceSource, setBalanceSource] = useState<string | null>(null)
   const reportParams = new URLSearchParams()
   if (periodCode) reportParams.set('periodCode', periodCode)
   if (reportType === 'trial-balance' && includeParents) reportParams.set('includeParents', 'true')
   const query = useQuery({
     queryKey: ['report', ledgerId, reportType, periodCode, includeParents],
-    queryFn: () => apiFetch<TrialBalanceLine[] | Statement>(
-      `/ledgers/${ledgerId}/reports/${reportType}?${reportParams}`, session!,
-    ),
+    queryFn: async () => {
+      const response = await apiFetchWithHeaders<TrialBalanceLine[] | Statement>(
+        `/ledgers/${ledgerId}/reports/${reportType}?${reportParams}`, session!,
+      )
+      setBalanceSource(response.headers.get('X-Balance-Source'))
+      return response.data
+    },
     enabled: Boolean(session && ledgerId && periodCode && reportNames[reportType]),
   })
   const statement = reportType === 'balance-sheet' || reportType === 'income-statement'
@@ -61,6 +67,9 @@ export function ReportsPage() {
   return <section className="financial-page" aria-labelledby="report-title">
     <div className="financial-toolbar">
       <Typography.Title id="report-title" level={1}>{reportNames[reportType] || '报表'}</Typography.Title>
+      {balanceSource && <Tag color={balanceSource === 'projection' ? 'blue' : 'orange'}>
+        数据来源：{balanceSource === 'projection' ? '余额投影' : '实时凭证'}
+      </Tag>}
       <Space wrap>
         {reportType === 'trial-balance' && <Switch
           checked={includeParents}

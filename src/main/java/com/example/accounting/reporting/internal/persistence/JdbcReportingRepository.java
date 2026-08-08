@@ -60,7 +60,7 @@ public class JdbcReportingRepository implements ReportingRepository {
                     from voucher_line vl
                     join voucher v on v.ledger_id = vl.ledger_id and v.id = vl.voucher_id
                     join accounting_period p on p.ledger_id = v.ledger_id and p.id = v.period_id
-                    where v.ledger_id = ? and v.status in ('POSTED', 'REVERSED')
+                    where v.ledger_id = ? and v.status = 'POSTED'
                       and (?::varchar is null or p.period_code = ?)
                     union all
                     select ob.account_id, ob.debit_base, ob.credit_base
@@ -108,7 +108,7 @@ public class JdbcReportingRepository implements ReportingRepository {
                         from voucher_line vl
                         join voucher v on v.ledger_id = vl.ledger_id and v.id = vl.voucher_id
                         join accounting_period p on p.ledger_id = v.ledger_id and p.id = v.period_id
-                        where v.ledger_id = ? and v.status in ('POSTED', 'REVERSED')
+                        where v.ledger_id = ? and v.status = 'POSTED'
                           and (?::varchar is null or p.period_code = ?)
                         union all
                         select ob.account_id, ob.debit_base, ob.credit_base
@@ -149,7 +149,7 @@ public class JdbcReportingRepository implements ReportingRepository {
                 join voucher v on v.ledger_id = vl.ledger_id and v.id = vl.voucher_id
                 join ledger_account a on a.ledger_id = vl.ledger_id and a.id = vl.account_id
                 join accounting_period p on p.ledger_id = v.ledger_id and p.id = v.period_id
-                where v.ledger_id = ? and v.status in ('POSTED', 'REVERSED')
+                where v.ledger_id = ? and v.status = 'POSTED'
                   and (?::varchar is null or p.period_code = ?)
                 order by v.voucher_date, v.voucher_number, vl.line_no
                 """, (rs, rowNum) -> new ReportResponses.LedgerLine(rs.getObject("voucher_id", UUID.class),
@@ -204,7 +204,7 @@ public class JdbcReportingRepository implements ReportingRepository {
                     join voucher v on v.ledger_id = vl.ledger_id and v.id = vl.voucher_id
                     join accounting_period p on p.ledger_id = v.ledger_id and p.id = v.period_id
                     left join baseline_period bp on bp.account_id = vl.account_id
-                    where v.ledger_id = ? and v.status in ('POSTED', 'REVERSED') and v.deleted_at is null
+                    where v.ledger_id = ? and v.status = 'POSTED' and v.deleted_at is null
                       and p.period_code < (select period_code from selected)
                       and (bp.baseline_code is null or p.period_code > bp.baseline_code)
                     group by vl.account_id
@@ -216,7 +216,7 @@ public class JdbcReportingRepository implements ReportingRepository {
                     from voucher_line vl
                     join voucher v on v.ledger_id = vl.ledger_id and v.id = vl.voucher_id
                     join accounting_period p on p.ledger_id = v.ledger_id and p.id = v.period_id
-                    where v.ledger_id = ? and v.status in ('POSTED', 'REVERSED') and v.deleted_at is null
+                    where v.ledger_id = ? and v.status = 'POSTED' and v.deleted_at is null
                       and p.period_code = (select period_code from selected)
                     group by vl.account_id
                 ),
@@ -227,7 +227,7 @@ public class JdbcReportingRepository implements ReportingRepository {
                     from voucher_line vl
                     join voucher v on v.ledger_id = vl.ledger_id and v.id = vl.voucher_id
                     join accounting_period p on p.ledger_id = v.ledger_id and p.id = v.period_id
-                    where v.ledger_id = ? and v.status in ('POSTED', 'REVERSED') and v.deleted_at is null
+                    where v.ledger_id = ? and v.status = 'POSTED' and v.deleted_at is null
                       and left(p.period_code, 4) = left((select period_code from selected), 4)
                       and p.period_code <= (select period_code from selected)
                     group by vl.account_id
@@ -288,7 +288,7 @@ public class JdbcReportingRepository implements ReportingRepository {
                     join voucher v on v.ledger_id = vl.ledger_id and v.id = vl.voucher_id
                     join accounting_period p on p.ledger_id = v.ledger_id and p.id = v.period_id
                     where v.ledger_id = ? and p.period_code = ? and vl.account_id = ?
-                      and v.status in ('POSTED', 'REVERSED') and v.deleted_at is null
+                      and v.status = 'POSTED' and v.deleted_at is null
                 ),
                 running as (
                     select *, count(*) over() total_items,
@@ -314,7 +314,7 @@ public class JdbcReportingRepository implements ReportingRepository {
                 join voucher v on v.ledger_id = vl.ledger_id and v.id = vl.voucher_id
                 join accounting_period p on p.ledger_id = v.ledger_id and p.id = v.period_id
                 where v.ledger_id = ? and p.period_code = ? and vl.account_id = ?
-                  and v.status in ('POSTED', 'REVERSED') and v.deleted_at is null
+                  and v.status = 'POSTED' and v.deleted_at is null
                 """, (rs, rowNum) -> new BigDecimal[]{rs.getBigDecimal("debit"), rs.getBigDecimal("credit")},
                 ledgerId, periodCode, accountId);
         BigDecimal ending = opening.add(totals[0]).subtract(totals[1]);
@@ -347,8 +347,8 @@ public class JdbcReportingRepository implements ReportingRepository {
                         from voucher_line vl
                         join voucher v on v.ledger_id = vl.ledger_id and v.id = vl.voucher_id
                         join accounting_period p on p.ledger_id = v.ledger_id and p.id = v.period_id
-                        where v.ledger_id = ? and vl.account_id = ?
-                          and v.status in ('POSTED', 'REVERSED') and v.deleted_at is null
+                          where v.ledger_id = ? and vl.account_id = ?
+                          and v.status = 'POSTED' and v.deleted_at is null
                           and p.period_code < (select period_code from selected)
                           and ((select period_code from baseline) is null
                             or p.period_code > (select period_code from baseline))), 0)

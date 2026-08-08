@@ -227,8 +227,10 @@ describe('VoucherListPage', () => {
 })
 
 describe('VoucherEditorPage', () => {
-  it('does not offer draft or posting actions after a voucher is posted', async () => {
-    vi.mocked(apiFetch).mockImplementation((path) => Promise.resolve(path.endsWith('/voucher-1') ? {
+  it('allows editing a posted voucher while its period is open', async () => {
+    vi.mocked(apiFetch).mockImplementation((path) => Promise.resolve(path.endsWith('/periods') ? [{
+      id: 'period-1', ledgerId: 'ledger-1', periodCode: '2026-06', startDate: '2026-06-01', endDate: '2026-06-30', status: 'OPEN',
+    }] : path.endsWith('/voucher-1') ? {
       id: 'voucher-1', ledgerId: 'ledger-1', periodId: 'period-1', voucherDate: '2026-06-25',
       voucherType: '记', voucherNumber: '6', summary: '收货款', status: 'POSTED',
       approvalRequired: false, version: 2, lines: [],
@@ -248,10 +250,36 @@ describe('VoucherEditorPage', () => {
     )
 
     expect(await screen.findByText('版本 2 · POSTED')).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: '保存草稿' })).not.toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: '保存修改' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '校验' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '记账' })).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '反记账' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /冲\s*销/ })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '反记账' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /冲\s*销/ })).not.toBeInTheDocument()
+  })
+
+  it('keeps a posted voucher read-only after the period is closed', async () => {
+    vi.mocked(apiFetch).mockImplementation((path) => Promise.resolve(path.endsWith('/periods') ? [{
+      id: 'period-1', ledgerId: 'ledger-1', periodCode: '2026-06', startDate: '2026-06-01', endDate: '2026-06-30', status: 'CLOSED',
+    }] : path.endsWith('/voucher-1') ? {
+      id: 'voucher-1', ledgerId: 'ledger-1', periodId: 'period-1', voucherDate: '2026-06-25',
+      voucherType: '记', voucherNumber: '6', summary: '收货款', status: 'POSTED',
+      approvalRequired: false, version: 2, lines: [],
+    } : []))
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <App>
+          <MemoryRouter initialEntries={['/ledgers/ledger-1/vouchers/voucher-1']}>
+            <Routes>
+              <Route path="/ledgers/:ledgerId/vouchers/:voucherId" element={<VoucherEditorPage />} />
+            </Routes>
+          </MemoryRouter>
+        </App>
+      </QueryClientProvider>,
+    )
+
+    expect(await screen.findByText('期间已结账，请先反结账后修改')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '保存修改' })).not.toBeInTheDocument()
   })
 })

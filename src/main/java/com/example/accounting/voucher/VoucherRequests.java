@@ -57,6 +57,4 @@ public final class VoucherRequests {
     public record Comment(@NotBlank String comment) {
     }
 
-    public record Reason(@NotBlank String reason) {
-    }
 }

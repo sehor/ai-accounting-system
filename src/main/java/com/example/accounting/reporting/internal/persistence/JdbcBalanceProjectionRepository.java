@@ -68,7 +68,7 @@ public class JdbcBalanceProjectionRepository implements BalanceProjectionReposit
                 ledgerId, periodId);
         if (state == null && Boolean.TRUE.equals(jdbc.queryForObject("""
                 select exists (
-                    select 1 from voucher where ledger_id = ? and period_id = ? and status in ('POSTED', 'REVERSED')
+                    select 1 from voucher where ledger_id = ? and period_id = ? and status = 'POSTED'
                     union all
                     select 1 from opening_balance where ledger_id = ? and period_id = ? and confirmed
                 )
@@ -88,7 +88,7 @@ public class JdbcBalanceProjectionRepository implements BalanceProjectionReposit
                         coalesce(sum(case when vl.side = 'CREDIT' then vl.base_amount else 0 end), 0) period_credit
                     from voucher_line vl
                     join voucher v on v.ledger_id = vl.ledger_id and v.id = vl.voucher_id
-                    where v.ledger_id = ? and v.period_id = ? and v.status in ('POSTED', 'REVERSED')
+                    where v.ledger_id = ? and v.period_id = ? and v.status = 'POSTED'
                     group by vl.account_id
                     union all
                     select ob.account_id, sum(ob.debit_base), sum(ob.credit_base),
@@ -140,7 +140,7 @@ public class JdbcBalanceProjectionRepository implements BalanceProjectionReposit
             boolean hasFacts = Boolean.TRUE.equals(jdbc.queryForObject("""
                     select exists (
                         select 1 from voucher v
-                        where v.ledger_id = ? and v.status in ('POSTED', 'REVERSED')
+                        where v.ledger_id = ? and v.status = 'POSTED'
                           and (?::varchar is null or exists (
                               select 1 from accounting_period p
                               where p.ledger_id = v.ledger_id and p.id = v.period_id and p.period_code = ?))

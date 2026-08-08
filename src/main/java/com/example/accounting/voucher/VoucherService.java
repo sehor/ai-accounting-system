@@ -18,6 +18,10 @@ public interface VoucherService {
 
     VoucherResponses.Voucher update(UUID actorId, UUID ledgerId, UUID voucherId, VoucherRequests.Update request);
 
+    VoucherResponses.Voucher replaceGenerated(UUID actorId, UUID ledgerId, UUID voucherId,
+                                              VoucherRequests.Update request, String sourceType,
+                                              UUID expectedSourceId, UUID nextSourceId);
+
     List<VoucherResponses.Voucher> list(UUID actorId, UUID ledgerId);
 
     List<VoucherResponses.Voucher> list(UUID actorId, UUID ledgerId, int limit, int offset);
@@ -41,13 +45,6 @@ public interface VoucherService {
     VoucherResponses.Voucher post(UUID actorId, UUID ledgerId, UUID voucherId);
 
     VoucherResponses.Voucher postAgentVoucher(UUID actorId, UUID ledgerId, UUID voucherId);
-
-    VoucherResponses.Voucher unpost(UUID actorId, UUID ledgerId, UUID voucherId, String reason);
-
-    VoucherResponses.Voucher reverse(UUID actorId, UUID ledgerId, UUID voucherId);
-
-    VoucherResponses.Voucher reverseGenerated(UUID actorId, UUID ledgerId, UUID voucherId,
-                                              String sourceType, UUID sourceId);
 
     void delete(UUID actorId, UUID ledgerId, UUID voucherId);
 

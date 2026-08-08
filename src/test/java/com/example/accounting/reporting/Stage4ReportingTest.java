@@ -90,10 +90,14 @@ class Stage4ReportingTest {
                 .extracting(ReportResponses.StatementLine::code)
                 .containsExactly("1001");
 
-        VoucherResponses.Voucher reversal = voucherService.reverse(userId, ledgerId, voucher.id());
-        assertThat(reversal.status()).isEqualTo("POSTED");
+        VoucherResponses.Voucher updated = voucherService.update(userId, ledgerId, voucher.id(),
+                new VoucherRequests.Update(voucher.version(), periodId, voucher.voucherDate(), voucher.voucherType(),
+                        voucher.voucherNumber(), "Updated", List.of(
+                        line(cashId, "DEBIT", "100"), line(capitalId, "CREDIT", "100"))));
+        assertThat(updated.status()).isEqualTo("POSTED");
         assertThat(reportingService.trialBalance(userId, ledgerId, "2026-01"))
-                .allSatisfy(line -> assertThat(line.balance()).isEqualByComparingTo(BigDecimal.ZERO));
+                .extracting(ReportResponses.TrialBalanceLine::balance)
+                .containsExactlyInAnyOrder(new BigDecimal("100.00"), new BigDecimal("-100.00"));
     }
 
     @Test

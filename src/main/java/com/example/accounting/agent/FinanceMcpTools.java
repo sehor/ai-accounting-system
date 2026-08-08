@@ -791,27 +791,6 @@ public class FinanceMcpTools {
                 () -> voucherService.post(actorId, ledgerId, voucherId));
     }
 
-    @McpTool(name = "unpost_voucher", description = "Unpost a posted voucher")
-    @PreAuthorize("isAuthenticated()")
-    public VoucherResponses.Voucher unpostVoucher(
-            @McpToolParam UUID ledgerId,
-            @McpToolParam UUID voucherId,
-            @McpToolParam(description = "Unpost reason") String reason) {
-        UUID actorId = actor();
-        return audited(actorId, "unpost_voucher", ledgerId, voucherId + ":" + reason,
-                () -> voucherService.unpost(actorId, ledgerId, voucherId, reason));
-    }
-
-    @McpTool(name = "reverse_voucher", description = "Create a reversal voucher for a posted voucher")
-    @PreAuthorize("isAuthenticated()")
-    public VoucherResponses.Voucher reverseVoucher(
-            @McpToolParam UUID ledgerId,
-            @McpToolParam(description = "Posted voucher identifier") UUID voucherId) {
-        UUID actorId = actor();
-        return audited(actorId, "reverse_voucher", ledgerId, voucherId.toString(),
-                () -> voucherService.reverse(actorId, ledgerId, voucherId));
-    }
-
     @McpTool(name = "delete_voucher", description = "Delete a voucher")
     @PreAuthorize("isAuthenticated()")
     public boolean deleteVoucher(

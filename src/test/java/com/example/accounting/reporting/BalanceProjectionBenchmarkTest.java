@@ -42,7 +42,7 @@ class BalanceProjectionBenchmarkTest {
                 from voucher_line vl
                 join voucher v on v.ledger_id = vl.ledger_id and v.id = vl.voucher_id
                 join accounting_period p on p.ledger_id = v.ledger_id and p.id = v.period_id
-                where v.ledger_id = ? and v.status in ('POSTED', 'REVERSED')
+                where v.ledger_id = ? and v.status = 'POSTED'
                   and (?::varchar is null or p.period_code = ?)
                 union all
                 select ob.account_id, ob.debit_base, ob.credit_base

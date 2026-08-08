@@ -29,14 +29,14 @@ class BalanceProjectionServiceTest {
         UUID periodId = UUID.randomUUID();
         UUID accountId = UUID.randomUUID();
         BalanceProjectionService.VoucherEvent event = new BalanceProjectionService.VoucherEvent(
-                ledgerId, periodId, UUID.randomUUID(), 2, BalanceProjectionService.EventType.UNPOST,
+                ledgerId, periodId, UUID.randomUUID(), 2, BalanceProjectionService.EventType.UPDATE,
                 java.util.List.of(new BalanceProjectionService.Entry(accountId, java.math.BigDecimal.ZERO,
                         java.math.BigDecimal.ZERO, new java.math.BigDecimal("-10.00"),
                         java.math.BigDecimal.ZERO)));
 
         assertThat(event.entries()).singleElement().satisfies(line -> {
             assertThat(line.periodDebit()).isEqualByComparingTo("-10.00");
-            assertThat(event.type()).isEqualTo(BalanceProjectionService.EventType.UNPOST);
+            assertThat(event.type()).isEqualTo(BalanceProjectionService.EventType.UPDATE);
         });
     }
 }

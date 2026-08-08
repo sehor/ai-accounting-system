@@ -116,22 +116,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/ledgers/{ledgerId}/vouchers/{voucherId}:unpost": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["unpost"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/v1/ledgers/{ledgerId}/vouchers/{voucherId}:submit": {
         parameters: {
             query?: never;
@@ -142,22 +126,6 @@ export interface paths {
         get?: never;
         put?: never;
         post: operations["submit"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/ledgers/{ledgerId}/vouchers/{voucherId}:reverse": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["reverse"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1454,9 +1422,6 @@ export interface components {
             approvalEnabled?: boolean;
             status?: string;
         };
-        Reason: {
-            reason: string;
-        };
         Comment: {
             comment: string;
         };
@@ -2423,57 +2388,7 @@ export interface operations {
             };
         };
     };
-    unpost: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                ledgerId: string;
-                voucherId: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["Reason"];
-            };
-        };
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "*/*": components["schemas"]["Voucher"];
-                };
-            };
-        };
-    };
     submit: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                ledgerId: string;
-                voucherId: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "*/*": components["schemas"]["Voucher"];
-                };
-            };
-        };
-    };
-    reverse: {
         parameters: {
             query?: never;
             header?: never;

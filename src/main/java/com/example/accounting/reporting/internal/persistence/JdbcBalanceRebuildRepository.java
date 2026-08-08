@@ -119,7 +119,7 @@ public class JdbcBalanceRebuildRepository implements BalanceRebuildRepository {
                         case when vl.side = 'DEBIT' then vl.base_amount else 0 end period_debit,
                         case when vl.side = 'CREDIT' then vl.base_amount else 0 end period_credit
                     from voucher_line vl join voucher v on v.ledger_id = vl.ledger_id and v.id = vl.voucher_id
-                    where v.ledger_id = ? and v.period_id = ? and v.status in ('POSTED', 'REVERSED')
+                    where v.ledger_id = ? and v.period_id = ? and v.status = 'POSTED'
                     union all
                     select ob.account_id, ob.debit_base, ob.credit_base, 0::numeric, 0::numeric
                     from opening_balance ob where ob.ledger_id = ? and ob.period_id = ? and ob.confirmed
