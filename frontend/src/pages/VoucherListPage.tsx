@@ -2,11 +2,12 @@ import { DownloadOutlined, PlusOutlined, UploadOutlined } from '@ant-design/icon
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Alert, App as AntApp, Button, Card, Checkbox, Empty, Input, Modal, Pagination, Space, Table, Tag, Typography, Upload } from 'antd'
 import { useMemo, useState } from 'react'
-import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import { ApiError, apiFetch, apiFetchWithHeaders, createIdempotencyKey, jsonBody } from '../api/client'
 import type { Account, KingdeeImportResult, Voucher, VoucherLine } from '../api/types'
 import { useAuth } from '../auth/AuthProvider'
 import { PeriodSelector, usePeriodFilter } from '../components/PeriodSelector'
+import { useWorkspaceSearchParams } from '../components/workspaceSearch'
 
 type DisplayRow = {
   key: string
@@ -34,7 +35,7 @@ export function VoucherListPage() {
   const navigate = useNavigate()
   const client = useQueryClient()
   const { message } = AntApp.useApp()
-  const [search, setSearch] = useSearchParams()
+  const [search, setSearch] = useWorkspaceSearchParams()
   const { periods, periodCode, setPeriodCode } = usePeriodFilter(ledgerId)
   const limit = Number(search.get('limit') || 20)
   const offset = Number(search.get('offset') || 0)

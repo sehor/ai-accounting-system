@@ -4,10 +4,11 @@ import { DownloadOutlined, PlusOutlined, ReloadOutlined, UploadOutlined } from '
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import dayjs, { type Dayjs } from 'dayjs'
 import { useEffect, useMemo, useState } from 'react'
-import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import { apiFetch, createIdempotencyKey, jsonBody, ApiError } from '../api/client'
 import type { Account, CashFlowItem, DimensionValue, KingdeeImportResult, Period, Voucher, VoucherRevision } from '../api/types'
 import { useAuth } from '../auth/AuthProvider'
+import { useWorkspaceSearchParams } from '../components/workspaceSearch'
 import { clearWorkspaceTabDirty, setWorkspaceTabDirty } from '../components/workspaceDirty'
 import { voucherTotals } from '../features/vouchers/money'
 
@@ -18,7 +19,7 @@ const emptyLines: VoucherForm['lines'] = []
 const decimalRule = { pattern: /^\d+(?:\.\d+)?$/, message: '请输入有效数字' }
 
 export function VoucherListPageLegacy() {
-  const { ledgerId = '' } = useParams(); const { session } = useAuth(); const navigate = useNavigate(); const client = useQueryClient(); const { message } = AntApp.useApp(); const [search, setSearch] = useSearchParams()
+  const { ledgerId = '' } = useParams(); const { session } = useAuth(); const navigate = useNavigate(); const client = useQueryClient(); const { message } = AntApp.useApp(); const [search, setSearch] = useWorkspaceSearchParams()
   const limit = Number(search.get('limit') || 20); const offset = Number(search.get('offset') || 0); const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([]); const [bulkAction, setBulkAction] = useState<'approve' | 'post' | null>(null); const [bulkComment, setBulkComment] = useState(''); const [exportOpen, setExportOpen] = useState(false); const [mergeEntries, setMergeEntries] = useState(false)
   const query = useQuery({ queryKey: ['vouchers', ledgerId, limit, offset], queryFn: () => apiFetch<Voucher[]>(`/ledgers/${ledgerId}/vouchers?limit=${limit}&offset=${offset}`, session!), enabled: Boolean(session && ledgerId) })
   const accounts = useQuery({ queryKey: ['accounts', ledgerId], queryFn: () => apiFetch<Account[]>(`/ledgers/${ledgerId}/accounts`, session!), enabled: Boolean(session && ledgerId) })

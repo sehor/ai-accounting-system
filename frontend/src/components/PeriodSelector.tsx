@@ -3,10 +3,10 @@ import { useQuery } from '@tanstack/react-query'
 import { Button, Select, Space, Typography } from 'antd'
 import dayjs from 'dayjs'
 import { useEffect, useMemo } from 'react'
-import { useSearchParams } from 'react-router-dom'
 import { apiFetch } from '../api/client'
 import type { Period } from '../api/types'
 import { useAuth } from '../auth/AuthProvider'
+import { useWorkspaceSearchParams } from './workspaceSearch'
 
 export function selectDefaultPeriod(periods: Period[], currentMonth = dayjs().format('YYYY-MM')): string | undefined {
   const withVouchers = periods.filter((period) => period.hasVouchers)
@@ -17,7 +17,7 @@ export function selectDefaultPeriod(periods: Period[], currentMonth = dayjs().fo
 
 export function usePeriodFilter(ledgerId: string) {
   const { session } = useAuth()
-  const [search, setSearch] = useSearchParams()
+  const [search, setSearch] = useWorkspaceSearchParams()
   const periods = useQuery({
     queryKey: ['periods', ledgerId],
     queryFn: () => apiFetch<Period[]>(`/ledgers/${ledgerId}/periods`, session!),

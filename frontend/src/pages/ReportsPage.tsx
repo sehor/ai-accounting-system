@@ -1,11 +1,12 @@
 import { Alert, Card, Empty, Space, Switch, Table, Typography } from 'antd'
 import type { TableProps } from 'antd'
 import { useQuery } from '@tanstack/react-query'
-import { useParams, useSearchParams } from 'react-router-dom'
+import { useParams } from 'react-router-dom'
 import { apiFetch } from '../api/client'
 import type { Statement, TrialBalanceLine } from '../api/types'
 import { useAuth } from '../auth/AuthProvider'
 import { PeriodSelector, usePeriodFilter } from '../components/PeriodSelector'
+import { useWorkspaceSearchParams } from '../components/workspaceSearch'
 
 const reportNames: Record<string, string> = {
   'trial-balance': '科目余额表',
@@ -21,7 +22,7 @@ export function reportRowKey(row: TrialBalanceLine | { code: string }, index = 0
 export function ReportsPage() {
   const { ledgerId = '', reportType = 'balance-sheet' } = useParams()
   const { session } = useAuth()
-  const [search, setSearch] = useSearchParams()
+  const [search, setSearch] = useWorkspaceSearchParams()
   const { periods, periodCode, setPeriodCode } = usePeriodFilter(ledgerId)
   const includeParents = search.get('includeParents') === 'true'
   const reportParams = new URLSearchParams()

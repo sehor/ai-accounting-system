@@ -4,10 +4,11 @@ import type { ColumnsType } from 'antd/es/table'
 import { PlusOutlined, ReloadOutlined, UploadOutlined } from '@ant-design/icons'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import dayjs from 'dayjs'
-import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import { apiFetch, jsonBody } from '../api/client'
 import type { Account, FixedAsset, FixedAssetCategory, FixedAssetPage, FixedAssetPreview, Period } from '../api/types'
 import { useAuth } from '../auth/AuthProvider'
+import { useWorkspaceSearchParams } from '../components/workspaceSearch'
 
 export const formatFixedAssetMoney = (value: string | number | null | undefined) => value == null ? '-' : Number(value).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const money = formatFixedAssetMoney
@@ -21,7 +22,7 @@ function useLedgerData(ledgerId: string) {
 
 export function FixedAssetListPage() {
   const { ledgerId = '' } = useParams(); const { session, periods, categories } = useLedgerData(ledgerId)
-  const navigate = useNavigate(); const [search, setSearch] = useSearchParams(); const [tab, setTab] = useState(search.get('tab') || 'cards')
+  const navigate = useNavigate(); const [search, setSearch] = useWorkspaceSearchParams(); const [tab, setTab] = useState(search.get('tab') || 'cards')
   const period = periods.data?.find((item) => item.status === 'OPEN') || periods.data?.[periods.data.length - 1]
   const categoryId = search.get('categoryId') || undefined; const keyword = search.get('keyword') || undefined
   const assets = useQuery({ queryKey: ['fixed-assets', ledgerId, period?.id, categoryId, keyword], queryFn: () => apiFetch<FixedAssetPage>(`/ledgers/${ledgerId}/fixed-assets?periodId=${period!.id}&page=1&pageSize=100${categoryId ? `&categoryId=${categoryId}` : ''}${keyword ? `&search=${encodeURIComponent(keyword)}` : ''}`, session!), enabled: Boolean(session && ledgerId && period) })

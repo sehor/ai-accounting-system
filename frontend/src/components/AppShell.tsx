@@ -14,6 +14,7 @@ import type { Ledger, User } from '../api/types'
 import { useAuth } from '../auth/AuthProvider'
 import { logoutOidc, isOidcConfigured } from '../auth/session'
 import { clearWorkspaceTabDirty, isWorkspaceTabDirty } from './workspaceDirty'
+import { WorkspaceTabSearchProvider } from './workspaceSearch'
 
 const { Header, Sider, Content } = Layout
 const TAB_STORAGE_PREFIX = 'ai-accounting.tabs.'
@@ -86,6 +87,8 @@ export function AppShell() {
   const currentTabTitle = currentTab?.title
   const currentTabLocation = currentTab?.location
   const currentTabClosable = currentTab?.closable
+  const activeTabRef = useRef<string | undefined>(undefined)
+  activeTabRef.current = currentTabId
 
   const ledgers = useQuery({
     queryKey: ['ledgers'],
@@ -139,7 +142,11 @@ export function AppShell() {
     }
   }, [ledgerId, storageKey, tabs, tabsLedgerId])
 
-  if (currentTab) cache.current.set(currentTab.id, outlet)
+  if (currentTab && currentTabLocation) cache.current.set(currentTab.id,
+    <WorkspaceTabSearchProvider tabId={currentTab.id} location={currentTabLocation} activeTabRef={activeTabRef}>
+      {outlet}
+    </WorkspaceTabSearchProvider>,
+  )
 
   const selectedKey = useMemo(() => {
     const path = location.pathname

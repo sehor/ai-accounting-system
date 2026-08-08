@@ -2,11 +2,12 @@ import { Alert, Card, Empty, Input, Pagination, Table, Tree, Typography } from '
 import type { DataNode } from 'antd/es/tree'
 import { useQuery } from '@tanstack/react-query'
 import { useEffect, useMemo } from 'react'
-import { Link, useParams, useSearchParams } from 'react-router-dom'
+import { Link, useParams } from 'react-router-dom'
 import { apiFetch } from '../api/client'
 import type { Account, GeneralLedgerAccount, GeneralLedgerPage, SubLedgerPage, TrialBalanceLine } from '../api/types'
 import { useAuth } from '../auth/AuthProvider'
 import { PeriodSelector, usePeriodFilter } from '../components/PeriodSelector'
+import { useWorkspaceSearchParams } from '../components/workspaceSearch'
 
 const bookNames: Record<string, string> = {
   'trial-balance': '科目余额表',
@@ -75,7 +76,7 @@ type GeneralLedgerDisplayRow = GeneralLedgerAccount & { rowType: 'opening' | 'pe
 function GeneralLedgerPageView() {
   const { ledgerId = '' } = useParams()
   const { session } = useAuth()
-  const [search, setSearch] = useSearchParams()
+  const [search, setSearch] = useWorkspaceSearchParams()
   const { periodCode } = usePeriodFilter(ledgerId)
   const page = Number(search.get('page') || 1)
   const query = useQuery({
@@ -150,7 +151,7 @@ function filterTree(nodes: DataNode[], keyword: string): DataNode[] {
 function SubLedgerPageView() {
   const { ledgerId = '' } = useParams()
   const { session } = useAuth()
-  const [search, setSearch] = useSearchParams()
+  const [search, setSearch] = useWorkspaceSearchParams()
   const { periodCode } = usePeriodFilter(ledgerId)
   const page = Number(search.get('page') || 1)
   const accountId = search.get('accountId') || undefined
