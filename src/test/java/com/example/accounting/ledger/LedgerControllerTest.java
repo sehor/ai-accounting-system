@@ -5,6 +5,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -51,6 +52,24 @@ class LedgerControllerTest {
 
         verify(ledgerService).create(eq(new com.example.accounting.identity.CurrentUserResolver.ResolvedUser(
                 userId, "local", userId.toString())), any());
+    }
+
+    @Test
+    void updatesLedgerDescription() throws Exception {
+        UUID userId = UUID.randomUUID();
+        UUID ledgerId = UUID.randomUUID();
+        when(ledgerService.renameLedger(eq(userId), eq(ledgerId), any())).thenReturn(
+                new LedgerResponses.Ledger(ledgerId, "Demo", "研发、生产和销售智能硬件", "SME", "v1", "CNY",
+                        LocalDate.of(2026, 1, 1), false, "ACTIVE"));
+
+        mockMvc.perform(patch("/v1/ledgers/{ledgerId}", ledgerId)
+                        .header("X-User-Id", userId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"Demo\",\"description\":\"研发、生产和销售智能硬件\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.description").value("研发、生产和销售智能硬件"));
+
+        verify(ledgerService).renameLedger(eq(userId), eq(ledgerId), any());
     }
 
     @Test

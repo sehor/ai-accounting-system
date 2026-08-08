@@ -21,7 +21,8 @@ public final class LedgerRequests {
         FUZZY
     }
 
-    public record Create(@NotBlank String name,
+    public record Create(@NotBlank @Size(max = 200) String name,
+                         @Size(max = 2000) String description,
                          @NotBlank String accountingStandardCode,
                          @NotBlank String accountingStandardVersion,
                          @NotBlank @Pattern(regexp = "[A-Z]{3}") String baseCurrency,
@@ -31,15 +32,34 @@ public final class LedgerRequests {
 
         public Create(String name, String accountingStandardCode, String accountingStandardVersion,
                       String baseCurrency, LocalDate startDate, Boolean approvalEnabled) {
-            this(name, accountingStandardCode, accountingStandardVersion, baseCurrency, startDate,
+            this(name, null, accountingStandardCode, accountingStandardVersion, baseCurrency, startDate,
                     approvalEnabled, null);
+        }
+
+        public Create(String name, String description, String accountingStandardCode,
+                      String accountingStandardVersion, String baseCurrency, LocalDate startDate,
+                      Boolean approvalEnabled) {
+            this(name, description, accountingStandardCode, accountingStandardVersion, baseCurrency, startDate,
+                    approvalEnabled, null);
+        }
+
+        public Create(String name, String accountingStandardCode, String accountingStandardVersion,
+                      String baseCurrency, LocalDate startDate, Boolean approvalEnabled,
+                      AccountCodeRule accountCodeRule) {
+            this(name, null, accountingStandardCode, accountingStandardVersion, baseCurrency, startDate,
+                    approvalEnabled, accountCodeRule);
         }
     }
 
     public record AddMember(@NotNull UUID userId, @NotNull LedgerRole role) {
     }
 
-    public record Rename(@NotBlank @Size(max = 200) String name) {
+    public record Rename(@NotBlank @Size(max = 200) String name,
+                         @Size(max = 2000) String description) {
+
+        public Rename(String name) {
+            this(name, null);
+        }
     }
 
     public record UpdateMember(@NotNull LedgerRole role, @NotNull MembershipStatus status) {

@@ -54,6 +54,12 @@ public class LedgerController {
         return ledgerService.findLedger(user(request), ledgerId);
     }
 
+    @PatchMapping("/{ledgerId}")
+    public Ledger update(HttpServletRequest request, @PathVariable UUID ledgerId,
+                         @Valid @RequestBody LedgerRequests.Rename body) {
+        return ledgerService.renameLedger(user(request), ledgerId, body);
+    }
+
     @GetMapping("/{ledgerId}/role")
     public Map<String, String> role(HttpServletRequest request, @PathVariable UUID ledgerId) {
         return Map.of("role", ledgerService.role(user(request), ledgerId).name());

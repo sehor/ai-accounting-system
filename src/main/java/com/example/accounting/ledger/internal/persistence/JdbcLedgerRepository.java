@@ -22,13 +22,13 @@ public class JdbcLedgerRepository implements LedgerRepository {
     }
 
     @Override
-    public void createLedger(UUID ledgerId, String name, String standardCode, String standardVersion,
+    public void createLedger(UUID ledgerId, String name, String description, String standardCode, String standardVersion,
                              String baseCurrency, LocalDate startDate, boolean approvalEnabled, UUID actorId) {
         jdbc.update("""
-                insert into ledger (id, name, accounting_standard_code, accounting_standard_version,
+                insert into ledger (id, name, description, accounting_standard_code, accounting_standard_version,
                     base_currency, start_date, approval_enabled, created_by, updated_by)
-                values (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """, ledgerId, name, standardCode, standardVersion, baseCurrency, startDate,
+                values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, ledgerId, name, description, standardCode, standardVersion, baseCurrency, startDate,
                 approvalEnabled, actorId, actorId);
     }
 
@@ -77,7 +77,7 @@ public class JdbcLedgerRepository implements LedgerRepository {
     @Override
     public List<LedgerResponses.Ledger> list(UUID actorId) {
         return jdbc.query("""
-                select l.id, l.name, l.accounting_standard_code, l.accounting_standard_version,
+                select l.id, l.name, l.description, l.accounting_standard_code, l.accounting_standard_version,
                     l.base_currency, l.start_date, l.approval_enabled, l.status
                 from ledger l
                 join ledger_membership m on m.ledger_id = l.id
@@ -91,7 +91,7 @@ public class JdbcLedgerRepository implements LedgerRepository {
     @Override
     public List<LedgerResponses.Ledger> listAllActive() {
         return jdbc.query("""
-                select id, name, accounting_standard_code, accounting_standard_version,
+                select id, name, description, accounting_standard_code, accounting_standard_version,
                     base_currency, start_date, approval_enabled, status
                 from ledger
                 where status = 'ACTIVE' and deleted_at is null
@@ -108,16 +108,17 @@ public class JdbcLedgerRepository implements LedgerRepository {
     @Override
     public Optional<LedgerResponses.Ledger> findLedger(UUID ledgerId) {
         return Optional.ofNullable(jdbc.query("""
-                select id, name, accounting_standard_code, accounting_standard_version,
+                select id, name, description, accounting_standard_code, accounting_standard_version,
                     base_currency, start_date, approval_enabled, status
                 from ledger where id = ? and deleted_at is null
                 """, rs -> rs.next() ? mapLedger(rs) : null, ledgerId));
     }
 
     @Override
-    public void updateLedgerName(UUID ledgerId, String name, UUID actorId) {
-        jdbc.update("update ledger set name = ?, updated_at = now(), updated_by = ?, version = version + 1 "
-                + "where id = ? and deleted_at is null", name, actorId, ledgerId);
+    public void updateLedger(UUID ledgerId, String name, String description, UUID actorId) {
+        jdbc.update("update ledger set name = ?, description = coalesce(?, description), updated_at = now(), "
+                + "updated_by = ?, version = version + 1 where id = ? and deleted_at is null",
+                name, description, actorId, ledgerId);
     }
 
     @Override
@@ -376,7 +377,8 @@ public class JdbcLedgerRepository implements LedgerRepository {
 
     private LedgerResponses.Ledger mapLedger(java.sql.ResultSet rs) throws java.sql.SQLException {
         return new LedgerResponses.Ledger(rs.getObject("id", UUID.class), rs.getString("name"),
-                rs.getString("accounting_standard_code"), rs.getString("accounting_standard_version"),
+                rs.getString("description"), rs.getString("accounting_standard_code"),
+                rs.getString("accounting_standard_version"),
                 rs.getString("base_currency"), rs.getObject("start_date", LocalDate.class),
                 rs.getBoolean("approval_enabled"), rs.getString("status"));
     }

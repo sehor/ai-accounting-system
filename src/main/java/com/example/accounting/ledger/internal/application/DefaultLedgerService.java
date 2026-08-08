@@ -105,7 +105,8 @@ public class DefaultLedgerService implements LedgerService {
         AccountCodeRule rule = request.accountCodeRule() == null
                 ? standard.accountCodeRule() : request.accountCodeRule();
         UUID ledgerId = UUID.randomUUID();
-        ledgers.createLedger(ledgerId, request.name().trim(), request.accountingStandardCode().trim(),
+        String description = normalizeDescription(request.description());
+        ledgers.createLedger(ledgerId, request.name().trim(), description, request.accountingStandardCode().trim(),
                 request.accountingStandardVersion().trim(), request.baseCurrency(), request.startDate(),
                 Boolean.TRUE.equals(request.approvalEnabled()), actorId);
         ledgers.createOwner(ledgerId, actorId);
@@ -137,7 +138,8 @@ public class DefaultLedgerService implements LedgerService {
             throw problem(422, "INVALID_LEDGER_NAME", "Invalid ledger name",
                     "Ledger name must contain between 1 and 200 characters");
         }
-        ledgers.updateLedgerName(ledgerId, name, actorId);
+        String description = request.description() == null ? null : normalizeDescription(request.description());
+        ledgers.updateLedger(ledgerId, name, description, actorId);
         return requireLedger(ledgerId);
     }
 
@@ -812,6 +814,15 @@ public class DefaultLedgerService implements LedgerService {
 
     private String text(String provided, String fallback) {
         return provided == null ? fallback : provided;
+    }
+
+    private String normalizeDescription(String description) {
+        String normalized = description == null ? "" : description.trim();
+        if (normalized.length() > 2000) {
+            throw problem(422, "INVALID_LEDGER_DESCRIPTION", "Invalid ledger description",
+                    "Ledger description must contain at most 2000 characters");
+        }
+        return normalized;
     }
 
     private String json(Object value) {

@@ -213,11 +213,11 @@ public class FinanceMcpTools {
                 ledgerService.listCashFlowItems(actorId, ledgerId)));
     }
 
-    @McpTool(name = "update_ledger", description = "Update a ledger name")
+    @McpTool(name = "update_ledger", description = "Update a ledger name and description")
     @PreAuthorize("isAuthenticated()")
     public LedgerResponses.Ledger updateLedger(
             @McpToolParam UUID ledgerId,
-            @McpToolParam(description = "Ledger name update") LedgerRequests.Rename request) {
+            @McpToolParam(description = "Ledger name and optional business description update") LedgerRequests.Rename request) {
         UUID actorId = actor();
         return audited(actorId, "update_ledger", ledgerId, String.valueOf(request),
                 () -> ledgerService.renameLedger(actorId, ledgerId, request));

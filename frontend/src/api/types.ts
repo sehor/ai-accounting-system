@@ -20,6 +20,7 @@ export interface AdminUser extends User {
 export interface Ledger {
   id: string
   name: string
+  description: string
   accountingStandardCode: string
   accountingStandardVersion: string
   baseCurrency: string

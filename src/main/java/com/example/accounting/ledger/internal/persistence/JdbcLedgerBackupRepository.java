@@ -57,16 +57,16 @@ public class JdbcLedgerBackupRepository implements LedgerBackupRepository {
     }
 
     @Override
-    public void createLedger(UUID ledgerId, UUID actorId, String name, String standardCode,
+    public void createLedger(UUID ledgerId, UUID actorId, String name, String description, String standardCode,
                              String standardVersion, String baseCurrency, LocalDate startDate,
                              boolean approvalEnabled, String separator, int level2Width,
                              int level3Width, int level4Width) {
         jdbc.update("""
-                insert into ledger (id, name, accounting_standard_code, accounting_standard_version,
+                insert into ledger (id, name, description, accounting_standard_code, accounting_standard_version,
                     base_currency, start_date, approval_enabled, status, created_by, updated_by,
                     account_code_separator, account_level2_width, account_level3_width, account_level4_width)
-                values (?, ?, ?, ?, ?, ?, ?, 'ACTIVE', ?, ?, ?, ?, ?, ?)
-                """, ledgerId, name, standardCode, standardVersion, baseCurrency, startDate,
+                values (?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE', ?, ?, ?, ?, ?, ?)
+                """, ledgerId, name, description, standardCode, standardVersion, baseCurrency, startDate,
                 approvalEnabled, actorId, actorId, separator, level2Width, level3Width, level4Width);
     }
 

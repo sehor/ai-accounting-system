@@ -59,7 +59,7 @@ public class JdbcAdministrationRepository implements AdministrationRepository {
     @Override
     public List<AdminResponses.Ledger> listLedgers() {
         return jdbc.query("""
-                select id, name, accounting_standard_code, accounting_standard_version,
+                select id, name, description, accounting_standard_code, accounting_standard_version,
                     base_currency, start_date, approval_enabled, status,
                     deleted_at is not null as deleted
                 from ledger
@@ -70,7 +70,7 @@ public class JdbcAdministrationRepository implements AdministrationRepository {
     @Override
     public Optional<AdminResponses.Ledger> findLedger(UUID ledgerId) {
         return Optional.ofNullable(jdbc.query("""
-                select id, name, accounting_standard_code, accounting_standard_version,
+                select id, name, description, accounting_standard_code, accounting_standard_version,
                     base_currency, start_date, approval_enabled, status,
                     deleted_at is not null as deleted
                 from ledger where id = ?
@@ -104,7 +104,8 @@ public class JdbcAdministrationRepository implements AdministrationRepository {
 
     private AdminResponses.Ledger mapLedger(java.sql.ResultSet rs) throws java.sql.SQLException {
         return new AdminResponses.Ledger(rs.getObject("id", UUID.class), rs.getString("name"),
-                rs.getString("accounting_standard_code"), rs.getString("accounting_standard_version"),
+                rs.getString("description"), rs.getString("accounting_standard_code"),
+                rs.getString("accounting_standard_version"),
                 rs.getString("base_currency"), rs.getObject("start_date", LocalDate.class),
                 rs.getBoolean("approval_enabled"), rs.getString("status"), rs.getBoolean("deleted"));
     }

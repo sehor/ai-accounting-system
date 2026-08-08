@@ -11,7 +11,7 @@ import java.util.UUID;
 
 public interface LedgerRepository {
 
-    void createLedger(UUID ledgerId, String name, String standardCode, String standardVersion,
+    void createLedger(UUID ledgerId, String name, String description, String standardCode, String standardVersion,
                       String baseCurrency, LocalDate startDate, boolean approvalEnabled, UUID actorId);
 
     void createOwner(UUID ledgerId, UUID actorId);
@@ -32,7 +32,7 @@ public interface LedgerRepository {
 
     Optional<LedgerResponses.Ledger> findLedger(UUID ledgerId);
 
-    void updateLedgerName(UUID ledgerId, String name, UUID actorId);
+    void updateLedger(UUID ledgerId, String name, String description, UUID actorId);
 
     List<LedgerResponses.Member> listMembers(UUID ledgerId);
 
