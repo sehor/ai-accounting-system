@@ -128,14 +128,16 @@ public class JdbcVoucherRepository implements VoucherRepository {
     }
 
     @Override
-    public boolean updateDraft(UUID ledgerId, UUID voucherId, UUID periodId, LocalDate voucherDate,
-                               String voucherType, String voucherNumber, String summary, boolean approvalRequired,
-                               UUID actorId, long expectedVersion) {
+    public boolean updateVoucher(UUID ledgerId, UUID voucherId, UUID periodId, LocalDate voucherDate,
+                                 String voucherType, String voucherNumber, String summary, boolean approvalRequired,
+                                 UUID actorId, long expectedVersion) {
         return jdbcTemplate.update("""
                 update voucher set period_id = ?, voucher_date = ?, voucher_type = ?, voucher_number = ?,
                     summary = ?, approval_required = ?, current_revision = current_revision + 1,
                     version = version + 1, updated_at = now(), updated_by = ?
-                where ledger_id = ? and id = ? and status = 'DRAFT' and version = ?
+                where ledger_id = ? and id = ?
+                    and status in ('DRAFT', 'VALIDATED', 'SUBMITTED', 'APPROVED', 'POSTED')
+                    and version = ?
                 """, periodId, voucherDate, voucherType, voucherNumber, summary, approvalRequired, actorId,
                 ledgerId, voucherId, expectedVersion) == 1;
     }
@@ -417,7 +419,7 @@ public class JdbcVoucherRepository implements VoucherRepository {
                               UUID actorId) {
         jdbcTemplate.update("""
                 update voucher set period_id = ?, voucher_date = ?, voucher_type = ?, voucher_number = ?,
-                    summary = ?, approval_required = ?, status = 'DRAFT', current_revision = current_revision + 1,
+                    summary = ?, approval_required = ?, current_revision = current_revision + 1,
                     version = version + 1, updated_at = now(), updated_by = ? where ledger_id = ? and id = ?
                 """, periodId, voucherDate, voucherType, voucherNumber, summary, approvalRequired, actorId,
                 ledgerId, voucherId);

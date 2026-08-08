@@ -36,7 +36,7 @@ public interface BalanceProjectionService {
     }
 
     enum EventType {
-        POST, UNPOST
+        POST, UPDATE, UNPOST
     }
 
     record ProjectionStatus(String status, long lastEnqueuedEventId, long lastAppliedEventId,

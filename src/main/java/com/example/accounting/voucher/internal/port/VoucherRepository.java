@@ -34,9 +34,9 @@ public interface VoucherRepository {
                                 boolean approvalRequired, UUID reversalOfId, UUID actorId,
                                 String sourceType, UUID sourceId);
 
-    boolean updateDraft(UUID ledgerId, UUID voucherId, UUID periodId, LocalDate voucherDate, String voucherType,
-                        String voucherNumber, String summary, boolean approvalRequired, UUID actorId,
-                        long expectedVersion);
+    boolean updateVoucher(UUID ledgerId, UUID voucherId, UUID periodId, LocalDate voucherDate, String voucherType,
+                          String voucherNumber, String summary, boolean approvalRequired, UUID actorId,
+                          long expectedVersion);
 
     void deleteLines(UUID ledgerId, UUID voucherId);
 

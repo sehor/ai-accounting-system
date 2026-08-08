@@ -337,7 +337,7 @@ public class JdbcBalanceProjectionRepository implements BalanceProjectionReposit
                 insert into balance_projection_event (
                     ledger_id, period_id, aggregate_type, aggregate_id, aggregate_version, event_type)
                 values (?, ?, ?, ?, ?, ?)
-                on conflict (aggregate_type, aggregate_id, aggregate_version, event_type) do nothing
+                on conflict (aggregate_type, aggregate_id, aggregate_version, event_type, period_id) do nothing
                 returning id
                 """, rs -> rs.next() ? rs.getLong("id") : null,
                 ledgerId, periodId, aggregateType, aggregateId, aggregateVersion, eventType);

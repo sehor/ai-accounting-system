@@ -18,6 +18,7 @@ import java.math.RoundingMode;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.security.MessageDigest;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.HashSet;
@@ -126,13 +127,14 @@ public class DefaultVoucherService implements VoucherService {
         requireRole(actorId, ledgerId, Set.of(LedgerRole.OWNER, LedgerRole.EDITOR));
         VoucherState state = stateWithVersion(ledgerId, voucherId);
         ensureManual(state);
-        if (!"DRAFT".equals(state.status())) {
+        if (!Set.of("DRAFT", "VALIDATED", "SUBMITTED", "APPROVED", "POSTED").contains(state.status())) {
             throw problem(409, "VOUCHER_STATE_INVALID", "Invalid voucher state",
-                    "Only draft vouchers can be updated");
+                    "Only active vouchers can be updated");
         }
         VoucherSnapshot before = snapshot(ledgerId, voucherId);
+        requireOpenPeriods(ledgerId, before.periodId(), request.periodId());
         LedgerContext context = ledgerContext(ledgerId, request.periodId(), request.voucherDate());
-        if (!vouchers.updateDraft(ledgerId, voucherId, request.periodId(), request.voucherDate(),
+        if (!vouchers.updateVoucher(ledgerId, voucherId, request.periodId(), request.voucherDate(),
                 request.voucherType().trim(), request.voucherNumber().trim(), request.summary(),
                 context.approvalRequired(), actorId, request.expectedVersion())) {
             throw problem(409, "RESOURCE_VERSION_CONFLICT", "Resource version conflict",
@@ -140,8 +142,16 @@ public class DefaultVoucherService implements VoucherService {
         }
         vouchers.deleteLines(ledgerId, voucherId);
         insertLines(ledgerId, voucherId, context, request.lines());
-        audit(ledgerId, voucherId, "UPDATE", actorId, null, before, snapshot(ledgerId, voucherId));
-        return finalizeOnSave(actorId, ledgerId, voucherId, Set.of(LedgerRole.OWNER, LedgerRole.EDITOR));
+        VoucherSnapshot after = snapshot(ledgerId, voucherId);
+        audit(ledgerId, voucherId, "UPDATE", actorId, null, before, after);
+        if ("POSTED".equals(state.status())) {
+            publishUpdate(ledgerId, voucherId, state.version() + 1, before, after);
+            return find(actorId, ledgerId, voucherId);
+        }
+        if ("DRAFT".equals(state.status())) {
+            return finalizeOnSave(actorId, ledgerId, voucherId, Set.of(LedgerRole.OWNER, LedgerRole.EDITOR));
+        }
+        return find(actorId, ledgerId, voucherId);
     }
 
     private void insertLines(UUID ledgerId, UUID voucherId, LedgerContext context, List<VoucherRequests.Line> lines) {
@@ -549,19 +559,29 @@ public class DefaultVoucherService implements VoucherService {
     @Override
     public VoucherResponses.Voucher restoreRevision(UUID actorId, UUID ledgerId, UUID voucherId, int revision) {
         requireRole(actorId, ledgerId, Set.of(LedgerRole.OWNER, LedgerRole.EDITOR));
-        ensureManual(state(ledgerId, voucherId));
+        VoucherState state = state(ledgerId, voucherId);
+        ensureManual(state);
         String targetData = vouchers.findRevisionData(ledgerId, voucherId, revision).orElseThrow(() ->
                 problem(404, "REVISION_NOT_FOUND", "Revision not found",
                         "The requested voucher revision does not exist"));
         VoucherSnapshot target = fromJson(targetData);
         VoucherSnapshot before = snapshot(ledgerId, voucherId);
+        requireOpenPeriods(ledgerId, before.periodId(), target.periodId());
+        ledgerContext(ledgerId, target.periodId(), target.voucherDate());
         vouchers.restoreHeader(ledgerId, voucherId, target.periodId(), target.voucherDate(), target.voucherType(),
                 target.voucherNumber(), target.summary(), target.approvalRequired(), actorId);
         vouchers.deleteLines(ledgerId, voucherId);
         insertSnapshotLines(ledgerId, voucherId, target.lines());
-        audit(ledgerId, voucherId, "RESTORE_REVISION", actorId, "revision:" + revision,
-                before, snapshot(ledgerId, voucherId));
-        return finalizeOnSave(actorId, ledgerId, voucherId, Set.of(LedgerRole.OWNER, LedgerRole.EDITOR));
+        VoucherSnapshot after = snapshot(ledgerId, voucherId);
+        audit(ledgerId, voucherId, "RESTORE_REVISION", actorId, "revision:" + revision, before, after);
+        if ("POSTED".equals(state.status())) {
+            publishUpdate(ledgerId, voucherId, state.version() + 1, before, after);
+            return find(actorId, ledgerId, voucherId);
+        }
+        if ("DRAFT".equals(state.status())) {
+            return finalizeOnSave(actorId, ledgerId, voucherId, Set.of(LedgerRole.OWNER, LedgerRole.EDITOR));
+        }
+        return find(actorId, ledgerId, voucherId);
     }
 
     private VoucherState state(UUID ledgerId, UUID voucherId) {
@@ -589,6 +609,58 @@ public class DefaultVoucherService implements VoucherService {
             return new BalanceProjectionService.Entry(line.accountId(), BigDecimal.ZERO, BigDecimal.ZERO,
                     debit, credit);
         }).toList();
+    }
+
+    private void publishUpdate(UUID ledgerId, UUID voucherId, long version,
+                               VoucherSnapshot before, VoucherSnapshot after) {
+        if (before.periodId().equals(after.periodId())) {
+            balanceProjection.publishVoucher(new BalanceProjectionService.VoucherEvent(
+                    ledgerId, after.periodId(), voucherId, version, BalanceProjectionService.EventType.UPDATE,
+                    balanceDelta(before.lines(), after.lines())));
+            return;
+        }
+        balanceProjection.publishVoucher(new BalanceProjectionService.VoucherEvent(
+                ledgerId, before.periodId(), voucherId, version, BalanceProjectionService.EventType.UPDATE,
+                balanceEntries(before.lines(), BigDecimal.ONE.negate())));
+        balanceProjection.publishVoucher(new BalanceProjectionService.VoucherEvent(
+                ledgerId, after.periodId(), voucherId, version, BalanceProjectionService.EventType.UPDATE,
+                balanceEntries(after.lines(), BigDecimal.ONE)));
+    }
+
+    private List<BalanceProjectionService.Entry> balanceDelta(List<VoucherLineSnapshot> before,
+                                                              List<VoucherLineSnapshot> after) {
+        Map<UUID, BigDecimal[]> amounts = new HashMap<>();
+        addBalance(amounts, before, BigDecimal.ONE.negate());
+        addBalance(amounts, after, BigDecimal.ONE);
+        return amounts.entrySet().stream().sorted(Map.Entry.comparingByKey()).map(entry ->
+                new BalanceProjectionService.Entry(entry.getKey(), BigDecimal.ZERO, BigDecimal.ZERO,
+                        entry.getValue()[0], entry.getValue()[1])).toList();
+    }
+
+    private void addBalance(Map<UUID, BigDecimal[]> amounts, List<VoucherLineSnapshot> lines, BigDecimal sign) {
+        for (VoucherLineSnapshot line : lines) {
+            BigDecimal[] current = amounts.computeIfAbsent(line.accountId(), ignored ->
+                    new BigDecimal[]{BigDecimal.ZERO, BigDecimal.ZERO});
+            if ("DEBIT".equals(line.side())) {
+                current[0] = current[0].add(line.baseAmount().multiply(sign));
+            } else {
+                current[1] = current[1].add(line.baseAmount().multiply(sign));
+            }
+        }
+    }
+
+    private void requireOpenPeriods(UUID ledgerId, UUID firstPeriodId, UUID secondPeriodId) {
+        if (firstPeriodId.equals(secondPeriodId)) {
+            balanceProjection.requireOpenPeriod(ledgerId, firstPeriodId);
+            return;
+        }
+        if (firstPeriodId.compareTo(secondPeriodId) < 0) {
+            balanceProjection.requireOpenPeriod(ledgerId, firstPeriodId);
+            balanceProjection.requireOpenPeriod(ledgerId, secondPeriodId);
+        } else {
+            balanceProjection.requireOpenPeriod(ledgerId, secondPeriodId);
+            balanceProjection.requireOpenPeriod(ledgerId, firstPeriodId);
+        }
     }
 
     private void changeStatus(UUID ledgerId, UUID voucherId, String expected, String next, UUID actorId) {
