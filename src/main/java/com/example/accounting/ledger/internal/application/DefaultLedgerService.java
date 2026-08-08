@@ -593,7 +593,7 @@ public class DefaultLedgerService implements LedgerService {
         }
         ledgers.recordPeriodAction(ledgerId, periodId, action, reason, actorId);
         return new LedgerResponses.Period(period.id(), period.ledgerId(), period.periodCode(), period.startDate(),
-                period.endDate(), nextStatus);
+                period.endDate(), nextStatus, period.hasVouchers());
     }
 
     private void requireDimensionType(UUID actorId, UUID ledgerId, UUID typeId, boolean write) {

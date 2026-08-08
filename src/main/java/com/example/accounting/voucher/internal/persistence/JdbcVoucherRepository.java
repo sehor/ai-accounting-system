@@ -223,17 +223,37 @@ public class JdbcVoucherRepository implements VoucherRepository {
 
     @Override
     public List<VoucherResponses.Voucher> list(UUID ledgerId, int limit, int offset) {
+        return list(ledgerId, null, limit, offset);
+    }
+
+    @Override
+    public List<VoucherResponses.Voucher> list(UUID ledgerId, String periodCode, int limit, int offset) {
         return jdbcTemplate.query("""
-                select id, ledger_id, period_id, voucher_date, voucher_type, voucher_number, summary, status,
-                    approval_required, version, source_type, source_id
-                from voucher where ledger_id = ? and deleted_at is null
-                order by voucher_date, voucher_number, id limit ? offset ?
+                select v.id, v.ledger_id, v.period_id, v.voucher_date, v.voucher_type, v.voucher_number,
+                    v.summary, v.status, v.approval_required, v.version, v.source_type, v.source_id
+                from voucher v
+                join accounting_period p on p.ledger_id = v.ledger_id and p.id = v.period_id
+                where v.ledger_id = ? and v.deleted_at is null
+                    and (?::varchar is null or p.period_code = ?)
+                order by v.voucher_date, v.voucher_number, v.id limit ? offset ?
                 """, (rs, rowNum) -> voucher(rs.getObject("id", UUID.class),
                 rs.getObject("ledger_id", UUID.class), rs.getObject("period_id", UUID.class),
                 rs.getObject("voucher_date", LocalDate.class), rs.getString("voucher_type"),
                 rs.getString("voucher_number"), rs.getString("summary"), rs.getString("status"),
                 rs.getBoolean("approval_required"), rs.getLong("version"), List.of(),
-                rs.getString("source_type"), rs.getObject("source_id", UUID.class)), ledgerId, limit, offset);
+                rs.getString("source_type"), rs.getObject("source_id", UUID.class)),
+                ledgerId, periodCode, periodCode, limit, offset);
+    }
+
+    @Override
+    public long count(UUID ledgerId, String periodCode) {
+        Long result = jdbcTemplate.queryForObject("""
+                select count(*) from voucher v
+                join accounting_period p on p.ledger_id = v.ledger_id and p.id = v.period_id
+                where v.ledger_id = ? and v.deleted_at is null
+                    and (?::varchar is null or p.period_code = ?)
+                """, Long.class, ledgerId, periodCode, periodCode);
+        return result == null ? 0 : result;
     }
 
     @Override

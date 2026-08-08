@@ -131,6 +131,7 @@ export interface Period {
   startDate: string
   endDate: string
   status: 'OPEN' | 'CLOSED' | string
+  hasVouchers?: boolean
 }
 
 export interface DimensionType {
@@ -330,6 +331,60 @@ export interface LedgerLine {
   side: string
   amount: string
   dimensionKey: string | null
+}
+
+export interface Pagination {
+  page: number
+  pageSize: number
+  totalItems: number
+  totalPages: number
+}
+
+export interface GeneralLedgerAccount {
+  accountId: string
+  accountCode: string
+  accountName: string
+  normalBalance: string
+  openingDirection: 'DEBIT' | 'CREDIT'
+  openingBalance: string
+  periodDebit: string
+  periodCredit: string
+  yearDebit: string
+  yearCredit: string
+  endingDirection: 'DEBIT' | 'CREDIT'
+  endingBalance: string
+}
+
+export interface GeneralLedgerPage {
+  periodCode: string
+  data: GeneralLedgerAccount[]
+  pagination: Pagination
+}
+
+export interface SubLedgerEntry {
+  voucherId: string
+  voucherNumber: string
+  voucherDate: string
+  summary: string
+  debit: string
+  credit: string
+  direction: 'DEBIT' | 'CREDIT'
+  balance: string
+}
+
+export interface SubLedgerPage {
+  periodCode: string
+  accountId: string
+  accountCode: string
+  accountName: string
+  openingDirection: 'DEBIT' | 'CREDIT'
+  openingBalance: string
+  data: SubLedgerEntry[]
+  periodDebit: string
+  periodCredit: string
+  endingDirection: 'DEBIT' | 'CREDIT'
+  endingBalance: string
+  pagination: Pagination
 }
 
 export interface AuditEntry {

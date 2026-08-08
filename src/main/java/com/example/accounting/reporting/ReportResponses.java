@@ -24,6 +24,32 @@ public final class ReportResponses {
                              String accountName, String side, BigDecimal amount, String dimensionKey) {
     }
 
+    public record Pagination(int page, int pageSize, long totalItems, int totalPages) {
+    }
+
+    public record GeneralLedgerAccount(
+            UUID accountId, String accountCode, String accountName, String normalBalance,
+            String openingDirection, BigDecimal openingBalance,
+            BigDecimal periodDebit, BigDecimal periodCredit,
+            BigDecimal yearDebit, BigDecimal yearCredit,
+            String endingDirection, BigDecimal endingBalance) {
+    }
+
+    public record GeneralLedgerPage(String periodCode, List<GeneralLedgerAccount> data, Pagination pagination) {
+    }
+
+    public record SubLedgerEntry(
+            UUID voucherId, String voucherNumber, LocalDate voucherDate, String summary,
+            BigDecimal debit, BigDecimal credit, String direction, BigDecimal balance) {
+    }
+
+    public record SubLedgerPage(
+            String periodCode, UUID accountId, String accountCode, String accountName,
+            String openingDirection, BigDecimal openingBalance,
+            List<SubLedgerEntry> data, BigDecimal periodDebit, BigDecimal periodCredit,
+            String endingDirection, BigDecimal endingBalance, Pagination pagination) {
+    }
+
     public record FinanceQueryLine(String groupKey, BigDecimal amount) {
     }
 }

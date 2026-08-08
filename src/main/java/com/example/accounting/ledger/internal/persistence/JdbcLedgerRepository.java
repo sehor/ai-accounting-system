@@ -148,16 +148,20 @@ public class JdbcLedgerRepository implements LedgerRepository {
     @Override
     public List<LedgerResponses.Period> listPeriods(UUID ledgerId) {
         return jdbc.query("""
-                select id, ledger_id, period_code, start_date, end_date, status
-                from accounting_period where ledger_id = ? order by period_code
+                select p.id, p.ledger_id, p.period_code, p.start_date, p.end_date, p.status,
+                    exists (select 1 from voucher v where v.ledger_id = p.ledger_id
+                        and v.period_id = p.id and v.deleted_at is null) has_vouchers
+                from accounting_period p where p.ledger_id = ? order by p.period_code
                 """, (rs, rowNum) -> mapPeriod(rs), ledgerId);
     }
 
     @Override
     public Optional<LedgerResponses.Period> findPeriod(UUID ledgerId, UUID periodId) {
         return Optional.ofNullable(jdbc.query("""
-                select id, ledger_id, period_code, start_date, end_date, status
-                from accounting_period where ledger_id = ? and id = ?
+                select p.id, p.ledger_id, p.period_code, p.start_date, p.end_date, p.status,
+                    exists (select 1 from voucher v where v.ledger_id = p.ledger_id
+                        and v.period_id = p.id and v.deleted_at is null) has_vouchers
+                from accounting_period p where p.ledger_id = ? and p.id = ?
                 """, rs -> rs.next() ? mapPeriod(rs) : null, ledgerId, periodId));
     }
 
@@ -393,7 +397,7 @@ public class JdbcLedgerRepository implements LedgerRepository {
         return new LedgerResponses.Period(rs.getObject("id", UUID.class),
                 rs.getObject("ledger_id", UUID.class), rs.getString("period_code"),
                 rs.getObject("start_date", LocalDate.class), rs.getObject("end_date", LocalDate.class),
-                rs.getString("status"));
+                rs.getString("status"), rs.getBoolean("has_vouchers"));
     }
 
     private LedgerResponses.DimensionType mapDimensionType(java.sql.ResultSet rs) throws java.sql.SQLException {

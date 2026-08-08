@@ -1,22 +1,199 @@
 :root {
-  font-family: "Inter", "Microsoft YaHei", "PingFang SC", sans-serif;
-  color: #1f2937;
-  background: #f3f5f7;
+  font-family: "Microsoft YaHei", "PingFang SC", Arial, sans-serif;
+  color: #17202a;
+  background: #eef1f4;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
 }
 
 * { box-sizing: border-box; }
-body { margin: 0; min-width: 320px; background: #f3f5f7; }
-.ant-typography-secondary { color: #595959 !important; }
+html, body, #root { min-height: 100%; }
+body { margin: 0; min-width: 320px; background: #eef1f4; }
 button, input, textarea, select { font: inherit; }
-a { color: inherit; }
-.app-content { min-height: calc(100vh - 56px); padding: 24px; }
-.page-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 20px; }
-.page-heading h1 { margin: 0; font-size: 24px; }
-.financial-table .ant-table-thead > tr > th { white-space: nowrap; }
+a { color: #1677a7; }
+.ant-typography-secondary { color: #5b6570 !important; }
+
+.skip-link {
+  position: fixed;
+  left: 12px;
+  top: -48px;
+  z-index: 2000;
+  padding: 8px 12px;
+  color: #fff;
+  background: #0f5577;
+}
+.skip-link:focus { top: 8px; }
+
+.app-shell { min-height: 100vh; }
+.main-sider { background: #17658a !important; }
+.mobile-menu-trigger { display: none; position: fixed; top: 50px; z-index: 30; border-radius: 0 2px 2px 0; transition: left .2s; }
+.brand-mark {
+  height: 64px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  color: #fff;
+  border-bottom: 1px solid rgb(255 255 255 / 18%);
+  font-size: 12px;
+}
+.brand-mark .anticon { font-size: 24px; }
+.main-sider .ant-menu { border-inline-end: 0 !important; }
+.main-sider .ant-menu-item,
+.main-sider .ant-menu-submenu-title {
+  height: 56px !important;
+  margin: 0 !important;
+  width: 100% !important;
+  border-radius: 0 !important;
+  display: flex !important;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  padding-inline: 0 !important;
+  text-align: center;
+  line-height: 18px !important;
+}
+.main-sider .ant-menu-item .anticon,
+.main-sider .ant-menu-submenu-title .anticon { margin: 0 !important; font-size: 20px; }
+.main-sider .ant-menu-submenu-arrow { inset-inline-end: 9px; }
+
+.app-header {
+  height: 48px;
+  padding: 0 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #fff;
+  border-bottom: 1px solid #d7dce2;
+  line-height: normal;
+}
+.ledger-select { min-width: 240px; }
+.app-header .ant-avatar { background: #17658a; }
+
+.workspace-tabs-bar {
+  height: 38px;
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+  padding: 2px 8px 0;
+  background: #f7f8fa;
+  border-bottom: 1px solid #cfd5dc;
+}
+.workspace-tabs-bar .ant-tabs { min-width: 0; flex: 1; }
+.workspace-tabs-bar .ant-tabs-nav { margin: 0; }
+.workspace-tabs-bar .ant-tabs-tab {
+  height: 35px;
+  padding: 6px 12px !important;
+  background: #f2f4f6 !important;
+  border-color: #d5dae0 !important;
+}
+.workspace-tabs-bar .ant-tabs-tab-active { background: #fff !important; }
+.workspace-tabs-bar > .ant-btn { margin-top: 1px; }
+
+.app-content {
+  min-height: calc(100vh - 86px);
+  padding: 10px 12px 14px;
+  overflow: auto;
+}
+.workspace-panel { min-height: calc(100vh - 110px); }
+.page-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.page-heading h1 { margin: 0; font-size: 20px; }
+
+.financial-page { width: 100%; }
+.financial-toolbar {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 4px 0 10px;
+}
+.financial-toolbar h1 {
+  min-width: max-content;
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+}
+.financial-toolbar-actions { margin-left: auto; }
+.period-selector .ant-select { min-width: 150px; }
+.financial-grid-card {
+  border-color: #cfd5dc;
+  border-radius: 0;
+  box-shadow: none;
+}
+.financial-grid-card > .ant-card-body { padding: 0; }
+.financial-pagination { display: flex; justify-content: flex-end; padding: 10px 12px; border-top: 1px solid var(--line); }
+.financial-table .ant-table { border-radius: 0; }
+.financial-table .ant-table-container { border-inline-start: 1px solid #d5dbe2; border-top: 1px solid #d5dbe2; }
+.financial-table .ant-table-thead > tr > th {
+  white-space: nowrap;
+  text-align: center;
+  font-weight: 600;
+  color: #17202a;
+  background: #eef0f2;
+  border-color: #d5dbe2;
+}
+.financial-table .ant-table-tbody > tr > td { border-color: #d9dee4; }
+.financial-table .ant-table-tbody > tr:hover > td { background: #f7fbfd !important; }
+.financial-table .ant-pagination { margin: 10px 12px; }
+.voucher-table .ant-table-tbody > tr:nth-child(even) > td { background: #fbfbfc; }
+.voucher-table .ant-tag { margin-inline-end: 0; }
+
+.sub-ledger-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 286px;
+  gap: 10px;
+  align-items: start;
+}
+.sub-ledger-table { min-width: 0; }
+.account-switcher {
+  min-height: 520px;
+  padding: 0 10px 10px;
+  background: #fff;
+  border: 1px solid #cfd5dc;
+}
+.account-switcher-title {
+  margin: 0 -10px 8px;
+  padding: 9px 12px;
+  font-weight: 600;
+  background: #f1f3f5;
+  border-bottom: 1px solid #d5dbe2;
+}
+.account-switcher .ant-tree { margin-top: 8px; max-height: 570px; overflow: auto; }
+
+@media (max-width: 991px) {
+  .mobile-menu-trigger { display: inline-flex; }
+}
+
+@media (max-width: 1024px) {
+  .current-user { display: none; }
+  .sub-ledger-layout { grid-template-columns: minmax(0, 1fr) 240px; }
+}
+
 @media (max-width: 768px) {
-  .app-content { padding: 16px; }
+  .app-header { padding: 0 10px 0 52px; }
+  .ledger-select { min-width: 150px; max-width: 48vw; }
+  .app-header .ant-btn { padding-inline: 6px; }
+  .app-content { padding: 8px; }
+  .financial-toolbar { align-items: flex-start; flex-wrap: wrap; }
+  .financial-toolbar-actions { width: 100%; margin-left: 0; }
+  .sub-ledger-layout { display: flex; flex-direction: column-reverse; }
+  .account-switcher { width: 100%; min-height: auto; }
+  .account-switcher .ant-tree { max-height: 240px; }
   .page-heading { align-items: flex-start; flex-direction: column; }
   .financial-table { overflow-x: auto; }
+}
+
+@media (max-width: 480px) {
+  .app-header .ant-avatar,
+  .app-header .ant-btn > span:not(.anticon) { display: none; }
+  .workspace-tabs-bar { padding-left: 4px; }
+  .period-selector { width: 100%; }
+  .period-selector .ant-select { flex: 1; }
 }

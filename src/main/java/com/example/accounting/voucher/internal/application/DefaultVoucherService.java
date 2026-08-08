@@ -225,13 +225,21 @@ public class DefaultVoucherService implements VoucherService {
     @Transactional(readOnly = true)
     @Override
     public List<VoucherResponses.Voucher> list(UUID actorId, UUID ledgerId, int limit, int offset) {
+        return list(actorId, ledgerId, null, limit, offset);
+    }
+
+    @Transactional(readOnly = true)
+    @Override
+    public List<VoucherResponses.Voucher> list(
+            UUID actorId, UUID ledgerId, String periodCode, int limit, int offset) {
         requireRole(actorId, ledgerId, Set.of(LedgerRole.OWNER, LedgerRole.EDITOR, LedgerRole.REVIEWER,
                 LedgerRole.VIEWER, LedgerRole.AGENT));
         if (limit < 1 || limit > 500 || offset < 0) {
             throw problem(400, "PAGINATION_INVALID", "Invalid pagination",
                     "limit must be between 1 and 500 and offset must be non-negative");
         }
-        List<VoucherResponses.Voucher> result = vouchers.list(ledgerId, limit, offset);
+        String normalizedPeriod = normalizePeriodCode(periodCode);
+        List<VoucherResponses.Voucher> result = vouchers.list(ledgerId, normalizedPeriod, limit, offset);
         if (result.isEmpty()) {
             return result;
         }
@@ -242,6 +250,26 @@ public class DefaultVoucherService implements VoucherService {
                 voucher.voucherNumber(), voucher.summary(), voucher.status(), voucher.approvalRequired(),
                 voucher.version(), linesByVoucher.getOrDefault(voucher.id(), List.of()),
                 voucher.sourceType(), voucher.sourceId())).toList();
+    }
+
+    @Transactional(readOnly = true)
+    @Override
+    public long count(UUID actorId, UUID ledgerId, String periodCode) {
+        requireRole(actorId, ledgerId, Set.of(LedgerRole.OWNER, LedgerRole.EDITOR, LedgerRole.REVIEWER,
+                LedgerRole.VIEWER, LedgerRole.AGENT));
+        return vouchers.count(ledgerId, normalizePeriodCode(periodCode));
+    }
+
+    private String normalizePeriodCode(String periodCode) {
+        if (periodCode == null || periodCode.isBlank()) {
+            return null;
+        }
+        String normalized = periodCode.trim();
+        if (!normalized.matches("\\d{4}-(0[1-9]|1[0-2])")) {
+            throw problem(400, "PERIOD_CODE_INVALID", "Invalid period code",
+                    "periodCode must use YYYY-MM format");
+        }
+        return normalized;
     }
 
     @Transactional(readOnly = true)

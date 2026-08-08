@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { ApiError, apiFetch, createIdempotencyKey } from './client'
+import { ApiError, apiFetch, apiFetchWithHeaders, createIdempotencyKey } from './client'
 
 describe('api client', () => {
   it('maps RFC problem details and auth headers', async () => {
@@ -12,6 +12,18 @@ describe('api client', () => {
 
   it('creates stable-looking idempotency keys', () => {
     expect(createIdempotencyKey()).toMatch(/^[0-9a-f-]{36}$/)
+  })
+
+  it('exposes pagination response headers without changing apiFetch callers', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('[]', {
+      status: 200,
+      headers: { 'content-type': 'application/json', 'X-Total-Count': '42' },
+    })))
+
+    const response = await apiFetchWithHeaders<unknown[]>('/vouchers', {})
+
+    expect(response.data).toEqual([])
+    expect(response.headers.get('X-Total-Count')).toBe('42')
   })
 
   it('clears the stored session after an unauthorized response', async () => {

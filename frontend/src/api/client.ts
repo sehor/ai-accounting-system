@@ -21,7 +21,12 @@ export class ApiError extends Error {
 
 const baseUrl = (import.meta.env.VITE_API_BASE_URL || '/v1').replace(/\/$/, '')
 
-export async function apiFetch<T>(path: string, auth: ApiAuth, init: RequestInit = {}): Promise<T> {
+export interface ApiResponse<T> {
+  data: T
+  headers: Headers
+}
+
+export async function apiFetchWithHeaders<T>(path: string, auth: ApiAuth, init: RequestInit = {}): Promise<ApiResponse<T>> {
   const headers = new Headers(init.headers)
   if (init.body && !(init.body instanceof FormData)) headers.set('Content-Type', 'application/json')
   if (auth.accessToken) headers.set('Authorization', `Bearer ${auth.accessToken}`)
@@ -42,10 +47,16 @@ export async function apiFetch<T>(path: string, auth: ApiAuth, init: RequestInit
     }
     throw new ApiError(response.status, problem)
   }
-  if (response.status === 204) return undefined as T
+  if (response.status === 204) return { data: undefined as T, headers: response.headers }
   const contentType = response.headers.get('content-type') || ''
-  if (contentType.includes('application/json')) return (await response.json()) as T
-  return (await response.blob()) as T
+  const data = contentType.includes('application/json')
+    ? (await response.json()) as T
+    : (await response.blob()) as T
+  return { data, headers: response.headers }
+}
+
+export async function apiFetch<T>(path: string, auth: ApiAuth, init: RequestInit = {}): Promise<T> {
+  return (await apiFetchWithHeaders<T>(path, auth, init)).data
 }
 
 export function jsonBody(value: unknown): BodyInit {

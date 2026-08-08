@@ -50,6 +50,10 @@ public interface VoucherRepository {
 
     List<VoucherResponses.Voucher> list(UUID ledgerId, int limit, int offset);
 
+    List<VoucherResponses.Voucher> list(UUID ledgerId, String periodCode, int limit, int offset);
+
+    long count(UUID ledgerId, String periodCode);
+
     Optional<VoucherResponses.Voucher> find(UUID ledgerId, UUID voucherId, boolean includeDeleted);
 
     List<VoucherResponses.Line> lines(UUID ledgerId, UUID voucherId);

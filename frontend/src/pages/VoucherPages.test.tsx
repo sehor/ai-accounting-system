@@ -3,12 +3,12 @@ import { App } from 'antd'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
-import { apiFetch } from '../api/client'
+import { apiFetch, apiFetchWithHeaders } from '../api/client'
 import { VoucherEditorPage, VoucherListPage } from './VoucherPages'
 
 vi.mock('../api/client', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../api/client')>()
-  return { ...actual, apiFetch: vi.fn() }
+  return { ...actual, apiFetch: vi.fn(), apiFetchWithHeaders: vi.fn() }
 })
 
 vi.mock('../auth/AuthProvider', () => ({
@@ -34,8 +34,14 @@ beforeAll(() => {
 
 beforeEach(() => {
   vi.mocked(apiFetch).mockImplementation((path) => Promise.resolve(
-    path.includes('kingdee:export') ? new Blob(['xlsx']) : [],
+    path.includes('kingdee:export') ? new Blob(['xlsx'])
+      : path.endsWith('/periods') ? [{
+          id: 'period-1', ledgerId: 'ledger-1', periodCode: '2026-06', startDate: '2026-06-01',
+          endDate: '2026-06-30', status: 'OPEN', hasVouchers: true,
+        }]
+        : [],
   ))
+  vi.mocked(apiFetchWithHeaders).mockResolvedValue({ data: [], headers: new Headers({ 'X-Total-Count': '0' }) })
 })
 
 afterEach(() => {
@@ -44,12 +50,47 @@ afterEach(() => {
 })
 
 describe('VoucherListPage', () => {
+  it('shows an empty state instead of vouchers from another period', async () => {
+    vi.mocked(apiFetch).mockImplementation((path) => Promise.resolve(
+      path.endsWith('/periods') ? [
+        { id: 'period-6', ledgerId: 'ledger-1', periodCode: '2026-06', startDate: '2026-06-01', endDate: '2026-06-30', status: 'OPEN', hasVouchers: true },
+        { id: 'period-7', ledgerId: 'ledger-1', periodCode: '2026-07', startDate: '2026-07-01', endDate: '2026-07-31', status: 'OPEN', hasVouchers: false },
+        { id: 'period-8', ledgerId: 'ledger-1', periodCode: '2026-08', startDate: '2026-08-01', endDate: '2026-08-31', status: 'OPEN', hasVouchers: false },
+      ] : [],
+    ))
+    vi.mocked(apiFetchWithHeaders).mockResolvedValue({
+      data: [{
+        id: 'voucher-6', ledgerId: 'ledger-1', periodId: 'period-6', voucherDate: '2026-06-02',
+        voucherType: '记', voucherNumber: '1', summary: '六月凭证', status: 'POSTED',
+        approvalRequired: false, version: 0, lines: [],
+      }],
+      headers: new Headers({ 'X-Total-Count': '1' }),
+    })
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <App>
+          <MemoryRouter initialEntries={['/ledgers/ledger-1/vouchers?periodCode=2026-07']}>
+            <Routes><Route path="/ledgers/:ledgerId/vouchers" element={<VoucherListPage />} /></Routes>
+          </MemoryRouter>
+        </App>
+      </QueryClientProvider>,
+    )
+
+    expect(await screen.findByText('2026年第7期没有凭证数据')).toBeInTheDocument()
+    expect(screen.queryByText('2026-06-02')).not.toBeInTheDocument()
+    expect(apiFetchWithHeaders).toHaveBeenCalledWith(
+      expect.stringContaining('periodCode=2026-07'), expect.anything(),
+    )
+  })
+
   it('shows a clear processing entry for draft vouchers', async () => {
-    vi.mocked(apiFetch).mockResolvedValueOnce([{
+    vi.mocked(apiFetchWithHeaders).mockResolvedValueOnce({ data: [{
       id: 'voucher-1', ledgerId: 'ledger-1', periodId: 'period-1', voucherDate: '2026-06-11',
       voucherType: '记', voucherNumber: '1', summary: '缴纳社保', status: 'DRAFT',
       approvalRequired: false, version: 0, lines: [],
-    }])
+    }], headers: new Headers({ 'X-Total-Count': '1' }) })
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
 
     render(
@@ -79,10 +120,14 @@ describe('VoucherListPage', () => {
       }],
     }
     vi.mocked(apiFetch).mockImplementation((path) => {
-      if (path.includes('/vouchers?')) return Promise.resolve([voucher])
       if (path.endsWith(':post')) return Promise.resolve({ ...voucher, status: 'POSTED' })
+      if (path.endsWith('/periods')) return Promise.resolve([{
+        id: 'period-1', ledgerId: 'ledger-1', periodCode: '2026-06', startDate: '2026-06-01',
+        endDate: '2026-06-30', status: 'OPEN', hasVouchers: true,
+      }])
       return Promise.resolve([])
     })
+    vi.mocked(apiFetchWithHeaders).mockResolvedValue({ data: [voucher], headers: new Headers({ 'X-Total-Count': '1' }) })
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
 
     render(
@@ -113,10 +158,14 @@ describe('VoucherListPage', () => {
       approvalRequired: true, version: 0, lines: [],
     }
     vi.mocked(apiFetch).mockImplementation((path) => {
-      if (path.includes('/vouchers?')) return Promise.resolve([voucher])
       if (path.endsWith(':approve')) return Promise.resolve({ ...voucher, status: 'APPROVED' })
+      if (path.endsWith('/periods')) return Promise.resolve([{
+        id: 'period-1', ledgerId: 'ledger-1', periodCode: '2026-06', startDate: '2026-06-01',
+        endDate: '2026-06-30', status: 'OPEN', hasVouchers: true,
+      }])
       return Promise.resolve([])
     })
+    vi.mocked(apiFetchWithHeaders).mockResolvedValue({ data: [voucher], headers: new Headers({ 'X-Total-Count': '1' }) })
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
 
     render(

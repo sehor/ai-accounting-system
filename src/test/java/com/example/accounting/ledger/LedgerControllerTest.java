@@ -80,14 +80,15 @@ class LedgerControllerTest {
                 new LedgerResponses.Account(UUID.randomUUID(), ledgerId, "1002", "银行存款", "ASSET", "DEBIT", "ACTIVE")));
         when(ledgerService.listPeriods(userId, ledgerId)).thenReturn(List.of(
                 new LedgerResponses.Period(UUID.randomUUID(), ledgerId, "2026-01",
-                        LocalDate.of(2026, 1, 1), LocalDate.of(2026, 1, 31), "OPEN")));
+                        LocalDate.of(2026, 1, 1), LocalDate.of(2026, 1, 31), "OPEN", true)));
 
         mockMvc.perform(get("/v1/ledgers/{ledgerId}/accounts", ledgerId).header("X-User-Id", userId))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].code").value("1002"));
         mockMvc.perform(get("/v1/ledgers/{ledgerId}/periods", ledgerId).header("X-User-Id", userId))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0].periodCode").value("2026-01"));
+                .andExpect(jsonPath("$[0].periodCode").value("2026-01"))
+                .andExpect(jsonPath("$[0].hasVouchers").value(true));
 
         verify(ledgerService).listAccounts(userId, ledgerId);
         verify(ledgerService).listPeriods(userId, ledgerId);

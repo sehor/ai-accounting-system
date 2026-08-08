@@ -1,7 +1,11 @@
 package com.example.accounting.voucher;
 
 import com.example.accounting.identity.CurrentUserResolver;
+import io.swagger.v3.oas.annotations.headers.Header;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import java.util.List;
 import java.util.UUID;
@@ -30,10 +34,21 @@ public class VoucherController {
     }
 
     @GetMapping
-    public List<VoucherResponses.Voucher> list(HttpServletRequest request, @PathVariable UUID ledgerId,
+    @ApiResponse(responseCode = "200", headers = @Header(
+            name = "X-Total-Count",
+            description = "Total number of vouchers matching the period filter",
+            schema = @Schema(type = "integer", format = "int64")))
+    public List<VoucherResponses.Voucher> list(HttpServletRequest request, HttpServletResponse response,
+                                                @PathVariable UUID ledgerId,
+                                                @RequestParam(required = false) String periodCode,
                                                 @RequestParam(defaultValue = "100") int limit,
                                                 @RequestParam(defaultValue = "0") int offset) {
-        return voucherService.list(user(request), ledgerId, limit, offset);
+        UUID actorId = user(request);
+        List<VoucherResponses.Voucher> result = voucherService.list(
+                actorId, ledgerId, periodCode, limit, offset);
+        response.setHeader("X-Total-Count", Long.toString(voucherService.count(actorId, ledgerId, periodCode)));
+        response.setHeader("Access-Control-Expose-Headers", "X-Total-Count");
+        return result;
     }
 
     @PostMapping

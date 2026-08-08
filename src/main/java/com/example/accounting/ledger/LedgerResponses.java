@@ -64,7 +64,12 @@ public final class LedgerResponses {
     }
 
     public record Period(UUID id, UUID ledgerId, String periodCode, LocalDate startDate,
-                         LocalDate endDate, String status) {
+                         LocalDate endDate, String status, boolean hasVouchers) {
+
+        public Period(UUID id, UUID ledgerId, String periodCode, LocalDate startDate,
+                      LocalDate endDate, String status) {
+            this(id, ledgerId, periodCode, startDate, endDate, status, false);
+        }
     }
 
     public record DimensionType(UUID id, UUID ledgerId, String code, String name, boolean required, String status) {
