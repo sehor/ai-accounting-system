@@ -17,7 +17,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 
 @SpringBootTest
-@org.junit.jupiter.api.Disabled("Creates ledgers; disabled until tests use an isolated database")
 class AccountExchangeIntegrationTest {
 
     @Autowired

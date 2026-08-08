@@ -36,7 +36,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 @SpringBootTest(properties = "storage.local.root=target/ledger-backup-test-files")
 @Transactional
-@org.junit.jupiter.api.Disabled("Creates ledgers; disabled until tests use an isolated database")
 class LedgerBackupServiceTest {
 
     private static final List<String> BUSINESS_TABLES = List.of(

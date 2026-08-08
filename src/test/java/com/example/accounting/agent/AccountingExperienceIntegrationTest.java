@@ -2,6 +2,7 @@ package com.example.accounting.agent;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.awaitility.Awaitility.await;
 
 import com.example.accounting.identity.CurrentUserResolver;
 import com.example.accounting.identity.IdentityService;
@@ -11,6 +12,7 @@ import com.example.accounting.ledger.LedgerRole;
 import com.example.accounting.ledger.LedgerService;
 import com.example.accounting.shared.audit.AuditContext;
 import com.example.accounting.shared.web.ApiProblemException;
+import java.time.Duration;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
@@ -23,7 +25,6 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.context.SecurityContextHolder;
 
 @SpringBootTest
-@org.junit.jupiter.api.Disabled("Creates ledgers; disabled until tests use an isolated database")
 class AccountingExperienceIntegrationTest {
 
     @Autowired
@@ -88,8 +89,10 @@ class AccountingExperienceIntegrationTest {
                 ledgerId, null, List.of(runTag), 1, 20)).items())
                 .extracting(ExperienceResponses.Experience::id)
                 .containsExactly(updated.id());
-        assertThat(jdbc.queryForObject("select count(*) from agent_tool_audit where trace_id = ? and outcome = 'SUCCESS'",
-                Long.class, traceId)).isEqualTo(7L);
+        await().atMost(Duration.ofSeconds(2)).untilAsserted(() ->
+                assertThat(jdbc.queryForObject(
+                        "select count(*) from agent_tool_audit where trace_id = ? and outcome = 'SUCCESS'",
+                        Long.class, traceId)).isEqualTo(7L));
     }
 
     @Test
