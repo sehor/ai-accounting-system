@@ -19,7 +19,7 @@ public final class VoucherRequests {
     public record Create(@NotNull UUID periodId,
                          @NotNull LocalDate voucherDate,
                          @NotBlank String voucherType,
-                         @NotBlank String voucherNumber,
+                         @Nullable String voucherNumber,
                          @Nullable String summary,
                          @NotEmpty List<@Valid Line> lines) {
     }
@@ -31,6 +31,12 @@ public final class VoucherRequests {
                          @NotBlank String voucherNumber,
                          @Nullable String summary,
                          @NotEmpty List<@Valid Line> lines) {
+    }
+
+    public record Search(@Nullable String periodCode,
+                         @Nullable LocalDate startDate,
+                         @Nullable LocalDate endDate,
+                         @Nullable String keyword) {
     }
 
     public record Line(@NotNull UUID accountId,

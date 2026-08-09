@@ -15,6 +15,8 @@ public interface VoucherRepository {
 
     Optional<Idempotency> findIdempotency(UUID ledgerId, UUID actorId, String key);
 
+    String nextVoucherNumber(UUID ledgerId, UUID periodId, String voucherType);
+
     Optional<LedgerContext> findLedgerContext(UUID ledgerId, UUID periodId);
 
     boolean activeAccountExists(UUID ledgerId, UUID accountId);
@@ -57,7 +59,11 @@ public interface VoucherRepository {
 
     List<VoucherResponses.Voucher> list(UUID ledgerId, String periodCode, int limit, int offset);
 
+    List<VoucherResponses.Voucher> list(UUID ledgerId, VoucherRequests.Search search, int limit, int offset);
+
     long count(UUID ledgerId, String periodCode);
+
+    long count(UUID ledgerId, VoucherRequests.Search search);
 
     Optional<VoucherResponses.Voucher> find(UUID ledgerId, UUID voucherId, boolean includeDeleted);
 

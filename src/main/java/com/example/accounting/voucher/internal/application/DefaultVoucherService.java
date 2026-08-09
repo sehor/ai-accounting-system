@@ -110,13 +110,17 @@ public class DefaultVoucherService implements VoucherService {
             }
         }
         LedgerContext context = ledgerContext(ledgerId, request.periodId(), request.voucherDate());
+        String voucherType = request.voucherType().trim();
+        String voucherNumber = request.voucherNumber() == null || request.voucherNumber().isBlank()
+                ? vouchers.nextVoucherNumber(ledgerId, request.periodId(), voucherType)
+                : request.voucherNumber().trim();
         if (sourceType == null) {
             vouchers.createVoucher(voucherId, ledgerId, request.periodId(), request.voucherDate(),
-                    request.voucherType().trim(), request.voucherNumber().trim(), request.summary(),
+                    voucherType, voucherNumber, request.summary(),
                     context.approvalRequired(), null, actorId);
         } else {
             vouchers.createGeneratedVoucher(voucherId, ledgerId, request.periodId(), request.voucherDate(),
-                    request.voucherType().trim(), request.voucherNumber().trim(), request.summary(),
+                    voucherType, voucherNumber, request.summary(),
                     context.approvalRequired(), null, actorId, sourceType, sourceId);
         }
         insertLines(ledgerId, voucherId, context, request.lines());
@@ -270,21 +274,28 @@ public class DefaultVoucherService implements VoucherService {
     @Transactional(readOnly = true)
     @Override
     public List<VoucherResponses.Voucher> list(UUID actorId, UUID ledgerId, int limit, int offset) {
-        return list(actorId, ledgerId, null, limit, offset);
+        return list(actorId, ledgerId, new VoucherRequests.Search(null, null, null, null), limit, offset);
     }
 
     @Transactional(readOnly = true)
     @Override
     public List<VoucherResponses.Voucher> list(
             UUID actorId, UUID ledgerId, String periodCode, int limit, int offset) {
+        return list(actorId, ledgerId, new VoucherRequests.Search(periodCode, null, null, null), limit, offset);
+    }
+
+    @Transactional(readOnly = true)
+    @Override
+    public List<VoucherResponses.Voucher> list(
+            UUID actorId, UUID ledgerId, VoucherRequests.Search search, int limit, int offset) {
         requireRole(actorId, ledgerId, Set.of(LedgerRole.OWNER, LedgerRole.EDITOR, LedgerRole.REVIEWER,
                 LedgerRole.VIEWER, LedgerRole.AGENT));
         if (limit < 1 || limit > 500 || offset < 0) {
             throw problem(400, "PAGINATION_INVALID", "Invalid pagination",
                     "limit must be between 1 and 500 and offset must be non-negative");
         }
-        String normalizedPeriod = normalizePeriodCode(periodCode);
-        List<VoucherResponses.Voucher> result = vouchers.list(ledgerId, normalizedPeriod, limit, offset);
+        VoucherRequests.Search normalizedSearch = normalizeSearch(search);
+        List<VoucherResponses.Voucher> result = vouchers.list(ledgerId, normalizedSearch, limit, offset);
         if (result.isEmpty()) {
             return result;
         }
@@ -300,9 +311,31 @@ public class DefaultVoucherService implements VoucherService {
     @Transactional(readOnly = true)
     @Override
     public long count(UUID actorId, UUID ledgerId, String periodCode) {
+        return count(actorId, ledgerId, new VoucherRequests.Search(periodCode, null, null, null));
+    }
+
+    @Transactional(readOnly = true)
+    @Override
+    public long count(UUID actorId, UUID ledgerId, VoucherRequests.Search search) {
         requireRole(actorId, ledgerId, Set.of(LedgerRole.OWNER, LedgerRole.EDITOR, LedgerRole.REVIEWER,
                 LedgerRole.VIEWER, LedgerRole.AGENT));
-        return vouchers.count(ledgerId, normalizePeriodCode(periodCode));
+        return vouchers.count(ledgerId, normalizeSearch(search));
+    }
+
+    private VoucherRequests.Search normalizeSearch(VoucherRequests.Search search) {
+        VoucherRequests.Search source = search == null
+                ? new VoucherRequests.Search(null, null, null, null) : search;
+        if (source.startDate() != null && source.endDate() != null && source.startDate().isAfter(source.endDate())) {
+            throw problem(400, "VOUCHER_DATE_RANGE_INVALID", "Invalid voucher date range",
+                    "startDate must not be after endDate");
+        }
+        String keyword = source.keyword() == null || source.keyword().isBlank() ? null : source.keyword().trim();
+        if (keyword != null && keyword.length() > 100) {
+            throw problem(400, "VOUCHER_KEYWORD_INVALID", "Invalid voucher keyword",
+                    "keyword must not exceed 100 characters");
+        }
+        return new VoucherRequests.Search(normalizePeriodCode(source.periodCode()), source.startDate(),
+                source.endDate(), keyword);
     }
 
     private String normalizePeriodCode(String periodCode) {

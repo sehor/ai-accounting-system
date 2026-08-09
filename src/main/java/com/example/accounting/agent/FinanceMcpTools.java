@@ -34,6 +34,7 @@ import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.security.MessageDigest;
+import java.time.LocalDate;
 import java.util.Base64;
 import java.util.HexFormat;
 import java.util.LinkedHashMap;
@@ -707,13 +708,23 @@ public class FinanceMcpTools {
     @PreAuthorize("isAuthenticated()")
     public List<VoucherResponses.Voucher> listVouchers(
             @McpToolParam UUID ledgerId,
+            @McpToolParam(description = "Exact accounting period code in YYYY-MM format", required = false)
+            String periodCode,
+            @McpToolParam(description = "Inclusive voucher date lower bound in YYYY-MM-DD format", required = false)
+            LocalDate startDate,
+            @McpToolParam(description = "Inclusive voucher date upper bound in YYYY-MM-DD format", required = false)
+            LocalDate endDate,
+            @McpToolParam(description = "Keyword matched against voucher type, number, and summaries", required = false)
+            String keyword,
             @McpToolParam(description = "Maximum number of vouchers", required = false) Integer limit,
             @McpToolParam(description = "Number of vouchers to skip", required = false) Integer offset) {
         UUID actorId = actor();
         int actualLimit = limit == null ? 100 : limit;
         int actualOffset = offset == null ? 0 : offset;
-        return audited(actorId, "list_vouchers", ledgerId, actualLimit + ":" + actualOffset,
-                () -> voucherService.list(actorId, ledgerId, actualLimit, actualOffset));
+        VoucherRequests.Search search = new VoucherRequests.Search(periodCode, startDate, endDate, keyword);
+        return audited(actorId, "list_vouchers", ledgerId,
+                periodCode + ":" + startDate + ":" + endDate + ":" + keyword + ":" + actualLimit + ":" + actualOffset,
+                () -> voucherService.list(actorId, ledgerId, search, actualLimit, actualOffset));
     }
 
     @McpTool(name = "create_voucher", description = "Save, automatically approve, and post a voucher")

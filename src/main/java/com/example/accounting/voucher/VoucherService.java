@@ -28,7 +28,12 @@ public interface VoucherService {
 
     List<VoucherResponses.Voucher> list(UUID actorId, UUID ledgerId, String periodCode, int limit, int offset);
 
+    List<VoucherResponses.Voucher> list(UUID actorId, UUID ledgerId, VoucherRequests.Search search,
+                                        int limit, int offset);
+
     long count(UUID actorId, UUID ledgerId, String periodCode);
+
+    long count(UUID actorId, UUID ledgerId, VoucherRequests.Search search);
 
     VoucherResponses.Voucher find(UUID actorId, UUID ledgerId, UUID voucherId);
 

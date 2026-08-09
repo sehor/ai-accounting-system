@@ -50,6 +50,29 @@ afterEach(() => {
 })
 
 describe('VoucherListPage', () => {
+  it('sends keyword and date-range filters without a conflicting period filter', async () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <App>
+          <MemoryRouter initialEntries={['/ledgers/ledger-1/vouchers?startDate=2026-06-01&endDate=2026-07-31&keyword=工资']}>
+            <Routes><Route path="/ledgers/:ledgerId/vouchers" element={<VoucherListPage />} /></Routes>
+          </MemoryRouter>
+        </App>
+      </QueryClientProvider>,
+    )
+
+    await waitFor(() => expect(apiFetchWithHeaders).toHaveBeenCalled())
+    const path = vi.mocked(apiFetchWithHeaders).mock.calls
+      .map(([requestPath]) => requestPath).find((requestPath) => requestPath.includes('/vouchers?'))!
+    const params = new URL(path, 'http://localhost').searchParams
+    expect(params.get('startDate')).toBe('2026-06-01')
+    expect(params.get('endDate')).toBe('2026-07-31')
+    expect(params.get('keyword')).toBe('工资')
+    expect(params.get('periodCode')).toBeNull()
+  })
+
   it('shows an empty state instead of vouchers from another period', async () => {
     vi.mocked(apiFetch).mockImplementation((path) => Promise.resolve(
       path.endsWith('/periods') ? [
@@ -212,6 +235,7 @@ describe('VoucherListPage', () => {
     )
 
     fireEvent.click(screen.getByRole('button', { name: /导出金蝶凭证/ }))
+    expect(screen.getByText(/收款-主营、付款-日常、付款-主营、银行费用/)).toBeInTheDocument()
     fireEvent.click(screen.getByRole('checkbox', { name: '合并同类分录' }))
     fireEvent.click(within(screen.getByRole('dialog', { name: '导出金蝶凭证' }))
       .getByRole('button', { name: /^导\s*出$/ }))
@@ -227,6 +251,25 @@ describe('VoucherListPage', () => {
 })
 
 describe('VoucherEditorPage', () => {
+  it('leaves the voucher number to the server for a new voucher', async () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <App>
+          <MemoryRouter initialEntries={['/ledgers/ledger-1/vouchers/new']}>
+            <Routes>
+              <Route path="/ledgers/:ledgerId/vouchers/:voucherId" element={<VoucherEditorPage />} />
+            </Routes>
+          </MemoryRouter>
+        </App>
+      </QueryClientProvider>,
+    )
+
+    expect(await screen.findByRole('heading', { name: '新建凭证' })).toBeInTheDocument()
+    expect(screen.queryByLabelText('凭证号')).not.toBeInTheDocument()
+  })
+
   it('allows editing a posted voucher while its period is open', async () => {
     vi.mocked(apiFetch).mockImplementation((path) => Promise.resolve(path.endsWith('/periods') ? [{
       id: 'period-1', ledgerId: 'ledger-1', periodCode: '2026-06', startDate: '2026-06-01', endDate: '2026-06-30', status: 'OPEN',

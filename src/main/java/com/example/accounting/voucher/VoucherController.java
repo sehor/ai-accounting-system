@@ -7,6 +7,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.http.HttpStatus;
@@ -36,17 +37,21 @@ public class VoucherController {
     @GetMapping
     @ApiResponse(responseCode = "200", headers = @Header(
             name = "X-Total-Count",
-            description = "Total number of vouchers matching the period filter",
+            description = "Total number of vouchers matching the supplied filters",
             schema = @Schema(type = "integer", format = "int64")))
     public List<VoucherResponses.Voucher> list(HttpServletRequest request, HttpServletResponse response,
                                                 @PathVariable UUID ledgerId,
                                                 @RequestParam(required = false) String periodCode,
+                                                @RequestParam(required = false) LocalDate startDate,
+                                                @RequestParam(required = false) LocalDate endDate,
+                                                @RequestParam(required = false) String keyword,
                                                 @RequestParam(defaultValue = "100") int limit,
                                                 @RequestParam(defaultValue = "0") int offset) {
         UUID actorId = user(request);
+        VoucherRequests.Search search = new VoucherRequests.Search(periodCode, startDate, endDate, keyword);
         List<VoucherResponses.Voucher> result = voucherService.list(
-                actorId, ledgerId, periodCode, limit, offset);
-        response.setHeader("X-Total-Count", Long.toString(voucherService.count(actorId, ledgerId, periodCode)));
+                actorId, ledgerId, search, limit, offset);
+        response.setHeader("X-Total-Count", Long.toString(voucherService.count(actorId, ledgerId, search)));
         response.setHeader("Access-Control-Expose-Headers", "X-Total-Count");
         return result;
     }

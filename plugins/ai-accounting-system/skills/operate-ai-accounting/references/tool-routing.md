@@ -63,8 +63,8 @@ Confirm targets and output handling. Never overwrite or discard an existing ledg
 
 ## Accounting experience
 
-- `search_accounting_experiences`: load active experience only when generating a voucher or voucher draft. Immediately before line mapping, send `{"ledgerId":null,"page":1,"pageSize":50}` without `query` or `tags`, then request every page through `totalPages`; a null ledger ID returns only `GENERAL` records. Keep the complete result set in context and reuse it across all lines. Use the selected ledger ID in a separate search only when ledger-specific guidance is needed.
-- `create_accounting_experience`: save confirmed experience.
+- `search_accounting_experiences`: search only directly relevant `LEDGER` experience for an unresolved company-specific question. Use the bundled template skills for cross-ledger rules.
+- `create_accounting_experience`: save confirmed `LEDGER` experience. Cross-ledger rules require a plugin-skill update.
 - `update_accounting_experience`: revise using the expected version.
 - `archive_accounting_experience`: soft-archive only on explicit request.
 

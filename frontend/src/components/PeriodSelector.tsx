@@ -24,10 +24,12 @@ export function usePeriodFilter(ledgerId: string) {
     enabled: Boolean(session && ledgerId),
   })
   const requested = search.get('periodCode') || undefined
+  const hasDateRange = Boolean(search.get('startDate') || search.get('endDate'))
   const periodCode = useMemo(() => {
+    if (hasDateRange) return undefined
     if (requested && periods.data?.some((period) => period.periodCode === requested)) return requested
     return selectDefaultPeriod(periods.data || [])
-  }, [periods.data, requested])
+  }, [hasDateRange, periods.data, requested])
 
   useEffect(() => {
     if (!periodCode || requested === periodCode) return
@@ -41,6 +43,8 @@ export function usePeriodFilter(ledgerId: string) {
   const setPeriodCode = (value: string) => {
     const next = new URLSearchParams(search)
     next.set('periodCode', value)
+    next.delete('startDate')
+    next.delete('endDate')
     next.delete('offset')
     next.delete('page')
     setSearch(next)

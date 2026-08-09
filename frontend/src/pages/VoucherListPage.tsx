@@ -39,6 +39,9 @@ export function VoucherListPage() {
   const { periods, periodCode, setPeriodCode } = usePeriodFilter(ledgerId)
   const limit = Number(search.get('limit') || 20)
   const offset = Number(search.get('offset') || 0)
+  const startDate = search.get('startDate') || ''
+  const endDate = search.get('endDate') || ''
+  const keyword = search.get('keyword') || ''
   const [selectedKeys, setSelectedKeys] = useState<string[]>([])
   const [bulkAction, setBulkAction] = useState<'approve' | null>(null)
   const [bulkComment, setBulkComment] = useState('')
@@ -46,14 +49,19 @@ export function VoucherListPage() {
   const [mergeEntries, setMergeEntries] = useState(false)
 
   const query = useQuery({
-    queryKey: ['vouchers', ledgerId, periodCode, limit, offset],
+    queryKey: ['vouchers', ledgerId, periodCode, startDate, endDate, keyword, limit, offset],
     queryFn: async () => {
+      const params = new URLSearchParams({ limit: String(limit), offset: String(offset) })
+      if (periodCode) params.set('periodCode', periodCode)
+      if (startDate) params.set('startDate', startDate)
+      if (endDate) params.set('endDate', endDate)
+      if (keyword) params.set('keyword', keyword)
       const response = await apiFetchWithHeaders<Voucher[]>(
-        `/ledgers/${ledgerId}/vouchers?periodCode=${periodCode}&limit=${limit}&offset=${offset}`, session!,
+        `/ledgers/${ledgerId}/vouchers?${params}`, session!,
       )
       return { data: response.data, total: Number(response.headers.get('X-Total-Count') || response.data.length) }
     },
-    enabled: Boolean(session && ledgerId && periodCode),
+    enabled: Boolean(session && ledgerId && (periodCode || startDate || endDate)),
   })
   const accounts = useQuery({
     queryKey: ['accounts', ledgerId],
@@ -65,12 +73,10 @@ export function VoucherListPage() {
   )
   const selectedPeriodId = periods.data?.find((period) => period.periodCode === periodCode)?.id
   const rawVouchers = useMemo(() => query.data?.data || [], [query.data?.data])
-  const vouchers = useMemo(
-    () => selectedPeriodId ? rawVouchers.filter((voucher) => voucher.periodId === selectedPeriodId) : [],
-    [rawVouchers, selectedPeriodId],
-  )
-  const hasCrossPeriodRows = rawVouchers.some((voucher) => voucher.periodId !== selectedPeriodId)
-  const total = hasCrossPeriodRows ? vouchers.length : (query.data?.total || 0)
+  const vouchers = useMemo(() => periodCode && selectedPeriodId
+    ? rawVouchers.filter((voucher) => voucher.periodId === selectedPeriodId) : rawVouchers,
+  [periodCode, rawVouchers, selectedPeriodId])
+  const total = query.data?.total || 0
   const rows = useMemo<DisplayRow[]>(() => vouchers.flatMap((voucher) => {
     const lines: Array<VoucherLine | null> = voucher.lines.length ? voucher.lines : [null]
     return lines.map((line, lineIndex) => ({
@@ -157,6 +163,16 @@ export function VoucherListPage() {
     setSelectedKeys([])
     setSearch(next)
   }
+  const setFilter = (name: 'startDate' | 'endDate' | 'keyword', value: string) => {
+    const next = new URLSearchParams(search)
+    if (value) next.set(name, value)
+    else next.delete(name)
+    if (name !== 'keyword') next.delete('periodCode')
+    next.delete('offset')
+    next.delete('page')
+    setSelectedKeys([])
+    setSearch(next)
+  }
 
   return <section className="financial-page" aria-labelledby="voucher-list-title">
     <div className="financial-toolbar">
@@ -170,6 +186,14 @@ export function VoucherListPage() {
         onChange={setPeriodCode}
         onRefresh={() => void query.refetch()}
       />
+      <Space wrap>
+        <Input aria-label="凭证关键字" value={keyword} allowClear placeholder="摘要、字号或凭证字"
+          onChange={(event) => setFilter('keyword', event.target.value)} />
+        <Input aria-label="开始日期" type="date" value={startDate}
+          onChange={(event) => setFilter('startDate', event.target.value)} />
+        <Input aria-label="结束日期" type="date" value={endDate}
+          onChange={(event) => setFilter('endDate', event.target.value)} />
+      </Space>
       <Space className="financial-toolbar-actions" wrap>
         <Upload accept=".xls,.xlsx" showUploadList={false} beforeUpload={(file) => {
           const name = file.name.toLowerCase()
@@ -240,7 +264,7 @@ export function VoucherListPage() {
       confirmLoading={exportKingdee.isPending} onCancel={() => setExportOpen(false)} onOk={() => exportKingdee.mutate(mergeEntries)}>
       <Space direction="vertical" size={4}>
         <Checkbox checked={mergeEntries} onChange={(event) => setMergeEntries(event.target.checked)}>合并同类分录</Checkbox>
-        <Typography.Text type="secondary">不同银行的业务始终分开。</Typography.Text>
+        <Typography.Text type="secondary">仅合并同月、同银行，且一级科目符合“收款-主营、付款-日常、付款-主营、银行费用”之一的凭证。</Typography.Text>
       </Space>
     </Modal>
   </section>

@@ -8,6 +8,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.example.accounting.identity.CurrentUserResolver;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
@@ -24,12 +25,17 @@ class VoucherControllerTest {
     void filtersVoucherPageByPeriodAndExposesTotalCount() throws Exception {
         UUID userId = UUID.randomUUID();
         UUID ledgerId = UUID.randomUUID();
-        when(voucherService.list(userId, ledgerId, "2026-06", 20, 20)).thenReturn(List.of());
-        when(voucherService.count(userId, ledgerId, "2026-06")).thenReturn(42L);
+        VoucherRequests.Search search = new VoucherRequests.Search("2026-06", LocalDate.of(2026, 6, 1),
+                LocalDate.of(2026, 6, 30), "工资");
+        when(voucherService.list(userId, ledgerId, search, 20, 20)).thenReturn(List.of());
+        when(voucherService.count(userId, ledgerId, search)).thenReturn(42L);
 
         mockMvc.perform(get("/v1/ledgers/{ledgerId}/vouchers", ledgerId)
                         .header("X-User-Id", userId)
                         .queryParam("periodCode", "2026-06")
+                        .queryParam("startDate", "2026-06-01")
+                        .queryParam("endDate", "2026-06-30")
+                        .queryParam("keyword", "工资")
                         .queryParam("limit", "20")
                         .queryParam("offset", "20"))
                 .andExpect(status().isOk())
@@ -37,7 +43,7 @@ class VoucherControllerTest {
                 .andExpect(header().string("X-Total-Count", "42"))
                 .andExpect(header().string("Access-Control-Expose-Headers", "X-Total-Count"));
 
-        verify(voucherService).list(userId, ledgerId, "2026-06", 20, 20);
-        verify(voucherService).count(userId, ledgerId, "2026-06");
+        verify(voucherService).list(userId, ledgerId, search, 20, 20);
+        verify(voucherService).count(userId, ledgerId, search);
     }
 }

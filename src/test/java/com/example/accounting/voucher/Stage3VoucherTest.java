@@ -49,6 +49,54 @@ class Stage3VoucherTest {
     }
 
     @Test
+    void assignsTheNextVoucherNumberWhenItIsOmitted() {
+        UUID userId = UUID.randomUUID();
+        UUID ledgerId = ledgerService.create(
+                new CurrentUserResolver.ResolvedUser(userId, "test", userId.toString()),
+                new LedgerRequests.Create("automatic-number", "SME", "v1", "CNY", LocalDate.of(2026, 1, 1), false)).id();
+        UUID periodId = periodId(ledgerId, "2026-01");
+        List<VoucherRequests.Line> lines = List.of(line(accountId(ledgerId, "1001"), "DEBIT", "1"),
+                line(accountId(ledgerId, "3001"), "CREDIT", "1"));
+
+        VoucherResponses.Voucher numbered = voucherService.create(userId, ledgerId,
+                new VoucherRequests.Create(periodId, LocalDate.of(2026, 1, 15), "记", "7", "Manual", lines));
+        VoucherResponses.Voucher generated = voucherService.create(userId, ledgerId,
+                new VoucherRequests.Create(periodId, LocalDate.of(2026, 1, 15), "记", null, "Generated", lines));
+        VoucherResponses.Voucher nextGenerated = voucherService.create(userId, ledgerId,
+                new VoucherRequests.Create(periodId, LocalDate.of(2026, 1, 15), "记", " ", "Generated", lines));
+
+        assertThat(numbered.voucherNumber()).isEqualTo("7");
+        assertThat(generated.voucherNumber()).isEqualTo("8");
+        assertThat(nextGenerated.voucherNumber()).isEqualTo("9");
+    }
+
+    @Test
+    void filtersVouchersByKeywordAndInclusiveDateRange() {
+        UUID userId = UUID.randomUUID();
+        UUID ledgerId = ledgerService.create(
+                new CurrentUserResolver.ResolvedUser(userId, "test", userId.toString()),
+                new LedgerRequests.Create("voucher-search", "SME", "v1", "CNY", LocalDate.of(2026, 1, 1), false)).id();
+        UUID periodId = periodId(ledgerId, "2026-01");
+        List<VoucherRequests.Line> lines = List.of(
+                new VoucherRequests.Line(accountId(ledgerId, "1001"), "DEBIT", "CNY", new BigDecimal("1"),
+                        BigDecimal.ONE, "研发工资"),
+                new VoucherRequests.Line(accountId(ledgerId, "3001"), "CREDIT", "CNY", new BigDecimal("1"),
+                        BigDecimal.ONE, "研发工资"));
+        voucherService.create(userId, ledgerId, new VoucherRequests.Create(
+                periodId, LocalDate.of(2026, 1, 5), "记", "1", "期初", lines));
+        voucherService.create(userId, ledgerId, new VoucherRequests.Create(
+                periodId, LocalDate.of(2026, 1, 15), "记", "2", "计提工资", lines));
+        voucherService.create(userId, ledgerId, new VoucherRequests.Create(
+                periodId, LocalDate.of(2026, 1, 25), "记", "3", "缴纳社保", lines));
+        VoucherRequests.Search search = new VoucherRequests.Search(null, LocalDate.of(2026, 1, 10),
+                LocalDate.of(2026, 1, 20), "工资");
+
+        assertThat(voucherService.list(userId, ledgerId, search, 20, 0))
+                .extracting(VoucherResponses.Voucher::summary).containsExactly("计提工资");
+        assertThat(voucherService.count(userId, ledgerId, search)).isEqualTo(1L);
+    }
+
+    @Test
     void rejectsAnUnbalancedVoucherDuringValidation() {
         UUID userId = UUID.randomUUID();
         UUID ledgerId = ledgerService.create(

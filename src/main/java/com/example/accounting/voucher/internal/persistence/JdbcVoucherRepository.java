@@ -1,6 +1,7 @@
 package com.example.accounting.voucher.internal.persistence;
 
 import com.example.accounting.voucher.VoucherResponses;
+import com.example.accounting.voucher.VoucherRequests;
 import com.example.accounting.voucher.internal.port.VoucherRepository;
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -38,6 +39,18 @@ public class JdbcVoucherRepository implements VoucherRepository {
                 where ledger_id = ? and actor_id = ? and idempotency_key = ?
                 """, rs -> rs.next() ? new Idempotency(rs.getString("request_hash"),
                 rs.getObject("voucher_id", UUID.class)) : null, ledgerId, actorId, key));
+    }
+
+    @Override
+    public String nextVoucherNumber(UUID ledgerId, UUID periodId, String voucherType) {
+        jdbcTemplate.queryForObject("select pg_advisory_xact_lock(hashtext(?))", Object.class,
+                ledgerId + ":" + periodId + ":" + voucherType);
+        Long next = jdbcTemplate.queryForObject("""
+                select coalesce(max(case when voucher_number ~ '^[0-9]+$' then voucher_number::bigint end), 0) + 1
+                from voucher
+                where ledger_id = ? and period_id = ? and voucher_type = ? and deleted_at is null
+                """, Long.class, ledgerId, periodId, voucherType);
+        return Long.toString(next);
     }
 
     @Override
@@ -242,11 +255,16 @@ public class JdbcVoucherRepository implements VoucherRepository {
 
     @Override
     public List<VoucherResponses.Voucher> list(UUID ledgerId, int limit, int offset) {
-        return list(ledgerId, null, limit, offset);
+        return list(ledgerId, new VoucherRequests.Search(null, null, null, null), limit, offset);
     }
 
     @Override
     public List<VoucherResponses.Voucher> list(UUID ledgerId, String periodCode, int limit, int offset) {
+        return list(ledgerId, new VoucherRequests.Search(periodCode, null, null, null), limit, offset);
+    }
+
+    @Override
+    public List<VoucherResponses.Voucher> list(UUID ledgerId, VoucherRequests.Search search, int limit, int offset) {
         return jdbcTemplate.query("""
                 select v.id, v.ledger_id, v.period_id, v.voucher_date, v.voucher_type, v.voucher_number,
                     v.summary, v.status, v.approval_required, v.version, v.source_type, v.source_id
@@ -254,6 +272,14 @@ public class JdbcVoucherRepository implements VoucherRepository {
                 join accounting_period p on p.ledger_id = v.ledger_id and p.id = v.period_id
                 where v.ledger_id = ? and v.deleted_at is null
                     and (?::varchar is null or p.period_code = ?)
+                    and (?::date is null or v.voucher_date >= ?)
+                    and (?::date is null or v.voucher_date <= ?)
+                    and (?::varchar is null or v.voucher_type ilike '%' || ? || '%'
+                        or v.voucher_number ilike '%' || ? || '%'
+                        or coalesce(v.summary, '') ilike '%' || ? || '%'
+                        or exists (select 1 from voucher_line line
+                                   where line.ledger_id = v.ledger_id and line.voucher_id = v.id
+                                     and coalesce(line.summary, '') ilike '%' || ? || '%'))
                 order by v.voucher_date, v.voucher_number, v.id limit ? offset ?
                 """, (rs, rowNum) -> voucher(rs.getObject("id", UUID.class),
                 rs.getObject("ledger_id", UUID.class), rs.getObject("period_id", UUID.class),
@@ -261,17 +287,34 @@ public class JdbcVoucherRepository implements VoucherRepository {
                 rs.getString("voucher_number"), rs.getString("summary"), rs.getString("status"),
                 rs.getBoolean("approval_required"), rs.getLong("version"), List.of(),
                 rs.getString("source_type"), rs.getObject("source_id", UUID.class)),
-                ledgerId, periodCode, periodCode, limit, offset);
+                ledgerId, search.periodCode(), search.periodCode(), search.startDate(), search.startDate(),
+                search.endDate(), search.endDate(), search.keyword(), search.keyword(), search.keyword(),
+                search.keyword(), search.keyword(), limit, offset);
     }
 
     @Override
     public long count(UUID ledgerId, String periodCode) {
+        return count(ledgerId, new VoucherRequests.Search(periodCode, null, null, null));
+    }
+
+    @Override
+    public long count(UUID ledgerId, VoucherRequests.Search search) {
         Long result = jdbcTemplate.queryForObject("""
                 select count(*) from voucher v
                 join accounting_period p on p.ledger_id = v.ledger_id and p.id = v.period_id
                 where v.ledger_id = ? and v.deleted_at is null
                     and (?::varchar is null or p.period_code = ?)
-                """, Long.class, ledgerId, periodCode, periodCode);
+                    and (?::date is null or v.voucher_date >= ?)
+                    and (?::date is null or v.voucher_date <= ?)
+                    and (?::varchar is null or v.voucher_type ilike '%' || ? || '%'
+                        or v.voucher_number ilike '%' || ? || '%'
+                        or coalesce(v.summary, '') ilike '%' || ? || '%'
+                        or exists (select 1 from voucher_line line
+                                   where line.ledger_id = v.ledger_id and line.voucher_id = v.id
+                                     and coalesce(line.summary, '') ilike '%' || ? || '%'))
+                """, Long.class, ledgerId, search.periodCode(), search.periodCode(), search.startDate(),
+                search.startDate(), search.endDate(), search.endDate(), search.keyword(), search.keyword(),
+                search.keyword(), search.keyword(), search.keyword());
         return result == null ? 0 : result;
     }
 
