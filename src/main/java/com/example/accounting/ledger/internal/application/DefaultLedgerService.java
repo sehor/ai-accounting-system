@@ -16,7 +16,7 @@ import com.example.accounting.ledger.LedgerRole;
 import com.example.accounting.ledger.LedgerService;
 import com.example.accounting.ledger.MembershipStatus;
 import com.example.accounting.ledger.PeriodCloseGuard;
-import com.example.accounting.reporting.BalanceProjectionService;
+import com.example.accounting.shared.balance.BalanceProjectionService;
 import com.example.accounting.ledger.internal.persistence.AccountManagementRepository;
 import com.example.accounting.ledger.internal.port.LedgerRepository;
 import com.example.accounting.shared.web.ApiProblemException;
@@ -40,11 +40,15 @@ import java.util.stream.Collectors;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class DefaultLedgerService implements LedgerService {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(DefaultLedgerService.class);
 
     private static final Set<LedgerRole> VIEW_ROLES = Set.of(
             LedgerRole.OWNER, LedgerRole.EDITOR, LedgerRole.REVIEWER, LedgerRole.VIEWER, LedgerRole.AGENT);
@@ -294,14 +298,35 @@ public class DefaultLedgerService implements LedgerService {
     public void deleteAccount(UUID actorId, UUID ledgerId, UUID accountId, long expectedVersion) {
         requireRole(actorId, ledgerId, WRITE_ROLES);
         LedgerResponses.Account before = requireAccount(ledgerId, accountId);
-        if (!accounts.delete(ledgerId, accountId, expectedVersion)) {
-            if (before.version() != expectedVersion) {
-                throw versionConflict();
-            }
+        if (before.version() != expectedVersion) {
+            throw versionConflict();
+        }
+        if (before.isTemplate() || !before.isLeaf()) {
             throw problem(409, "ACCOUNT_DELETE_FORBIDDEN", "Account cannot be deleted",
                     "Only an unused custom leaf account can be deleted; disable other accounts instead");
         }
-        accounts.recordRevision(ledgerId, accountId, "DELETE", actorId, json(before), "null");
+        if (accounts.hasVoucherLines(ledgerId, accountId)) {
+            throw problem(409, "ACCOUNT_HAS_VOUCHER_LINES", "Account cannot be deleted",
+                    "The account is referenced by voucher lines");
+        }
+        if (accounts.hasOpeningBalances(ledgerId, accountId)) {
+            throw problem(409, "ACCOUNT_HAS_OPENING_BALANCE", "Account cannot be deleted",
+                    "The account is referenced by opening balances");
+        }
+        accounts.findConfigurationReference(ledgerId, accountId).ifPresent(reference -> {
+            throw problem(409, "ACCOUNT_REFERENCED_BY_CONFIGURATION", "Account cannot be deleted",
+                    "The account is referenced by " + reference);
+        });
+        try {
+            if (!accounts.delete(ledgerId, accountId, expectedVersion)) {
+                throw problem(409, "ACCOUNT_DELETE_CONFLICT", "Account cannot be deleted",
+                        "The account acquired a reference or changed before deletion");
+            }
+        } catch (DataIntegrityViolationException exception) {
+            throw problem(409, "ACCOUNT_REFERENCED_BY_CONFIGURATION", "Account cannot be deleted",
+                    "The account is still referenced by a business configuration");
+        }
+        LOGGER.info("Account deleted: ledgerId={}, accountId={}, actorId={}", ledgerId, accountId, actorId);
     }
 
     @Override
@@ -459,7 +484,11 @@ public class DefaultLedgerService implements LedgerService {
                             new BalanceProjectionService.OpeningBalanceEvent(
                                     ledgerId, balance.periodId(), balance.id(), 1,
                                     List.of(new BalanceProjectionService.Entry(balance.accountId(),
-                                            balance.debitBase(), balance.creditBase(), BigDecimal.ZERO,
+                                            balance.debitBase().max(BigDecimal.ZERO)
+                                                    .add(balance.creditBase().negate().max(BigDecimal.ZERO)),
+                                            balance.creditBase().max(BigDecimal.ZERO)
+                                                    .add(balance.debitBase().negate().max(BigDecimal.ZERO)),
+                                            BigDecimal.ZERO,
                                             BigDecimal.ZERO)))));
         }
         return confirmed;

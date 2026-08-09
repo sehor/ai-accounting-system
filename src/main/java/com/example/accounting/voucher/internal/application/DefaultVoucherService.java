@@ -4,7 +4,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.example.accounting.ledger.LedgerAccessService;
 import com.example.accounting.ledger.LedgerRole;
-import com.example.accounting.reporting.BalanceProjectionService;
+import com.example.accounting.shared.balance.BalanceProjectionService;
 import com.example.accounting.shared.web.ApiProblemException;
 import com.example.accounting.voucher.VoucherRequests;
 import com.example.accounting.voucher.VoucherResponses;
@@ -25,11 +25,15 @@ import java.util.HashSet;
 import java.util.Set;
 import java.util.UUID;
 import java.util.HexFormat;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class DefaultVoucherService implements VoucherService {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(DefaultVoucherService.class);
 
     // 同时审批记账开关：改为 false 即恢复原有的人工提交、审批和记账流程。
     private static final boolean AUTO_APPROVE_AND_POST_ON_SAVE = true;
@@ -179,7 +183,9 @@ public class DefaultVoucherService implements VoucherService {
         insertLines(ledgerId, voucherId, context, request.lines());
         VoucherSnapshot after = snapshot(ledgerId, voucherId);
         audit(ledgerId, voucherId, "UPDATE_GENERATED", actorId, sourceType, before, after);
-        publishUpdate(ledgerId, voucherId, state.version() + 1, before, after);
+        if ("POSTED".equals(state.status())) {
+            publishUpdate(ledgerId, voucherId, state.version() + 1, before, after);
+        }
         return find(actorId, ledgerId, voucherId);
     }
 
@@ -469,25 +475,10 @@ public class DefaultVoucherService implements VoucherService {
             throw problem(409, "VOUCHER_STATE_INVALID", "Invalid voucher state",
                     "Only draft or validated vouchers can be deleted");
         }
-        VoucherSnapshot before = snapshot(ledgerId, voucherId);
-        changeStatus(ledgerId, voucherId, state.status(), "DELETED", actorId);
-        vouchers.markDeleted(ledgerId, voucherId);
-        audit(ledgerId, voucherId, "DELETE", actorId, null, before, snapshot(ledgerId, voucherId));
-    }
-
-    @Transactional
-    @Override
-    public VoucherResponses.Voucher restoreDeleted(UUID actorId, UUID ledgerId, UUID voucherId) {
-        requireRole(actorId, ledgerId, Set.of(LedgerRole.OWNER, LedgerRole.EDITOR));
-        VoucherState state = vouchers.findState(ledgerId, voucherId, true).orElse(null);
-        if (state == null || !"DELETED".equals(state.status())) {
-            throw problem(404, "VOUCHER_NOT_FOUND", "Deleted voucher not found", "The deleted voucher is not available");
+        if (!vouchers.deleteVoucher(ledgerId, voucherId)) {
+            throw problem(409, "VOUCHER_STATE_INVALID", "Invalid voucher state", "The voucher state has changed");
         }
-        ensureManual(state);
-        VoucherSnapshot before = snapshot(ledgerId, voucherId);
-        vouchers.restoreDeleted(ledgerId, voucherId, actorId);
-        audit(ledgerId, voucherId, "RESTORE_DELETED", actorId, null, before, snapshot(ledgerId, voucherId));
-        return finalizeOnSave(actorId, ledgerId, voucherId, Set.of(LedgerRole.OWNER, LedgerRole.EDITOR));
+        LOGGER.info("Voucher deleted: ledgerId={}, voucherId={}, actorId={}", ledgerId, voucherId, actorId);
     }
 
     @Transactional(readOnly = true)

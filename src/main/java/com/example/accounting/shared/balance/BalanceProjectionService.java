@@ -1,12 +1,11 @@
-package com.example.accounting.reporting;
+package com.example.accounting.shared.balance;
 
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
-import java.time.Duration;
 import java.util.List;
 import java.util.UUID;
 
-/** Public reporting boundary used by posting flows to publish balance projection events. */
+/** Shared boundary used by accounting write flows and reporting projection adapters. */
 public interface BalanceProjectionService {
 
     void publishVoucher(VoucherEvent event);
@@ -42,19 +41,8 @@ public interface BalanceProjectionService {
     record ProjectionStatus(String status, long lastEnqueuedEventId, long lastAppliedEventId,
                             OffsetDateTime lastEnqueuedAt, OffsetDateTime projectedAt) {
 
-        public boolean fresh(long maxLagSeconds, OffsetDateTime now) {
-            if (!"READY".equals(status()) || lastEnqueuedEventId() != lastAppliedEventId()) {
-                return false;
-            }
-            return lastEnqueuedAt() == null
-                    || !lastEnqueuedAt().plusSeconds(maxLagSeconds).isBefore(now);
-        }
-
-        public boolean fresh(Duration maxLag, OffsetDateTime now) {
-            if (!"READY".equals(status()) || lastEnqueuedEventId() != lastAppliedEventId()) {
-                return false;
-            }
-            return lastEnqueuedAt() == null || !lastEnqueuedAt().plus(maxLag).isBefore(now);
+        public boolean fresh() {
+            return "READY".equals(status()) && lastEnqueuedEventId() == lastAppliedEventId();
         }
     }
 }

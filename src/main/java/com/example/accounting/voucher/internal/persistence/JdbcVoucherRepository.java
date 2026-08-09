@@ -387,17 +387,15 @@ public class JdbcVoucherRepository implements VoucherRepository {
     }
 
     @Override
-    public void markDeleted(UUID ledgerId, UUID voucherId) {
-        jdbcTemplate.update("update voucher set deleted_at = now() where ledger_id = ? and id = ?",
+    public boolean deleteVoucher(UUID ledgerId, UUID voucherId) {
+        jdbcTemplate.update("delete from voucher_idempotency where ledger_id = ? and voucher_id = ?",
                 ledgerId, voucherId);
-    }
-
-    @Override
-    public void restoreDeleted(UUID ledgerId, UUID voucherId, UUID actorId) {
-        jdbcTemplate.update("update voucher set status = 'DRAFT', deleted_at = null, "
-                        + "current_revision = current_revision + 1, version = version + 1, updated_at = now(), "
-                        + "updated_by = ? where ledger_id = ? and id = ?",
-                actorId, ledgerId, voucherId);
+        jdbcTemplate.update("delete from voucher_approval where ledger_id = ? and voucher_id = ?",
+                ledgerId, voucherId);
+        jdbcTemplate.update("delete from voucher_line where ledger_id = ? and voucher_id = ?",
+                ledgerId, voucherId);
+        return jdbcTemplate.update("delete from voucher where ledger_id = ? and id = ?",
+                ledgerId, voucherId) == 1;
     }
 
     @Override

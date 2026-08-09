@@ -1,7 +1,7 @@
 package com.example.accounting.reporting.internal.persistence;
 
 import com.example.accounting.reporting.ReportResponses;
-import com.example.accounting.reporting.BalanceProjectionService;
+import com.example.accounting.shared.balance.BalanceProjectionService;
 import com.example.accounting.reporting.BalanceReadMetadata;
 import com.example.accounting.reporting.internal.port.BalanceProjectionRepository;
 import com.example.accounting.reporting.internal.port.ReportingRepository;
@@ -23,16 +23,13 @@ public class JdbcReportingRepository implements ReportingRepository {
     private final JdbcTemplate jdbc;
     private final BalanceProjectionRepository projection;
     private final String readMode;
-    private final Duration maxLag;
 
     @Autowired
     public JdbcReportingRepository(JdbcTemplate jdbc, BalanceProjectionRepository projection,
-                                   @Value("${accounting.balance.read-mode:legacy}") String readMode,
-                                   @Value("${accounting.balance.max-lag:5s}") Duration maxLag) {
+                                   @Value("${accounting.balance.read-mode:legacy}") String readMode) {
         this.jdbc = jdbc;
         this.projection = projection;
         this.readMode = readMode;
-        this.maxLag = maxLag;
     }
 
     /** Compatibility constructor for repository-focused tests. */
@@ -40,7 +37,6 @@ public class JdbcReportingRepository implements ReportingRepository {
         this.jdbc = jdbc;
         this.projection = null;
         this.readMode = "legacy";
-        this.maxLag = Duration.ofSeconds(5);
     }
 
     @Override
@@ -385,7 +381,7 @@ public class JdbcReportingRepository implements ReportingRepository {
             return false;
         }
         BalanceProjectionService.ProjectionStatus status = projection.status(ledgerId, periodCode);
-        boolean fresh = status.fresh(maxLag, OffsetDateTime.now());
+        boolean fresh = status.fresh();
         if (fresh) {
             BalanceReadMetadata.set("projection", status.projectedAt() == null
                     ? (status.lastEnqueuedAt() == null ? OffsetDateTime.now() : status.lastEnqueuedAt())
@@ -405,7 +401,11 @@ public class JdbcReportingRepository implements ReportingRepository {
     }
 
     private long lagMs(BalanceProjectionService.ProjectionStatus status) {
-        return status.lastEnqueuedAt() == null ? 0
-                : Math.max(0, Duration.between(status.lastEnqueuedAt(), OffsetDateTime.now()).toMillis());
+        if (status.lastEnqueuedAt() == null) {
+            return 0;
+        }
+        OffsetDateTime measuredAt = status.fresh() && status.projectedAt() != null
+                ? status.projectedAt() : OffsetDateTime.now();
+        return Math.max(0, Duration.between(status.lastEnqueuedAt(), measuredAt).toMillis());
     }
 }

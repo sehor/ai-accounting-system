@@ -36,7 +36,7 @@ For the local `super-agent`, `get_ledger_role` returns effective role `OWNER` fo
 - `list_vouchers`, `get_voucher`: read and verify.
 - `create_voucher_draft`, `create_voucher`: create using exact ledger IDs and account IDs.
 - `validate_voucher`, `submit_voucher`, `approve_voucher`, `reject_voucher`, `post_voucher`: advance state only as authorized.
-- `update_voucher`, `reverse_voucher`, `unpost_voucher`, `delete_voucher`, `restore_deleted_voucher`, `restore_voucher_revision`: corrective operations requiring exact targets and explicit scope.
+- `update_voucher`, `reverse_voucher`, `unpost_voucher`, `delete_voucher`, `restore_voucher_revision`: corrective operations requiring exact targets and explicit scope.
 - `import_kingdee_vouchers`, `export_kingdee_vouchers`: batch exchange.
 
 Do not assume every listed state tool exists in every server version. Follow the tool schema currently exposed.

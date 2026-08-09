@@ -1,6 +1,6 @@
 package com.example.accounting.reporting.internal.application;
 
-import com.example.accounting.reporting.BalanceProjectionService;
+import com.example.accounting.shared.balance.BalanceProjectionService;
 import com.example.accounting.reporting.internal.persistence.BalanceProjectionException;
 import com.example.accounting.reporting.internal.port.BalanceProjectionRepository;
 import com.example.accounting.shared.web.ApiProblemException;
@@ -20,7 +20,7 @@ public class DefaultBalanceProjectionService implements BalanceProjectionService
     @Override
     @Transactional
     public void publishVoucher(VoucherEvent event) {
-        call(() -> repository.appendVoucherEvent(event));
+        call(() -> repository.appendAndApplyVoucherEvent(event));
     }
 
     @Override

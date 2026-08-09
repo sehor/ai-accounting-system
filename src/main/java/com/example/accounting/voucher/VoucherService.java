@@ -48,8 +48,6 @@ public interface VoucherService {
 
     void delete(UUID actorId, UUID ledgerId, UUID voucherId);
 
-    VoucherResponses.Voucher restoreDeleted(UUID actorId, UUID ledgerId, UUID voucherId);
-
     List<VoucherResponses.Revision> listRevisions(UUID actorId, UUID ledgerId, UUID voucherId);
 
     VoucherResponses.Voucher restoreRevision(UUID actorId, UUID ledgerId, UUID voucherId, int revision);

@@ -500,7 +500,6 @@ POST           /v1/ledgers/{ledgerId}/opening-balances:confirm
 GET/POST       /v1/ledgers/{ledgerId}/vouchers
 GET/PATCH      /v1/ledgers/{ledgerId}/vouchers/{voucherId}
 DELETE         /v1/ledgers/{ledgerId}/vouchers/{voucherId}
-POST           /v1/ledgers/{ledgerId}/vouchers/{voucherId}:restore-deleted
 POST           /v1/ledgers/{ledgerId}/vouchers/{voucherId}:validate
 POST           /v1/ledgers/{ledgerId}/vouchers/{voucherId}:submit
 POST           /v1/ledgers/{ledgerId}/vouchers/{voucherId}:approve

@@ -803,16 +803,6 @@ public class FinanceMcpTools {
         });
     }
 
-    @McpTool(name = "restore_deleted_voucher", description = "Restore a deleted voucher")
-    @PreAuthorize("isAuthenticated()")
-    public VoucherResponses.Voucher restoreDeletedVoucher(
-            @McpToolParam UUID ledgerId,
-            @McpToolParam UUID voucherId) {
-        UUID actorId = actor();
-        return audited(actorId, "restore_deleted_voucher", ledgerId, voucherId.toString(),
-                () -> voucherService.restoreDeleted(actorId, ledgerId, voucherId));
-    }
-
     @McpTool(name = "list_voucher_revisions", description = "List revisions for a voucher")
     @PreAuthorize("isAuthenticated()")
     public List<VoucherResponses.Revision> listVoucherRevisions(

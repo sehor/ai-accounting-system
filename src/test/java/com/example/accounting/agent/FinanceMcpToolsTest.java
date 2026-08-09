@@ -38,7 +38,7 @@ class FinanceMcpToolsTest {
                 "update_ledger",
                 "list_periods", "list_voucher_revisions", "list_vouchers", "post_voucher",
                 "post_voucher_standard", "preview_account_import", "reject_voucher", "reopen_period",
-                "replace_opening_balances", "restore_deleted_voucher", "restore_ledger",
+                "replace_opening_balances", "restore_ledger",
                 "restore_voucher_revision", "submit_voucher",
                 "update_account", "update_account_code_rule", "update_accounting_experience", "update_voucher",
                 "upload_document",

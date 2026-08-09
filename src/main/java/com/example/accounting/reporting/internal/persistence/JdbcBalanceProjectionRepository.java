@@ -1,6 +1,6 @@
 package com.example.accounting.reporting.internal.persistence;
 
-import com.example.accounting.reporting.BalanceProjectionService;
+import com.example.accounting.shared.balance.BalanceProjectionService;
 import com.example.accounting.reporting.ReportResponses;
 import com.example.accounting.reporting.internal.port.BalanceProjectionRepository;
 import java.math.BigDecimal;
@@ -9,6 +9,7 @@ import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
@@ -23,10 +24,13 @@ public class JdbcBalanceProjectionRepository implements BalanceProjectionReposit
     }
 
     @Override
-    public void appendVoucherEvent(BalanceProjectionService.VoucherEvent event) {
+    public void appendAndApplyVoucherEvent(BalanceProjectionService.VoucherEvent event) {
         requireOpenPeriod(event.ledgerId(), event.periodId());
-        append(event.ledgerId(), event.periodId(), "VOUCHER", event.voucherId(), event.version(),
+        Long eventId = append(event.ledgerId(), event.periodId(), "VOUCHER", event.voucherId(), event.version(),
                 event.type().name(), event.entries());
+        if (eventId != null) {
+            applyThrough(event.ledgerId(), event.periodId(), eventId);
+        }
     }
 
     @Override
@@ -155,14 +159,22 @@ public class JdbcBalanceProjectionRepository implements BalanceProjectionReposit
             return new BalanceProjectionService.ProjectionStatus(hasFacts ? "UNINITIALIZED" : "READY",
                     0, 0, null, null);
         }
+        return summarizeStatus(rows);
+    }
+
+    static BalanceProjectionService.ProjectionStatus summarizeStatus(List<ProjectionRow> rows) {
+        boolean pending = rows.stream().anyMatch(row -> row.enqueued() != row.applied());
         String status = rows.stream().anyMatch(row -> "FAILED".equals(row.status())) ? "FAILED"
-                : rows.stream().anyMatch(row -> "REBUILDING".equals(row.status())) ? "REBUILDING" : "READY";
+                : rows.stream().anyMatch(row -> "REBUILDING".equals(row.status())) ? "REBUILDING"
+                : pending ? "PENDING" : "READY";
         long enqueued = rows.stream().mapToLong(ProjectionRow::enqueued).max().orElse(0);
-        long applied = rows.stream().mapToLong(ProjectionRow::applied).min().orElse(0);
+        long applied = pending
+                ? rows.stream().mapToLong(ProjectionRow::applied).min().orElse(0)
+                : enqueued;
         OffsetDateTime enqueuedAt = rows.stream().map(ProjectionRow::enqueuedAt).filter(java.util.Objects::nonNull)
                 .max(OffsetDateTime::compareTo).orElse(null);
         OffsetDateTime projectedAt = rows.stream().map(ProjectionRow::projectedAt).filter(java.util.Objects::nonNull)
-                .max(OffsetDateTime::compareTo).orElse(null);
+                .min(OffsetDateTime::compareTo).orElse(null);
         return new BalanceProjectionService.ProjectionStatus(status, enqueued, applied, enqueuedAt, projectedAt);
     }
 
@@ -261,24 +273,12 @@ public class JdbcBalanceProjectionRepository implements BalanceProjectionReposit
                 break;
             }
             for (BalanceLine line : lines) {
-                jdbc.update("""
-                        insert into account_period_balance (
-                            ledger_id, period_id, account_id, opening_debit_base, opening_credit_base,
-                            period_debit_base, period_credit_base, version, updated_at)
-                        values (?, ?, ?, ?, ?, ?, ?, 1, now())
-                        on conflict (ledger_id, period_id, account_id) do update set
-                            opening_debit_base = account_period_balance.opening_debit_base + excluded.opening_debit_base,
-                            opening_credit_base = account_period_balance.opening_credit_base + excluded.opening_credit_base,
-                            period_debit_base = account_period_balance.period_debit_base + excluded.period_debit_base,
-                            period_credit_base = account_period_balance.period_credit_base + excluded.period_credit_base,
-                            version = account_period_balance.version + 1,
-                            updated_at = now()
-                        """, batch.ledgerId(), batch.periodId(), line.accountId(), line.openingDebit(),
-                        line.openingCredit(), line.periodDebit(), line.periodCredit());
+                applyLine(batch.ledgerId(), batch.periodId(), line);
             }
             lineCount += lines.size();
             lastApplied = eventId;
         }
+        deleteZeroBalances(batch.ledgerId(), batch.periodId());
         jdbc.update("""
                 update balance_projection_state set last_applied_event_id = ?, projected_at = now(),
                     status = 'READY', attempts = 0, last_error_code = null, last_error_message = null,
@@ -330,7 +330,7 @@ public class JdbcBalanceProjectionRepository implements BalanceProjectionReposit
                 rs.getString("name"), rs.getString("category"), debit, credit, debit.subtract(credit));
     }
 
-    private void append(UUID ledgerId, UUID periodId, String aggregateType, UUID aggregateId,
+    private Long append(UUID ledgerId, UUID periodId, String aggregateType, UUID aggregateId,
                         long aggregateVersion, String eventType,
                         java.util.List<BalanceProjectionService.Entry> entries) {
         Long eventId = jdbc.query("""
@@ -342,7 +342,7 @@ public class JdbcBalanceProjectionRepository implements BalanceProjectionReposit
                 """, rs -> rs.next() ? rs.getLong("id") : null,
                 ledgerId, periodId, aggregateType, aggregateId, aggregateVersion, eventType);
         if (eventId == null) {
-            return;
+            return null;
         }
         Map<UUID, BalanceProjectionService.Entry> aggregated = aggregate(entries);
         for (BalanceProjectionService.Entry entry : aggregated.values()) {
@@ -369,6 +369,93 @@ public class JdbcBalanceProjectionRepository implements BalanceProjectionReposit
                     next_attempt_at = now(),
                     updated_at = now()
                 """, ledgerId, periodId, eventId);
+        return eventId;
+    }
+
+    private void applyThrough(UUID ledgerId, UUID periodId, long targetEventId) {
+        ProjectionBatch state = jdbc.query("""
+                select ledger_id, period_id, coalesce(last_applied_event_id, 0) applied,
+                    coalesce(last_enqueued_event_id, 0) enqueued
+                from balance_projection_state
+                where ledger_id = ? and period_id = ? and status <> 'REBUILDING'
+                for update
+                """, rs -> rs.next() ? new ProjectionBatch(rs.getObject("ledger_id", UUID.class),
+                rs.getObject("period_id", UUID.class), rs.getLong("applied"), rs.getLong("enqueued")) : null,
+                ledgerId, periodId);
+        if (state == null) {
+            throw new BalanceProjectionException("BALANCE_PROJECTION_NOT_READY",
+                    "The balance projection is rebuilding and cannot accept voucher changes");
+        }
+        List<Long> eventIds = jdbc.queryForList("""
+                select id from balance_projection_event
+                where ledger_id = ? and period_id = ? and id > ? and id <= ?
+                order by id
+                """, Long.class, ledgerId, periodId, state.applied(), targetEventId);
+        long lastApplied = state.applied();
+        for (Long eventId : eventIds) {
+            List<BalanceLine> lines = jdbc.query("""
+                    select account_id, opening_debit_delta, opening_credit_delta,
+                        period_debit_delta, period_credit_delta
+                    from balance_projection_event_line where event_id = ? order by account_id
+                    """, (rs, row) -> new BalanceLine(rs.getObject("account_id", UUID.class),
+                    rs.getBigDecimal("opening_debit_delta"), rs.getBigDecimal("opening_credit_delta"),
+                    rs.getBigDecimal("period_debit_delta"), rs.getBigDecimal("period_credit_delta")), eventId);
+            for (BalanceLine line : lines) {
+                applyLine(ledgerId, periodId, line);
+            }
+            lastApplied = eventId;
+        }
+        deleteZeroBalances(ledgerId, periodId);
+        jdbc.update("""
+                update balance_projection_state set last_applied_event_id = ?, projected_at = now(),
+                    status = 'READY', attempts = 0, last_error_code = null, last_error_message = null,
+                    updated_at = now() where ledger_id = ? and period_id = ?
+                """, lastApplied, ledgerId, periodId);
+    }
+
+    private void applyLine(UUID ledgerId, UUID periodId, BalanceLine line) {
+        try {
+            int updated = jdbc.update("""
+                    update account_period_balance set
+                        opening_debit_base = opening_debit_base + ?,
+                        opening_credit_base = opening_credit_base + ?,
+                        period_debit_base = period_debit_base + ?,
+                        period_credit_base = period_credit_base + ?,
+                        version = version + 1, updated_at = now()
+                    where ledger_id = ? and period_id = ? and account_id = ?
+                    """, line.openingDebit(), line.openingCredit(), line.periodDebit(), line.periodCredit(),
+                    ledgerId, periodId, line.accountId());
+            if (updated == 0) {
+                if (negative(line)) {
+                    throw new BalanceProjectionException("BALANCE_PROJECTION_OUT_OF_SYNC",
+                            "A voucher change attempted to remove a balance that is not projected");
+                }
+                jdbc.update("""
+                        insert into account_period_balance (
+                            ledger_id, period_id, account_id, opening_debit_base, opening_credit_base,
+                            period_debit_base, period_credit_base, version, updated_at)
+                        values (?, ?, ?, ?, ?, ?, ?, 1, now())
+                        """, ledgerId, periodId, line.accountId(), line.openingDebit(), line.openingCredit(),
+                        line.periodDebit(), line.periodCredit());
+            }
+        } catch (DataIntegrityViolationException exception) {
+            throw new BalanceProjectionException("BALANCE_PROJECTION_OUT_OF_SYNC",
+                    "The voucher change would make the projected balance inconsistent");
+        }
+    }
+
+    private boolean negative(BalanceLine line) {
+        return line.openingDebit().signum() < 0 || line.openingCredit().signum() < 0
+                || line.periodDebit().signum() < 0 || line.periodCredit().signum() < 0;
+    }
+
+    private void deleteZeroBalances(UUID ledgerId, UUID periodId) {
+        jdbc.update("""
+                delete from account_period_balance
+                where ledger_id = ? and period_id = ?
+                  and opening_debit_base = 0 and opening_credit_base = 0
+                  and period_debit_base = 0 and period_credit_base = 0
+                """, ledgerId, periodId);
     }
 
     private Map<UUID, BalanceProjectionService.Entry> aggregate(
@@ -387,8 +474,8 @@ public class JdbcBalanceProjectionRepository implements BalanceProjectionReposit
         return left.add(right);
     }
 
-    private record ProjectionRow(String status, long enqueued, long applied,
-                                 OffsetDateTime enqueuedAt, OffsetDateTime projectedAt) {
+    record ProjectionRow(String status, long enqueued, long applied,
+                         OffsetDateTime enqueuedAt, OffsetDateTime projectedAt) {
     }
 
     private record ProjectionBatch(UUID ledgerId, UUID periodId, long applied, long enqueued) {

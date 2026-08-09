@@ -1,6 +1,6 @@
 package com.example.accounting.reporting.internal.port;
 
-import com.example.accounting.reporting.BalanceProjectionService;
+import com.example.accounting.shared.balance.BalanceProjectionService;
 import java.util.UUID;
 import java.util.List;
 import java.time.OffsetDateTime;
@@ -8,7 +8,7 @@ import com.example.accounting.reporting.ReportResponses;
 
 public interface BalanceProjectionRepository {
 
-    void appendVoucherEvent(BalanceProjectionService.VoucherEvent event);
+    void appendAndApplyVoucherEvent(BalanceProjectionService.VoucherEvent event);
 
     void appendOpeningBalanceEvent(BalanceProjectionService.OpeningBalanceEvent event);
 

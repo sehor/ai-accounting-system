@@ -132,22 +132,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/ledgers/{ledgerId}/vouchers/{voucherId}:restore-deleted": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["restoreDeleted"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/v1/ledgers/{ledgerId}/vouchers/{voucherId}:reject": {
         parameters: {
             query?: never;
@@ -2389,29 +2373,6 @@ export interface operations {
         };
     };
     submit: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                ledgerId: string;
-                voucherId: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "*/*": components["schemas"]["Voucher"];
-                };
-            };
-        };
-    };
-    restoreDeleted: {
         parameters: {
             query?: never;
             header?: never;

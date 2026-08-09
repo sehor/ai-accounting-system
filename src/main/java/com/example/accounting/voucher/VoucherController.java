@@ -109,12 +109,6 @@ public class VoucherController {
         voucherService.delete(user(request), ledgerId, voucherId);
     }
 
-    @PostMapping("/{voucherId}:restore-deleted")
-    public VoucherResponses.Voucher restoreDeleted(HttpServletRequest request, @PathVariable UUID ledgerId,
-                                                    @PathVariable UUID voucherId) {
-        return voucherService.restoreDeleted(user(request), ledgerId, voucherId);
-    }
-
     @GetMapping("/{voucherId}/revisions")
     public List<VoucherResponses.Revision> revisions(HttpServletRequest request, @PathVariable UUID ledgerId,
                                                      @PathVariable UUID voucherId) {

@@ -4,7 +4,8 @@
 
 - `accounting.balance.read-mode=legacy|auto|projection`，默认 `legacy`。
 - `accounting.balance.worker-enabled=false`，确认迁移完成后才启用。
-- `accounting.balance.max-lag=5s`，超过后报表自动使用 live fallback。
+- 仅当投影状态为 `READY` 且已处理到最后一个入队事件时读取投影，否则使用 live fallback；
+  已完全追平的投影不会因为长时间没有新事件而失效。
 
 ## 首次上线
 

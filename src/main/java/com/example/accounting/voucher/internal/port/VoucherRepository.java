@@ -77,9 +77,7 @@ public interface VoucherRepository {
 
     void recordApproval(UUID ledgerId, UUID voucherId, String action, String comment, UUID actorId);
 
-    void markDeleted(UUID ledgerId, UUID voucherId);
-
-    void restoreDeleted(UUID ledgerId, UUID voucherId, UUID actorId);
+    boolean deleteVoucher(UUID ledgerId, UUID voucherId);
 
     List<VoucherResponses.Revision> listRevisions(UUID ledgerId, UUID voucherId);
 

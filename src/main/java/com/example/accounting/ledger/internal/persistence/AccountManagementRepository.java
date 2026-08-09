@@ -227,6 +227,75 @@ public class AccountManagementRepository {
         return deleted == 1;
     }
 
+    public boolean hasVoucherLines(UUID ledgerId, UUID accountId) {
+        return Boolean.TRUE.equals(jdbc.queryForObject("""
+                select exists (
+                    select 1 from voucher_line
+                    where ledger_id = ? and account_id = ?)
+                """, Boolean.class, ledgerId, accountId));
+    }
+
+    public boolean hasOpeningBalances(UUID ledgerId, UUID accountId) {
+        return Boolean.TRUE.equals(jdbc.queryForObject("""
+                select exists (
+                    select 1 from opening_balance
+                    where ledger_id = ? and account_id = ?)
+                """, Boolean.class, ledgerId, accountId));
+    }
+
+    public Optional<String> findConfigurationReference(UUID ledgerId, UUID accountId) {
+        return Optional.ofNullable(jdbc.query("""
+                select reference from (
+                    select 'fixed_asset_category.asset_account_id' reference
+                    from fixed_asset_category where ledger_id = ? and asset_account_id = ?
+                    union all select 'fixed_asset_category.accumulated_depreciation_account_id'
+                    from fixed_asset_category where ledger_id = ? and accumulated_depreciation_account_id = ?
+                    union all select 'fixed_asset_category.depreciation_expense_account_id'
+                    from fixed_asset_category where ledger_id = ? and depreciation_expense_account_id = ?
+                    union all select 'fixed_asset_category.impairment_account_id'
+                    from fixed_asset_category where ledger_id = ? and impairment_account_id = ?
+                    union all select 'fixed_asset_category.clearing_account_id'
+                    from fixed_asset_category where ledger_id = ? and clearing_account_id = ?
+                    union all select 'fixed_asset_category.disposal_gain_account_id'
+                    from fixed_asset_category where ledger_id = ? and disposal_gain_account_id = ?
+                    union all select 'fixed_asset_category.disposal_loss_account_id'
+                    from fixed_asset_category where ledger_id = ? and disposal_loss_account_id = ?
+                    union all select 'fixed_asset.asset_account_id'
+                    from fixed_asset where ledger_id = ? and asset_account_id = ?
+                    union all select 'fixed_asset.accumulated_depreciation_account_id'
+                    from fixed_asset where ledger_id = ? and accumulated_depreciation_account_id = ?
+                    union all select 'fixed_asset.depreciation_expense_account_id'
+                    from fixed_asset where ledger_id = ? and depreciation_expense_account_id = ?
+                    union all select 'fixed_asset.impairment_account_id'
+                    from fixed_asset where ledger_id = ? and impairment_account_id = ?
+                    union all select 'fixed_asset.clearing_account_id'
+                    from fixed_asset where ledger_id = ? and clearing_account_id = ?
+                    union all select 'fixed_asset.disposal_gain_account_id'
+                    from fixed_asset where ledger_id = ? and disposal_gain_account_id = ?
+                    union all select 'fixed_asset.disposal_loss_account_id'
+                    from fixed_asset where ledger_id = ? and disposal_loss_account_id = ?
+                    union all select 'fixed_asset_depreciation_line.expense_account_id'
+                    from fixed_asset_depreciation_line where ledger_id = ? and expense_account_id = ?
+                    union all select 'fixed_asset_depreciation_line.accumulated_account_id'
+                    from fixed_asset_depreciation_line where ledger_id = ? and accumulated_account_id = ?
+                    union all select 'fixed_asset_disposal.receipt_account_id'
+                    from fixed_asset_disposal where ledger_id = ? and receipt_account_id = ?
+                    union all select 'fixed_asset_disposal.payment_account_id'
+                    from fixed_asset_disposal where ledger_id = ? and payment_account_id = ?
+                    union all select 'fixed_asset_disposal.output_tax_account_id'
+                    from fixed_asset_disposal where ledger_id = ? and output_tax_account_id = ?
+                    union all select 'fixed_asset_disposal.input_tax_account_id'
+                    from fixed_asset_disposal where ledger_id = ? and input_tax_account_id = ?
+                ) references_found limit 1
+                """, rs -> rs.next() ? rs.getString(1) : null,
+                ledgerId, accountId, ledgerId, accountId, ledgerId, accountId, ledgerId, accountId,
+                ledgerId, accountId, ledgerId, accountId, ledgerId, accountId,
+                ledgerId, accountId, ledgerId, accountId, ledgerId, accountId, ledgerId, accountId,
+                ledgerId, accountId, ledgerId, accountId, ledgerId, accountId,
+                ledgerId, accountId, ledgerId, accountId, ledgerId, accountId, ledgerId, accountId,
+                ledgerId, accountId, ledgerId, accountId, ledgerId, accountId));
+    }
+
     public boolean hasActiveDescendants(UUID ledgerId, UUID accountId) {
         return Boolean.TRUE.equals(jdbc.queryForObject("""
                 with recursive descendants as (

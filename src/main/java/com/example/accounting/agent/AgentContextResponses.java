@@ -35,7 +35,7 @@ public final class AgentContextResponses {
                     "create_voucher_draft_from_document", "create_voucher_draft_from_document_standard",
                     "validate_voucher", "validate_voucher_standard", "submit_voucher", "approve_voucher",
                     "reject_voucher", "post_voucher", "post_voucher_standard", "update_voucher",
-                    "delete_voucher", "restore_deleted_voucher", "list_voucher_revisions",
+                    "delete_voucher", "list_voucher_revisions",
                     "restore_voucher_revision",
                     "import_kingdee_vouchers", "export_kingdee_vouchers")),
             new ToolGroup("reports", List.of("finance_query", "finance_query_advanced", "export_report")),
