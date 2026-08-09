@@ -229,7 +229,8 @@ public class LedgerBackupService {
                         ledgerId, actor.id(), idMap);
             }
             return new LedgerResponses.Ledger(
-                    ledgerId, name, requiredText(source, "accounting_standard_code"),
+                    ledgerId, name, source.path("description").asText(""),
+                    requiredText(source, "accounting_standard_code"),
                     requiredText(source, "accounting_standard_version"),
                     requiredText(source, "base_currency"),
                     LocalDate.parse(requiredText(source, "start_date")),
@@ -255,7 +256,8 @@ public class LedgerBackupService {
     }
 
     private void createLedger(UUID ledgerId, UUID actorId, String name, ObjectNode source) {
-        repository.createLedger(ledgerId, actorId, name, requiredText(source, "accounting_standard_code"),
+        repository.createLedger(ledgerId, actorId, name, source.path("description").asText(""),
+                requiredText(source, "accounting_standard_code"),
                 requiredText(source, "accounting_standard_version"), requiredText(source, "base_currency"),
                 LocalDate.parse(requiredText(source, "start_date")), source.path("approval_enabled").asBoolean(),
                 "",

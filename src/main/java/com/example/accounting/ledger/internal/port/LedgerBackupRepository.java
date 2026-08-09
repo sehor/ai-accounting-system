@@ -12,7 +12,7 @@ public interface LedgerBackupRepository {
 
     String rowsJson(String table, UUID ledgerId);
 
-    void createLedger(UUID ledgerId, UUID actorId, String name, String standardCode,
+    void createLedger(UUID ledgerId, UUID actorId, String name, String description, String standardCode,
                       String standardVersion, String baseCurrency, LocalDate startDate,
                       boolean approvalEnabled, String separator, int level2Width,
                       int level3Width, int level4Width);

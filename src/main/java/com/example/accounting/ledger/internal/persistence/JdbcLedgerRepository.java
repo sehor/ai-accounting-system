@@ -22,13 +22,13 @@ public class JdbcLedgerRepository implements LedgerRepository {
     }
 
     @Override
-    public void createLedger(UUID ledgerId, String name, String standardCode, String standardVersion,
+    public void createLedger(UUID ledgerId, String name, String description, String standardCode, String standardVersion,
                              String baseCurrency, LocalDate startDate, boolean approvalEnabled, UUID actorId) {
         jdbc.update("""
-                insert into ledger (id, name, accounting_standard_code, accounting_standard_version,
+                insert into ledger (id, name, description, accounting_standard_code, accounting_standard_version,
                     base_currency, start_date, approval_enabled, created_by, updated_by)
-                values (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """, ledgerId, name, standardCode, standardVersion, baseCurrency, startDate,
+                values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, ledgerId, name, description, standardCode, standardVersion, baseCurrency, startDate,
                 approvalEnabled, actorId, actorId);
     }
 
@@ -77,13 +77,26 @@ public class JdbcLedgerRepository implements LedgerRepository {
     @Override
     public List<LedgerResponses.Ledger> list(UUID actorId) {
         return jdbc.query("""
-                select l.id, l.name, l.accounting_standard_code, l.accounting_standard_version,
+                select l.id, l.name, l.description, l.accounting_standard_code, l.accounting_standard_version,
                     l.base_currency, l.start_date, l.approval_enabled, l.status
                 from ledger l
                 join ledger_membership m on m.ledger_id = l.id
+                join app_user u on u.id = m.user_id
                 where m.user_id = ? and m.status = 'ACTIVE' and l.status = 'ACTIVE' and l.deleted_at is null
+                    and u.status = 'ACTIVE' and u.deleted_at is null
                 order by l.name, l.id
                 """, (rs, rowNum) -> mapLedger(rs), actorId);
+    }
+
+    @Override
+    public List<LedgerResponses.Ledger> listAllActive() {
+        return jdbc.query("""
+                select id, name, description, accounting_standard_code, accounting_standard_version,
+                    base_currency, start_date, approval_enabled, status
+                from ledger
+                where status = 'ACTIVE' and deleted_at is null
+                order by name, id
+                """, (rs, rowNum) -> mapLedger(rs));
     }
 
     @Override
@@ -95,16 +108,17 @@ public class JdbcLedgerRepository implements LedgerRepository {
     @Override
     public Optional<LedgerResponses.Ledger> findLedger(UUID ledgerId) {
         return Optional.ofNullable(jdbc.query("""
-                select id, name, accounting_standard_code, accounting_standard_version,
+                select id, name, description, accounting_standard_code, accounting_standard_version,
                     base_currency, start_date, approval_enabled, status
                 from ledger where id = ? and deleted_at is null
                 """, rs -> rs.next() ? mapLedger(rs) : null, ledgerId));
     }
 
     @Override
-    public void updateLedgerName(UUID ledgerId, String name, UUID actorId) {
-        jdbc.update("update ledger set name = ?, updated_at = now(), updated_by = ?, version = version + 1 "
-                + "where id = ? and deleted_at is null", name, actorId, ledgerId);
+    public void updateLedger(UUID ledgerId, String name, String description, UUID actorId) {
+        jdbc.update("update ledger set name = ?, description = coalesce(?, description), updated_at = now(), "
+                + "updated_by = ?, version = version + 1 where id = ? and deleted_at is null",
+                name, description, actorId, ledgerId);
     }
 
     @Override
@@ -135,16 +149,20 @@ public class JdbcLedgerRepository implements LedgerRepository {
     @Override
     public List<LedgerResponses.Period> listPeriods(UUID ledgerId) {
         return jdbc.query("""
-                select id, ledger_id, period_code, start_date, end_date, status
-                from accounting_period where ledger_id = ? order by period_code
+                select p.id, p.ledger_id, p.period_code, p.start_date, p.end_date, p.status,
+                    exists (select 1 from voucher v where v.ledger_id = p.ledger_id
+                        and v.period_id = p.id and v.deleted_at is null) has_vouchers
+                from accounting_period p where p.ledger_id = ? order by p.period_code
                 """, (rs, rowNum) -> mapPeriod(rs), ledgerId);
     }
 
     @Override
     public Optional<LedgerResponses.Period> findPeriod(UUID ledgerId, UUID periodId) {
         return Optional.ofNullable(jdbc.query("""
-                select id, ledger_id, period_code, start_date, end_date, status
-                from accounting_period where ledger_id = ? and id = ?
+                select p.id, p.ledger_id, p.period_code, p.start_date, p.end_date, p.status,
+                    exists (select 1 from voucher v where v.ledger_id = p.ledger_id
+                        and v.period_id = p.id and v.deleted_at is null) has_vouchers
+                from accounting_period p where p.ledger_id = ? and p.id = ?
                 """, rs -> rs.next() ? mapPeriod(rs) : null, ledgerId, periodId));
     }
 
@@ -359,7 +377,8 @@ public class JdbcLedgerRepository implements LedgerRepository {
 
     private LedgerResponses.Ledger mapLedger(java.sql.ResultSet rs) throws java.sql.SQLException {
         return new LedgerResponses.Ledger(rs.getObject("id", UUID.class), rs.getString("name"),
-                rs.getString("accounting_standard_code"), rs.getString("accounting_standard_version"),
+                rs.getString("description"), rs.getString("accounting_standard_code"),
+                rs.getString("accounting_standard_version"),
                 rs.getString("base_currency"), rs.getObject("start_date", LocalDate.class),
                 rs.getBoolean("approval_enabled"), rs.getString("status"));
     }
@@ -380,7 +399,7 @@ public class JdbcLedgerRepository implements LedgerRepository {
         return new LedgerResponses.Period(rs.getObject("id", UUID.class),
                 rs.getObject("ledger_id", UUID.class), rs.getString("period_code"),
                 rs.getObject("start_date", LocalDate.class), rs.getObject("end_date", LocalDate.class),
-                rs.getString("status"));
+                rs.getString("status"), rs.getBoolean("has_vouchers"));
     }
 
     private LedgerResponses.DimensionType mapDimensionType(java.sql.ResultSet rs) throws java.sql.SQLException {

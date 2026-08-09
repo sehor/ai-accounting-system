@@ -24,7 +24,6 @@ import org.springframework.context.annotation.Primary;
 
 @SpringBootTest
 @Import(Stage5DocumentTest.ExtractorTestConfiguration.class)
-@org.junit.jupiter.api.Disabled("Creates ledgers; disabled until tests use an isolated database")
 class Stage5DocumentTest {
 
     @Autowired

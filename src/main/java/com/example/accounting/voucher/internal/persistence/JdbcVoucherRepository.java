@@ -1,6 +1,7 @@
 package com.example.accounting.voucher.internal.persistence;
 
 import com.example.accounting.voucher.VoucherResponses;
+import com.example.accounting.voucher.VoucherRequests;
 import com.example.accounting.voucher.internal.port.VoucherRepository;
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -38,6 +39,18 @@ public class JdbcVoucherRepository implements VoucherRepository {
                 where ledger_id = ? and actor_id = ? and idempotency_key = ?
                 """, rs -> rs.next() ? new Idempotency(rs.getString("request_hash"),
                 rs.getObject("voucher_id", UUID.class)) : null, ledgerId, actorId, key));
+    }
+
+    @Override
+    public String nextVoucherNumber(UUID ledgerId, UUID periodId, String voucherType) {
+        jdbcTemplate.queryForObject("select pg_advisory_xact_lock(hashtext(?))", Object.class,
+                ledgerId + ":" + periodId + ":" + voucherType);
+        Long next = jdbcTemplate.queryForObject("""
+                select coalesce(max(case when voucher_number ~ '^[0-9]+$' then voucher_number::bigint end), 0) + 1
+                from voucher
+                where ledger_id = ? and period_id = ? and voucher_type = ? and deleted_at is null
+                """, Long.class, ledgerId, periodId, voucherType);
+        return Long.toString(next);
     }
 
     @Override
@@ -128,16 +141,35 @@ public class JdbcVoucherRepository implements VoucherRepository {
     }
 
     @Override
-    public boolean updateDraft(UUID ledgerId, UUID voucherId, UUID periodId, LocalDate voucherDate,
-                               String voucherType, String voucherNumber, String summary, boolean approvalRequired,
-                               UUID actorId, long expectedVersion) {
+    public boolean updateVoucher(UUID ledgerId, UUID voucherId, UUID periodId, LocalDate voucherDate,
+                                 String voucherType, String voucherNumber, String summary, boolean approvalRequired,
+                                 UUID actorId, long expectedVersion) {
         return jdbcTemplate.update("""
                 update voucher set period_id = ?, voucher_date = ?, voucher_type = ?, voucher_number = ?,
                     summary = ?, approval_required = ?, current_revision = current_revision + 1,
                     version = version + 1, updated_at = now(), updated_by = ?
-                where ledger_id = ? and id = ? and status = 'DRAFT' and version = ?
+                where ledger_id = ? and id = ?
+                    and status in ('DRAFT', 'VALIDATED', 'SUBMITTED', 'APPROVED', 'POSTED')
+                    and version = ?
                 """, periodId, voucherDate, voucherType, voucherNumber, summary, approvalRequired, actorId,
                 ledgerId, voucherId, expectedVersion) == 1;
+    }
+
+    @Override
+    public boolean replaceGeneratedVoucher(UUID ledgerId, UUID voucherId, UUID periodId, LocalDate voucherDate,
+                                           String voucherType, String voucherNumber, String summary,
+                                           boolean approvalRequired, UUID actorId, long expectedVersion,
+                                           String sourceType, UUID expectedSourceId, UUID nextSourceId) {
+        return jdbcTemplate.update("""
+                update voucher set period_id = ?, voucher_date = ?, voucher_type = ?, voucher_number = ?,
+                    summary = ?, approval_required = ?, source_type = ?, source_id = ?,
+                    current_revision = current_revision + 1, version = version + 1,
+                    updated_at = now(), updated_by = ?
+                where ledger_id = ? and id = ? and status = 'POSTED'
+                    and source_type = ? and source_id = ? and version = ?
+                """, periodId, voucherDate, voucherType, voucherNumber, summary, approvalRequired,
+                sourceType, nextSourceId, actorId, ledgerId, voucherId, sourceType, expectedSourceId,
+                expectedVersion) == 1;
     }
 
     @Override
@@ -223,17 +255,67 @@ public class JdbcVoucherRepository implements VoucherRepository {
 
     @Override
     public List<VoucherResponses.Voucher> list(UUID ledgerId, int limit, int offset) {
+        return list(ledgerId, new VoucherRequests.Search(null, null, null, null), limit, offset);
+    }
+
+    @Override
+    public List<VoucherResponses.Voucher> list(UUID ledgerId, String periodCode, int limit, int offset) {
+        return list(ledgerId, new VoucherRequests.Search(periodCode, null, null, null), limit, offset);
+    }
+
+    @Override
+    public List<VoucherResponses.Voucher> list(UUID ledgerId, VoucherRequests.Search search, int limit, int offset) {
         return jdbcTemplate.query("""
-                select id, ledger_id, period_id, voucher_date, voucher_type, voucher_number, summary, status,
-                    approval_required, version, source_type, source_id
-                from voucher where ledger_id = ? and deleted_at is null
-                order by voucher_date, voucher_number, id limit ? offset ?
+                select v.id, v.ledger_id, v.period_id, v.voucher_date, v.voucher_type, v.voucher_number,
+                    v.summary, v.status, v.approval_required, v.version, v.source_type, v.source_id
+                from voucher v
+                join accounting_period p on p.ledger_id = v.ledger_id and p.id = v.period_id
+                where v.ledger_id = ? and v.deleted_at is null
+                    and (?::varchar is null or p.period_code = ?)
+                    and (?::date is null or v.voucher_date >= ?)
+                    and (?::date is null or v.voucher_date <= ?)
+                    and (?::varchar is null or v.voucher_type ilike '%' || ? || '%'
+                        or v.voucher_number ilike '%' || ? || '%'
+                        or coalesce(v.summary, '') ilike '%' || ? || '%'
+                        or exists (select 1 from voucher_line line
+                                   where line.ledger_id = v.ledger_id and line.voucher_id = v.id
+                                     and coalesce(line.summary, '') ilike '%' || ? || '%'))
+                order by v.voucher_date, v.voucher_number, v.id limit ? offset ?
                 """, (rs, rowNum) -> voucher(rs.getObject("id", UUID.class),
                 rs.getObject("ledger_id", UUID.class), rs.getObject("period_id", UUID.class),
                 rs.getObject("voucher_date", LocalDate.class), rs.getString("voucher_type"),
                 rs.getString("voucher_number"), rs.getString("summary"), rs.getString("status"),
                 rs.getBoolean("approval_required"), rs.getLong("version"), List.of(),
-                rs.getString("source_type"), rs.getObject("source_id", UUID.class)), ledgerId, limit, offset);
+                rs.getString("source_type"), rs.getObject("source_id", UUID.class)),
+                ledgerId, search.periodCode(), search.periodCode(), search.startDate(), search.startDate(),
+                search.endDate(), search.endDate(), search.keyword(), search.keyword(), search.keyword(),
+                search.keyword(), search.keyword(), limit, offset);
+    }
+
+    @Override
+    public long count(UUID ledgerId, String periodCode) {
+        return count(ledgerId, new VoucherRequests.Search(periodCode, null, null, null));
+    }
+
+    @Override
+    public long count(UUID ledgerId, VoucherRequests.Search search) {
+        Long result = jdbcTemplate.queryForObject("""
+                select count(*) from voucher v
+                join accounting_period p on p.ledger_id = v.ledger_id and p.id = v.period_id
+                where v.ledger_id = ? and v.deleted_at is null
+                    and (?::varchar is null or p.period_code = ?)
+                    and (?::date is null or v.voucher_date >= ?)
+                    and (?::date is null or v.voucher_date <= ?)
+                    and (?::varchar is null or v.voucher_type ilike '%' || ? || '%'
+                        or v.voucher_number ilike '%' || ? || '%'
+                        or coalesce(v.summary, '') ilike '%' || ? || '%'
+                        or exists (select 1 from voucher_line line
+                                   where line.ledger_id = v.ledger_id and line.voucher_id = v.id
+                                     and coalesce(line.summary, '') ilike '%' || ? || '%'))
+                """, Long.class, ledgerId, search.periodCode(), search.periodCode(), search.startDate(),
+                search.startDate(), search.endDate(), search.endDate(), search.keyword(), search.keyword(),
+                search.keyword(), search.keyword(), search.keyword());
+        return result == null ? 0 : result;
     }
 
     @Override
@@ -348,26 +430,15 @@ public class JdbcVoucherRepository implements VoucherRepository {
     }
 
     @Override
-    public boolean reversalExists(UUID ledgerId, UUID voucherId) {
-        return Boolean.TRUE.equals(jdbcTemplate.queryForObject("""
-                select exists (
-                    select 1 from voucher
-                    where ledger_id = ? and reversal_of_id = ? and deleted_at is null)
-                """, Boolean.class, ledgerId, voucherId));
-    }
-
-    @Override
-    public void markDeleted(UUID ledgerId, UUID voucherId) {
-        jdbcTemplate.update("update voucher set deleted_at = now() where ledger_id = ? and id = ?",
+    public boolean deleteVoucher(UUID ledgerId, UUID voucherId) {
+        jdbcTemplate.update("delete from voucher_idempotency where ledger_id = ? and voucher_id = ?",
                 ledgerId, voucherId);
-    }
-
-    @Override
-    public void restoreDeleted(UUID ledgerId, UUID voucherId, UUID actorId) {
-        jdbcTemplate.update("update voucher set status = 'DRAFT', deleted_at = null, "
-                        + "current_revision = current_revision + 1, version = version + 1, updated_at = now(), "
-                        + "updated_by = ? where ledger_id = ? and id = ?",
-                actorId, ledgerId, voucherId);
+        jdbcTemplate.update("delete from voucher_approval where ledger_id = ? and voucher_id = ?",
+                ledgerId, voucherId);
+        jdbcTemplate.update("delete from voucher_line where ledger_id = ? and voucher_id = ?",
+                ledgerId, voucherId);
+        return jdbcTemplate.update("delete from voucher where ledger_id = ? and id = ?",
+                ledgerId, voucherId) == 1;
     }
 
     @Override
@@ -397,7 +468,7 @@ public class JdbcVoucherRepository implements VoucherRepository {
                               UUID actorId) {
         jdbcTemplate.update("""
                 update voucher set period_id = ?, voucher_date = ?, voucher_type = ?, voucher_number = ?,
-                    summary = ?, approval_required = ?, status = 'DRAFT', current_revision = current_revision + 1,
+                    summary = ?, approval_required = ?, current_revision = current_revision + 1,
                     version = version + 1, updated_at = now(), updated_by = ? where ledger_id = ? and id = ?
                 """, periodId, voucherDate, voucherType, voucherNumber, summary, approvalRequired, actorId,
                 ledgerId, voucherId);
@@ -420,21 +491,6 @@ public class JdbcVoucherRepository implements VoucherRepository {
                 values (?, ?, 'VOUCHER', ?, ?, ?, ?, ?, ?::jsonb, ?::jsonb)
                 """, UUID.randomUUID(), ledgerId, voucherId, revision, action, actorId, reason,
                 beforeData, afterData);
-    }
-
-    @Override
-    public Optional<UUID> reversalOf(UUID ledgerId, UUID voucherId) {
-        return Optional.ofNullable(jdbcTemplate.query("""
-                select reversal_of_id from voucher where ledger_id = ? and id = ?
-                """, rs -> rs.next() ? rs.getObject(1, UUID.class) : null, ledgerId, voucherId));
-    }
-
-    @Override
-    public void markReversedBy(UUID ledgerId, UUID voucherId, UUID reversalId, UUID actorId) {
-        jdbcTemplate.update("""
-                update voucher set reversed_by_id = ?, updated_at = now(), updated_by = ?
-                where ledger_id = ? and id = ?
-                """, reversalId, actorId, ledgerId, voucherId);
     }
 
     private VoucherResponses.Voucher voucher(UUID id, UUID ledgerId, UUID periodId, LocalDate voucherDate,

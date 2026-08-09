@@ -13,5 +13,7 @@ public interface IdentityRepository {
 
     Optional<UserResponse> findById(UUID id);
 
+    Optional<UserResponse> findByIdIncludingDeleted(UUID id);
+
     Optional<UserResponse> findByEmail(String email);
 }

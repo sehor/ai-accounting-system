@@ -34,6 +34,7 @@ import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.security.MessageDigest;
+import java.time.LocalDate;
 import java.util.Base64;
 import java.util.HexFormat;
 import java.util.LinkedHashMap;
@@ -109,10 +110,10 @@ public class FinanceMcpTools {
         return audited(actorId, "get_operator_context", null, "", AgentContextResponses::toolCatalog);
     }
 
-    @McpTool(name = "create_accounting_experience", description = "Create accounting experience")
+    @McpTool(name = "create_accounting_experience", description = "Create ledger accounting experience")
     @PreAuthorize("isAuthenticated()")
     public ExperienceResponses.Experience createAccountingExperience(
-            @McpToolParam(description = "Experience payload with GENERAL or LEDGER scope")
+            @McpToolParam(description = "Ledger accounting experience payload")
             ExperienceRequests.Create request) {
         UUID actorId = actor();
         UUID ledgerId = request == null ? null : request.ledgerId();
@@ -120,11 +121,10 @@ public class FinanceMcpTools {
                 () -> experienceService.create(actorId, request));
     }
 
-    @McpTool(name = "search_accounting_experiences", description = "Search accounting experiences")
+    @McpTool(name = "search_accounting_experiences", description = "Search ledger accounting experiences")
     @PreAuthorize("isAuthenticated()")
     public ExperienceResponses.Page searchAccountingExperiences(
-            @McpToolParam(description = "Search payload with optional ledgerId, query, tags and pagination",
-                    required = false)
+            @McpToolParam(description = "Search payload with ledgerId, query, tags and pagination")
             ExperienceRequests.Search request) {
         UUID actorId = actor();
         UUID ledgerId = request == null ? null : request.ledgerId();
@@ -213,11 +213,11 @@ public class FinanceMcpTools {
                 ledgerService.listCashFlowItems(actorId, ledgerId)));
     }
 
-    @McpTool(name = "update_ledger", description = "Update a ledger name")
+    @McpTool(name = "update_ledger", description = "Update a ledger name and description")
     @PreAuthorize("isAuthenticated()")
     public LedgerResponses.Ledger updateLedger(
             @McpToolParam UUID ledgerId,
-            @McpToolParam(description = "Ledger name update") LedgerRequests.Rename request) {
+            @McpToolParam(description = "Ledger name and optional business description update") LedgerRequests.Rename request) {
         UUID actorId = actor();
         return audited(actorId, "update_ledger", ledgerId, String.valueOf(request),
                 () -> ledgerService.renameLedger(actorId, ledgerId, request));
@@ -707,13 +707,23 @@ public class FinanceMcpTools {
     @PreAuthorize("isAuthenticated()")
     public List<VoucherResponses.Voucher> listVouchers(
             @McpToolParam UUID ledgerId,
+            @McpToolParam(description = "Exact accounting period code in YYYY-MM format", required = false)
+            String periodCode,
+            @McpToolParam(description = "Inclusive voucher date lower bound in YYYY-MM-DD format", required = false)
+            LocalDate startDate,
+            @McpToolParam(description = "Inclusive voucher date upper bound in YYYY-MM-DD format", required = false)
+            LocalDate endDate,
+            @McpToolParam(description = "Keyword matched against voucher type, number, and summaries", required = false)
+            String keyword,
             @McpToolParam(description = "Maximum number of vouchers", required = false) Integer limit,
             @McpToolParam(description = "Number of vouchers to skip", required = false) Integer offset) {
         UUID actorId = actor();
         int actualLimit = limit == null ? 100 : limit;
         int actualOffset = offset == null ? 0 : offset;
-        return audited(actorId, "list_vouchers", ledgerId, actualLimit + ":" + actualOffset,
-                () -> voucherService.list(actorId, ledgerId, actualLimit, actualOffset));
+        VoucherRequests.Search search = new VoucherRequests.Search(periodCode, startDate, endDate, keyword);
+        return audited(actorId, "list_vouchers", ledgerId,
+                periodCode + ":" + startDate + ":" + endDate + ":" + keyword + ":" + actualLimit + ":" + actualOffset,
+                () -> voucherService.list(actorId, ledgerId, search, actualLimit, actualOffset));
     }
 
     @McpTool(name = "create_voucher", description = "Save, automatically approve, and post a voucher")
@@ -791,27 +801,6 @@ public class FinanceMcpTools {
                 () -> voucherService.post(actorId, ledgerId, voucherId));
     }
 
-    @McpTool(name = "unpost_voucher", description = "Unpost a posted voucher")
-    @PreAuthorize("isAuthenticated()")
-    public VoucherResponses.Voucher unpostVoucher(
-            @McpToolParam UUID ledgerId,
-            @McpToolParam UUID voucherId,
-            @McpToolParam(description = "Unpost reason") String reason) {
-        UUID actorId = actor();
-        return audited(actorId, "unpost_voucher", ledgerId, voucherId + ":" + reason,
-                () -> voucherService.unpost(actorId, ledgerId, voucherId, reason));
-    }
-
-    @McpTool(name = "reverse_voucher", description = "Create a reversal voucher for a posted voucher")
-    @PreAuthorize("isAuthenticated()")
-    public VoucherResponses.Voucher reverseVoucher(
-            @McpToolParam UUID ledgerId,
-            @McpToolParam(description = "Posted voucher identifier") UUID voucherId) {
-        UUID actorId = actor();
-        return audited(actorId, "reverse_voucher", ledgerId, voucherId.toString(),
-                () -> voucherService.reverse(actorId, ledgerId, voucherId));
-    }
-
     @McpTool(name = "delete_voucher", description = "Delete a voucher")
     @PreAuthorize("isAuthenticated()")
     public boolean deleteVoucher(
@@ -822,16 +811,6 @@ public class FinanceMcpTools {
             voucherService.delete(actorId, ledgerId, voucherId);
             return true;
         });
-    }
-
-    @McpTool(name = "restore_deleted_voucher", description = "Restore a deleted voucher")
-    @PreAuthorize("isAuthenticated()")
-    public VoucherResponses.Voucher restoreDeletedVoucher(
-            @McpToolParam UUID ledgerId,
-            @McpToolParam UUID voucherId) {
-        UUID actorId = actor();
-        return audited(actorId, "restore_deleted_voucher", ledgerId, voucherId.toString(),
-                () -> voucherService.restoreDeleted(actorId, ledgerId, voucherId));
     }
 
     @McpTool(name = "list_voucher_revisions", description = "List revisions for a voucher")

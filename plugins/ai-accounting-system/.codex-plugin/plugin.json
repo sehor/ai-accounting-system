@@ -1,6 +1,6 @@
 {
   "name": "ai-accounting-system",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "Guides AI agents to record accounting materials, vouchers, balances, assets, and accounting experience through the local ai-accounting-system MCP service.",
   "author": {
     "name": "Local developer"

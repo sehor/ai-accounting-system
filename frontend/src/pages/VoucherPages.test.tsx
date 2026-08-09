@@ -3,12 +3,12 @@ import { App } from 'antd'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
-import { apiFetch } from '../api/client'
+import { apiFetch, apiFetchWithHeaders } from '../api/client'
 import { VoucherEditorPage, VoucherListPage } from './VoucherPages'
 
 vi.mock('../api/client', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../api/client')>()
-  return { ...actual, apiFetch: vi.fn() }
+  return { ...actual, apiFetch: vi.fn(), apiFetchWithHeaders: vi.fn() }
 })
 
 vi.mock('../auth/AuthProvider', () => ({
@@ -34,8 +34,14 @@ beforeAll(() => {
 
 beforeEach(() => {
   vi.mocked(apiFetch).mockImplementation((path) => Promise.resolve(
-    path.includes('kingdee:export') ? new Blob(['xlsx']) : [],
+    path.includes('kingdee:export') ? new Blob(['xlsx'])
+      : path.endsWith('/periods') ? [{
+          id: 'period-1', ledgerId: 'ledger-1', periodCode: '2026-06', startDate: '2026-06-01',
+          endDate: '2026-06-30', status: 'OPEN', hasVouchers: true,
+        }]
+        : [],
   ))
+  vi.mocked(apiFetchWithHeaders).mockResolvedValue({ data: [], headers: new Headers({ 'X-Total-Count': '0' }) })
 })
 
 afterEach(() => {
@@ -44,12 +50,70 @@ afterEach(() => {
 })
 
 describe('VoucherListPage', () => {
+  it('sends keyword and date-range filters without a conflicting period filter', async () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <App>
+          <MemoryRouter initialEntries={['/ledgers/ledger-1/vouchers?startDate=2026-06-01&endDate=2026-07-31&keyword=工资']}>
+            <Routes><Route path="/ledgers/:ledgerId/vouchers" element={<VoucherListPage />} /></Routes>
+          </MemoryRouter>
+        </App>
+      </QueryClientProvider>,
+    )
+
+    await waitFor(() => expect(apiFetchWithHeaders).toHaveBeenCalled())
+    const path = vi.mocked(apiFetchWithHeaders).mock.calls
+      .map(([requestPath]) => requestPath).find((requestPath) => requestPath.includes('/vouchers?'))!
+    const params = new URL(path, 'http://localhost').searchParams
+    expect(params.get('startDate')).toBe('2026-06-01')
+    expect(params.get('endDate')).toBe('2026-07-31')
+    expect(params.get('keyword')).toBe('工资')
+    expect(params.get('periodCode')).toBeNull()
+  })
+
+  it('shows an empty state instead of vouchers from another period', async () => {
+    vi.mocked(apiFetch).mockImplementation((path) => Promise.resolve(
+      path.endsWith('/periods') ? [
+        { id: 'period-6', ledgerId: 'ledger-1', periodCode: '2026-06', startDate: '2026-06-01', endDate: '2026-06-30', status: 'OPEN', hasVouchers: true },
+        { id: 'period-7', ledgerId: 'ledger-1', periodCode: '2026-07', startDate: '2026-07-01', endDate: '2026-07-31', status: 'OPEN', hasVouchers: false },
+        { id: 'period-8', ledgerId: 'ledger-1', periodCode: '2026-08', startDate: '2026-08-01', endDate: '2026-08-31', status: 'OPEN', hasVouchers: false },
+      ] : [],
+    ))
+    vi.mocked(apiFetchWithHeaders).mockResolvedValue({
+      data: [{
+        id: 'voucher-6', ledgerId: 'ledger-1', periodId: 'period-6', voucherDate: '2026-06-02',
+        voucherType: '记', voucherNumber: '1', summary: '六月凭证', status: 'POSTED',
+        approvalRequired: false, version: 0, lines: [],
+      }],
+      headers: new Headers({ 'X-Total-Count': '1' }),
+    })
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <App>
+          <MemoryRouter initialEntries={['/ledgers/ledger-1/vouchers?periodCode=2026-07']}>
+            <Routes><Route path="/ledgers/:ledgerId/vouchers" element={<VoucherListPage />} /></Routes>
+          </MemoryRouter>
+        </App>
+      </QueryClientProvider>,
+    )
+
+    expect(await screen.findByText('2026年第7期没有凭证数据')).toBeInTheDocument()
+    expect(screen.queryByText('2026-06-02')).not.toBeInTheDocument()
+    expect(apiFetchWithHeaders).toHaveBeenCalledWith(
+      expect.stringContaining('periodCode=2026-07'), expect.anything(),
+    )
+  })
+
   it('shows a clear processing entry for draft vouchers', async () => {
-    vi.mocked(apiFetch).mockResolvedValueOnce([{
+    vi.mocked(apiFetchWithHeaders).mockResolvedValueOnce({ data: [{
       id: 'voucher-1', ledgerId: 'ledger-1', periodId: 'period-1', voucherDate: '2026-06-11',
       voucherType: '记', voucherNumber: '1', summary: '缴纳社保', status: 'DRAFT',
       approvalRequired: false, version: 0, lines: [],
-    }])
+    }], headers: new Headers({ 'X-Total-Count': '1' }) })
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
 
     render(
@@ -79,10 +143,14 @@ describe('VoucherListPage', () => {
       }],
     }
     vi.mocked(apiFetch).mockImplementation((path) => {
-      if (path.includes('/vouchers?')) return Promise.resolve([voucher])
       if (path.endsWith(':post')) return Promise.resolve({ ...voucher, status: 'POSTED' })
+      if (path.endsWith('/periods')) return Promise.resolve([{
+        id: 'period-1', ledgerId: 'ledger-1', periodCode: '2026-06', startDate: '2026-06-01',
+        endDate: '2026-06-30', status: 'OPEN', hasVouchers: true,
+      }])
       return Promise.resolve([])
     })
+    vi.mocked(apiFetchWithHeaders).mockResolvedValue({ data: [voucher], headers: new Headers({ 'X-Total-Count': '1' }) })
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
 
     render(
@@ -113,10 +181,14 @@ describe('VoucherListPage', () => {
       approvalRequired: true, version: 0, lines: [],
     }
     vi.mocked(apiFetch).mockImplementation((path) => {
-      if (path.includes('/vouchers?')) return Promise.resolve([voucher])
       if (path.endsWith(':approve')) return Promise.resolve({ ...voucher, status: 'APPROVED' })
+      if (path.endsWith('/periods')) return Promise.resolve([{
+        id: 'period-1', ledgerId: 'ledger-1', periodCode: '2026-06', startDate: '2026-06-01',
+        endDate: '2026-06-30', status: 'OPEN', hasVouchers: true,
+      }])
       return Promise.resolve([])
     })
+    vi.mocked(apiFetchWithHeaders).mockResolvedValue({ data: [voucher], headers: new Headers({ 'X-Total-Count': '1' }) })
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
 
     render(
@@ -163,6 +235,7 @@ describe('VoucherListPage', () => {
     )
 
     fireEvent.click(screen.getByRole('button', { name: /导出金蝶凭证/ }))
+    expect(screen.getByText(/收款-主营、付款-日常、付款-主营、银行费用/)).toBeInTheDocument()
     fireEvent.click(screen.getByRole('checkbox', { name: '合并同类分录' }))
     fireEvent.click(within(screen.getByRole('dialog', { name: '导出金蝶凭证' }))
       .getByRole('button', { name: /^导\s*出$/ }))
@@ -178,8 +251,29 @@ describe('VoucherListPage', () => {
 })
 
 describe('VoucherEditorPage', () => {
-  it('does not offer draft or posting actions after a voucher is posted', async () => {
-    vi.mocked(apiFetch).mockImplementation((path) => Promise.resolve(path.endsWith('/voucher-1') ? {
+  it('leaves the voucher number to the server for a new voucher', async () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <App>
+          <MemoryRouter initialEntries={['/ledgers/ledger-1/vouchers/new']}>
+            <Routes>
+              <Route path="/ledgers/:ledgerId/vouchers/:voucherId" element={<VoucherEditorPage />} />
+            </Routes>
+          </MemoryRouter>
+        </App>
+      </QueryClientProvider>,
+    )
+
+    expect(await screen.findByRole('heading', { name: '新建凭证' })).toBeInTheDocument()
+    expect(screen.queryByLabelText('凭证号')).not.toBeInTheDocument()
+  })
+
+  it('allows editing a posted voucher while its period is open', async () => {
+    vi.mocked(apiFetch).mockImplementation((path) => Promise.resolve(path.endsWith('/periods') ? [{
+      id: 'period-1', ledgerId: 'ledger-1', periodCode: '2026-06', startDate: '2026-06-01', endDate: '2026-06-30', status: 'OPEN',
+    }] : path.endsWith('/voucher-1') ? {
       id: 'voucher-1', ledgerId: 'ledger-1', periodId: 'period-1', voucherDate: '2026-06-25',
       voucherType: '记', voucherNumber: '6', summary: '收货款', status: 'POSTED',
       approvalRequired: false, version: 2, lines: [],
@@ -199,10 +293,36 @@ describe('VoucherEditorPage', () => {
     )
 
     expect(await screen.findByText('版本 2 · POSTED')).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: '保存草稿' })).not.toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: '保存修改' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '校验' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '记账' })).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '反记账' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /冲\s*销/ })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '反记账' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /冲\s*销/ })).not.toBeInTheDocument()
+  })
+
+  it('keeps a posted voucher read-only after the period is closed', async () => {
+    vi.mocked(apiFetch).mockImplementation((path) => Promise.resolve(path.endsWith('/periods') ? [{
+      id: 'period-1', ledgerId: 'ledger-1', periodCode: '2026-06', startDate: '2026-06-01', endDate: '2026-06-30', status: 'CLOSED',
+    }] : path.endsWith('/voucher-1') ? {
+      id: 'voucher-1', ledgerId: 'ledger-1', periodId: 'period-1', voucherDate: '2026-06-25',
+      voucherType: '记', voucherNumber: '6', summary: '收货款', status: 'POSTED',
+      approvalRequired: false, version: 2, lines: [],
+    } : []))
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <App>
+          <MemoryRouter initialEntries={['/ledgers/ledger-1/vouchers/voucher-1']}>
+            <Routes>
+              <Route path="/ledgers/:ledgerId/vouchers/:voucherId" element={<VoucherEditorPage />} />
+            </Routes>
+          </MemoryRouter>
+        </App>
+      </QueryClientProvider>,
+    )
+
+    expect(await screen.findByText('期间已结账，请先反结账后修改')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '保存修改' })).not.toBeInTheDocument()
   })
 })

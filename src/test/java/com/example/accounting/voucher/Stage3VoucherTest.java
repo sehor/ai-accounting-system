@@ -17,7 +17,6 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 @SpringBootTest
-@org.junit.jupiter.api.Disabled("Creates ledgers; disabled until tests use an isolated database")
 class Stage3VoucherTest {
 
     @Autowired
@@ -47,6 +46,54 @@ class Stage3VoucherTest {
         assertThat(jdbcTemplate.queryForObject(
                 "select count(*) from voucher_approval where voucher_id = ? and action = 'APPROVE'",
                 Long.class, voucher.id())).isEqualTo(1L);
+    }
+
+    @Test
+    void assignsTheNextVoucherNumberWhenItIsOmitted() {
+        UUID userId = UUID.randomUUID();
+        UUID ledgerId = ledgerService.create(
+                new CurrentUserResolver.ResolvedUser(userId, "test", userId.toString()),
+                new LedgerRequests.Create("automatic-number", "SME", "v1", "CNY", LocalDate.of(2026, 1, 1), false)).id();
+        UUID periodId = periodId(ledgerId, "2026-01");
+        List<VoucherRequests.Line> lines = List.of(line(accountId(ledgerId, "1001"), "DEBIT", "1"),
+                line(accountId(ledgerId, "3001"), "CREDIT", "1"));
+
+        VoucherResponses.Voucher numbered = voucherService.create(userId, ledgerId,
+                new VoucherRequests.Create(periodId, LocalDate.of(2026, 1, 15), "记", "7", "Manual", lines));
+        VoucherResponses.Voucher generated = voucherService.create(userId, ledgerId,
+                new VoucherRequests.Create(periodId, LocalDate.of(2026, 1, 15), "记", null, "Generated", lines));
+        VoucherResponses.Voucher nextGenerated = voucherService.create(userId, ledgerId,
+                new VoucherRequests.Create(periodId, LocalDate.of(2026, 1, 15), "记", " ", "Generated", lines));
+
+        assertThat(numbered.voucherNumber()).isEqualTo("7");
+        assertThat(generated.voucherNumber()).isEqualTo("8");
+        assertThat(nextGenerated.voucherNumber()).isEqualTo("9");
+    }
+
+    @Test
+    void filtersVouchersByKeywordAndInclusiveDateRange() {
+        UUID userId = UUID.randomUUID();
+        UUID ledgerId = ledgerService.create(
+                new CurrentUserResolver.ResolvedUser(userId, "test", userId.toString()),
+                new LedgerRequests.Create("voucher-search", "SME", "v1", "CNY", LocalDate.of(2026, 1, 1), false)).id();
+        UUID periodId = periodId(ledgerId, "2026-01");
+        List<VoucherRequests.Line> lines = List.of(
+                new VoucherRequests.Line(accountId(ledgerId, "1001"), "DEBIT", "CNY", new BigDecimal("1"),
+                        BigDecimal.ONE, "研发工资"),
+                new VoucherRequests.Line(accountId(ledgerId, "3001"), "CREDIT", "CNY", new BigDecimal("1"),
+                        BigDecimal.ONE, "研发工资"));
+        voucherService.create(userId, ledgerId, new VoucherRequests.Create(
+                periodId, LocalDate.of(2026, 1, 5), "记", "1", "期初", lines));
+        voucherService.create(userId, ledgerId, new VoucherRequests.Create(
+                periodId, LocalDate.of(2026, 1, 15), "记", "2", "计提工资", lines));
+        voucherService.create(userId, ledgerId, new VoucherRequests.Create(
+                periodId, LocalDate.of(2026, 1, 25), "记", "3", "缴纳社保", lines));
+        VoucherRequests.Search search = new VoucherRequests.Search(null, LocalDate.of(2026, 1, 10),
+                LocalDate.of(2026, 1, 20), "工资");
+
+        assertThat(voucherService.list(userId, ledgerId, search, 20, 0))
+                .extracting(VoucherResponses.Voucher::summary).containsExactly("计提工资");
+        assertThat(voucherService.count(userId, ledgerId, search)).isEqualTo(1L);
     }
 
     @Test
@@ -80,7 +127,7 @@ class Stage3VoucherTest {
     }
 
     @Test
-    void canUnpostAndReverseAPostedVoucher() {
+    void updatesAPostedVoucherDirectlyInAnOpenPeriod() {
         UUID userId = UUID.randomUUID();
         UUID ledgerId = ledgerService.create(
                 new CurrentUserResolver.ResolvedUser(userId, "test", userId.toString()),
@@ -90,19 +137,20 @@ class Stage3VoucherTest {
                 periodId, LocalDate.of(2026, 1, 15), "记", "1", "Reverse",
                 List.of(line(accountId(ledgerId, "1001"), "DEBIT", "100"),
                         line(accountId(ledgerId, "3001"), "CREDIT", "100"))));
-        VoucherResponses.Voucher draft = voucherService.unpost(userId, ledgerId, voucher.id(), "correction");
-        assertThat(draft.status()).isEqualTo("DRAFT");
-        VoucherResponses.Voucher reposted = voucherService.update(userId, ledgerId, voucher.id(),
-                new VoucherRequests.Update(draft.version(), periodId, voucher.voucherDate(), voucher.voucherType(),
-                        voucher.voucherNumber(), voucher.summary(), List.of(
-                        line(accountId(ledgerId, "1001"), "DEBIT", "100"),
-                        line(accountId(ledgerId, "3001"), "CREDIT", "100"))));
-        assertThat(reposted.status()).isEqualTo("POSTED");
-
-        VoucherResponses.Voucher reversal = voucherService.reverse(userId, ledgerId, voucher.id());
-        assertThat(reversal.status()).isEqualTo("POSTED");
-        assertThat(reversal.lines().get(0).side()).isNotEqualTo(voucher.lines().get(0).side());
-        assertThat(voucherService.find(userId, ledgerId, voucher.id()).status()).isEqualTo("REVERSED");
+        VoucherResponses.Voucher updated = voucherService.update(userId, ledgerId, voucher.id(),
+                new VoucherRequests.Update(voucher.version(), periodId, voucher.voucherDate(), voucher.voucherType(),
+                        voucher.voucherNumber(), "After", List.of(
+                        line(accountId(ledgerId, "1001"), "DEBIT", "120"),
+                        line(accountId(ledgerId, "3001"), "CREDIT", "120"))));
+        assertThat(updated.id()).isEqualTo(voucher.id());
+        assertThat(updated.status()).isEqualTo("POSTED");
+        assertThat(updated.version()).isEqualTo(voucher.version() + 1);
+        assertThat(updated.summary()).isEqualTo("After");
+        assertThat(updated.lines()).extracting(VoucherResponses.Line::originalAmount)
+                .containsOnly(new BigDecimal("120.0000"));
+        assertThat(jdbcTemplate.queryForObject(
+                "select count(*) from balance_projection_event where ledger_id = ? and aggregate_id = ? and event_type = 'UPDATE'",
+                Long.class, ledgerId, voucher.id())).isEqualTo(1L);
     }
 
     @Test
@@ -116,12 +164,9 @@ class Stage3VoucherTest {
                         "记", "1", "Delete", List.of(line(accountId(ledgerId, "1001"), "DEBIT", "1"),
                         line(accountId(ledgerId, "3001"), "CREDIT", "1"))));
 
-        voucherService.unpost(userId, ledgerId, voucher.id(), "delete");
-        voucherService.delete(userId, ledgerId, voucher.id());
-        assertThatThrownBy(() -> voucherService.find(userId, ledgerId, voucher.id()))
+        assertThatThrownBy(() -> voucherService.delete(userId, ledgerId, voucher.id()))
                 .isInstanceOf(ApiProblemException.class);
-        assertThat(voucherService.restoreDeleted(userId, ledgerId, voucher.id()).status()).isEqualTo("POSTED");
-        assertThat(voucherService.listRevisions(userId, ledgerId, voucher.id())).isNotEmpty();
+        assertThat(voucherService.find(userId, ledgerId, voucher.id()).status()).isEqualTo("POSTED");
     }
 
     @Test
@@ -160,18 +205,16 @@ class Stage3VoucherTest {
         VoucherResponses.Voucher voucher = voucherService.create(userId, ledgerId,
                 new VoucherRequests.Create(periodId, LocalDate.of(2026, 1, 15), "GENERAL", "1", "Before", lines));
 
-        VoucherResponses.Voucher firstDraft = voucherService.unpost(userId, ledgerId, voucher.id(), "edit");
         VoucherResponses.Voucher after = voucherService.update(userId, ledgerId, voucher.id(),
-                new VoucherRequests.Update(firstDraft.version(), periodId, voucher.voucherDate(),
+                new VoucherRequests.Update(voucher.version(), periodId, voucher.voucherDate(),
                         voucher.voucherType(), voucher.voucherNumber(), "After", lines));
         assertThat(after.status()).isEqualTo("POSTED");
         int afterRevision = voucherService.listRevisions(userId, ledgerId, voucher.id()).stream()
                 .filter(revision -> revision.action().equals("UPDATE"))
                 .mapToInt(VoucherResponses.Revision::revision).max().orElseThrow();
 
-        VoucherResponses.Voucher secondDraft = voucherService.unpost(userId, ledgerId, voucher.id(), "edit again");
         assertThatThrownBy(() -> voucherService.update(userId, ledgerId, voucher.id(),
-                new VoucherRequests.Update(after.version(),
+                new VoucherRequests.Update(voucher.version(),
                 periodId, voucher.voucherDate(), voucher.voucherType(), voucher.voucherNumber(), "Stale", lines)))
                 .isInstanceOf(ApiProblemException.class)
                 .extracting(exception -> ((ApiProblemException) exception).code())
@@ -179,7 +222,7 @@ class Stage3VoucherTest {
         List<VoucherRequests.Line> latestLines = List.of(line(accountId(ledgerId, "1001"), "DEBIT", "2"),
                 line(accountId(ledgerId, "3001"), "CREDIT", "2"));
         assertThat(voucherService.update(userId, ledgerId, voucher.id(),
-                new VoucherRequests.Update(secondDraft.version(), periodId, voucher.voucherDate(),
+                new VoucherRequests.Update(after.version(), periodId, voucher.voucherDate(),
                         voucher.voucherType(), voucher.voucherNumber(), "Latest", latestLines)).status())
                 .isEqualTo("POSTED");
 

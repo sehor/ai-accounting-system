@@ -6,6 +6,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.example.accounting.administration.PlatformAdminPolicy;
 import com.example.accounting.identity.IdentityService;
 import com.example.accounting.ledger.AccountingStandardCatalog;
 import com.example.accounting.ledger.LedgerAccessService;
@@ -29,10 +30,12 @@ class DefaultLedgerServiceAccountSearchTest {
     private final IdentityService identityService = mock(IdentityService.class);
     private final AccountingStandardCatalog standards = mock(AccountingStandardCatalog.class);
     private final LocalSuperAgentPolicy localSuperAgent = mock(LocalSuperAgentPolicy.class);
+    private final PlatformAdminPolicy platformAdmin = mock(PlatformAdminPolicy.class);
     @SuppressWarnings("unchecked")
     private final ObjectProvider<PeriodCloseGuard> closeGuards = mock(ObjectProvider.class);
     private final DefaultLedgerService service = new DefaultLedgerService(
-            ledgers, accounts, ledgerAccess, identityService, standards, closeGuards, localSuperAgent);
+            ledgers, accounts, ledgerAccess, identityService, standards, closeGuards,
+            localSuperAgent, platformAdmin);
 
     private final UUID actorId = UUID.randomUUID();
     private final UUID ledgerId = UUID.randomUUID();

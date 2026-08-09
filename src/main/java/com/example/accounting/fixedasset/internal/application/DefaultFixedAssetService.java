@@ -336,7 +336,7 @@ public class DefaultFixedAssetService implements FixedAssetService, PeriodCloseG
     public FixedAssetResponses.DepreciationRun generateDepreciation(UUID actorId, UUID ledgerId,
                                                                      FixedAssetRequests.DepreciationAction request) {
         requireRole(actorId, ledgerId, WRITE_ROLES);
-        return generate(actorId, ledgerId, request.periodId(), request.reason(), false);
+        return generate(actorId, ledgerId, request.periodId(), request.reason(), null, 0, null);
     }
 
     @Override
@@ -349,10 +349,11 @@ public class DefaultFixedAssetService implements FixedAssetService, PeriodCloseG
         }
         RunRecord current = assets.currentRun(ledgerId, request.periodId(), "MONTH_END").orElseThrow(() ->
                 problem(409, "FIXED_ASSET_RUN_NOT_FOUND", "No depreciation run to regenerate", "Generate the period depreciation first"));
-        vouchers.reverseGenerated(actorId, ledgerId, current.voucherId(), "FIXED_ASSET_DEPRECIATION", current.id());
+        VoucherResponses.Voucher currentVoucher = vouchers.find(actorId, ledgerId, current.voucherId());
         assets.supersedeLines(ledgerId, current.id());
         assets.supersedeRun(ledgerId, current.id(), null);
-        FixedAssetResponses.DepreciationRun replacement = generate(actorId, ledgerId, request.periodId(), request.reason(), true);
+        FixedAssetResponses.DepreciationRun replacement = generate(actorId, ledgerId, request.periodId(), request.reason(),
+                current.voucherId(), currentVoucher.version(), current.id());
         assets.supersedeRun(ledgerId, current.id(), replacement.id());
         return replacement;
     }
@@ -382,37 +383,39 @@ public class DefaultFixedAssetService implements FixedAssetService, PeriodCloseG
         }
         UUID depreciationVoucherId = null;
         if (monthly(row, period).signum() > 0 && !assets.hasActiveLine(ledgerId, assetId, period.id())) {
-            FixedAssetResponses.DepreciationRun run = generate(actorId, ledgerId, period.id(), "处置向导自动补提折旧", false);
+            FixedAssetResponses.DepreciationRun run = generate(actorId, ledgerId, period.id(), "处置向导自动补提折旧",
+                    null, 0, null);
             depreciationVoucherId = run.voucherId();
         }
+        String baseCurrency = ledgers.findLedger(actorId, ledgerId).baseCurrency();
         BigDecimal accumulated = row.openingAccumulatedDepreciation()
-                .add(assets.postedDepreciationBefore(ledgerId, assetId, period.id()))
+                .add(assets.depreciationBefore(ledgerId, assetId, period.id()).amount())
                 .add(assets.periodDepreciation(ledgerId, assetId, period.id()));
         BigDecimal residual = residual(row);
         BigDecimal carrying = row.originalCost().subtract(accumulated).subtract(row.impairmentAmount()).setScale(2, RoundingMode.HALF_UP);
         List<VoucherRequests.Line> transfer = new ArrayList<>();
-        addLine(transfer, row.accumulatedDepreciationAccountId(), "DEBIT", accumulated, "结转累计折旧");
-        addLine(transfer, row.impairmentAccountId(), "DEBIT", row.impairmentAmount(), "结转减值准备");
-        addLine(transfer, row.clearingAccountId(), "DEBIT", carrying, "转入固定资产清理");
-        addLine(transfer, row.assetAccountId(), "CREDIT", row.originalCost(), "结转固定资产原值");
+        addLine(transfer, row.accumulatedDepreciationAccountId(), "DEBIT", accumulated, baseCurrency, "结转累计折旧");
+        addLine(transfer, row.impairmentAccountId(), "DEBIT", row.impairmentAmount(), baseCurrency, "结转减值准备");
+        addLine(transfer, row.clearingAccountId(), "DEBIT", carrying, baseCurrency, "转入固定资产清理");
+        addLine(transfer, row.assetAccountId(), "CREDIT", row.originalCost(), baseCurrency, "结转固定资产原值");
         VoucherResponses.Voucher transferVoucher = createVoucher(actorId, ledgerId, period, "FA-CLEAR-" + shortId(assetId),
                 "固定资产清理结转：" + row.code(), transfer, "FIXED_ASSET_DISPOSAL", assetId);
 
         List<VoucherRequests.Line> settlement = new ArrayList<>();
         BigDecimal proceedsWithTax = request.proceeds().add(request.outputTax());
-        addLine(settlement, request.receiptAccountId(), "DEBIT", proceedsWithTax, "收到处置款");
-        addLine(settlement, row.clearingAccountId(), "CREDIT", request.proceeds(), "处置收入结转");
-        addLine(settlement, request.outputTaxAccountId(), "CREDIT", request.outputTax(), "处置销项税");
-        addLine(settlement, row.clearingAccountId(), "DEBIT", request.clearingCost(), "处置清理费用");
-        addLine(settlement, request.inputTaxAccountId(), "DEBIT", request.clearingInputTax(), "清理费用进项税");
-        addLine(settlement, request.paymentAccountId(), "CREDIT", request.clearingCost().add(request.clearingInputTax()), "支付清理费用");
+        addLine(settlement, request.receiptAccountId(), "DEBIT", proceedsWithTax, baseCurrency, "收到处置款");
+        addLine(settlement, row.clearingAccountId(), "CREDIT", request.proceeds(), baseCurrency, "处置收入结转");
+        addLine(settlement, request.outputTaxAccountId(), "CREDIT", request.outputTax(), baseCurrency, "处置销项税");
+        addLine(settlement, row.clearingAccountId(), "DEBIT", request.clearingCost(), baseCurrency, "处置清理费用");
+        addLine(settlement, request.inputTaxAccountId(), "DEBIT", request.clearingInputTax(), baseCurrency, "清理费用进项税");
+        addLine(settlement, request.paymentAccountId(), "CREDIT", request.clearingCost().add(request.clearingInputTax()), baseCurrency, "支付清理费用");
         BigDecimal gainOrLoss = request.proceeds().subtract(carrying).subtract(request.clearingCost()).setScale(2, RoundingMode.HALF_UP);
         if (gainOrLoss.signum() >= 0) {
-            addLine(settlement, row.clearingAccountId(), "DEBIT", gainOrLoss, "结转处置收益");
-            addLine(settlement, row.disposalGainAccountId(), "CREDIT", gainOrLoss, "处置收益");
+            addLine(settlement, row.clearingAccountId(), "DEBIT", gainOrLoss, baseCurrency, "结转处置收益");
+            addLine(settlement, row.disposalGainAccountId(), "CREDIT", gainOrLoss, baseCurrency, "处置收益");
         } else {
-            addLine(settlement, row.disposalLossAccountId(), "DEBIT", gainOrLoss.abs(), "处置损失");
-            addLine(settlement, row.clearingAccountId(), "CREDIT", gainOrLoss.abs(), "结转处置损失");
+            addLine(settlement, row.disposalLossAccountId(), "DEBIT", gainOrLoss.abs(), baseCurrency, "处置损失");
+            addLine(settlement, row.clearingAccountId(), "CREDIT", gainOrLoss.abs(), baseCurrency, "结转处置损失");
         }
         VoucherResponses.Voucher settlementVoucher = createVoucher(actorId, ledgerId, period, "FA-SETTLE-" + shortId(assetId),
                 "固定资产处置结算：" + row.code(), settlement, "FIXED_ASSET_DISPOSAL", assetId);
@@ -563,7 +566,8 @@ public class DefaultFixedAssetService implements FixedAssetService, PeriodCloseG
     }
 
     private FixedAssetResponses.DepreciationRun generate(UUID actorId, UUID ledgerId, UUID periodId,
-                                                         String reason, boolean replacing) {
+                                                         String reason, UUID replacingVoucherId,
+                                                         long expectedVoucherVersion, UUID expectedSourceId) {
         LedgerResponses.Period period = period(actorId, ledgerId, periodId);
         if (!"OPEN".equals(period.status())) throw problem(409, "FIXED_ASSET_PERIOD_CLOSED", "Period is closed", "Open the period before generating depreciation");
         FixedAssetResponses.DepreciationPreview preview = previewDepreciation(actorId, ledgerId, periodId);
@@ -595,9 +599,18 @@ public class DefaultFixedAssetService implements FixedAssetService, PeriodCloseG
                     entry.getValue(), BigDecimal.ONE, "计提固定资产折旧", null, null, null, dimensions));
         }
         UUID runId = UUID.randomUUID();
-        String number = "ZJ-" + period.periodCode().replace("-", "") + "-R" + (assets.listRuns(ledgerId, periodId).size() + 1);
-        VoucherResponses.Voucher voucher = createVoucher(actorId, ledgerId, period, number, "计提固定资产折旧", voucherLines,
-                "FIXED_ASSET_DEPRECIATION", runId);
+        VoucherResponses.Voucher voucher;
+        if (replacingVoucherId == null) {
+            String number = "ZJ-" + period.periodCode().replace("-", "") + "-R" + (assets.listRuns(ledgerId, periodId).size() + 1);
+            voucher = createVoucher(actorId, ledgerId, period, number, "计提固定资产折旧", voucherLines,
+                    "FIXED_ASSET_DEPRECIATION", runId);
+        } else {
+            VoucherResponses.Voucher currentVoucher = vouchers.find(actorId, ledgerId, replacingVoucherId);
+            voucher = vouchers.replaceGenerated(actorId, ledgerId, replacingVoucherId,
+                    new VoucherRequests.Update(expectedVoucherVersion, period.id(), period.endDate(),
+                            currentVoucher.voucherType(), currentVoucher.voucherNumber(), "计提固定资产折旧", voucherLines),
+                    "FIXED_ASSET_DEPRECIATION", expectedSourceId, runId);
+        }
         String fingerprint = fingerprint(rows, period);
         RunRecord run = new RunRecord(runId, ledgerId, periodId, "MONTH_END", "POSTED", voucher.id(), fingerprint,
                 amounts.values().stream().reduce(BigDecimal.ZERO, BigDecimal::add), reason, null, java.time.OffsetDateTime.now());
@@ -627,22 +640,28 @@ public class DefaultFixedAssetService implements FixedAssetService, PeriodCloseG
                 "fixed-asset:" + ledgerId + ":" + number, sourceType, sourceId);
     }
 
-    private void addLine(List<VoucherRequests.Line> lines, UUID accountId, String side, BigDecimal amount, String summary) {
+    private void addLine(List<VoucherRequests.Line> lines, UUID accountId, String side, BigDecimal amount,
+                         String currency, String summary) {
         if (accountId != null && amount != null && amount.signum() > 0) {
-            lines.add(new VoucherRequests.Line(accountId, side, "CNY", amount, BigDecimal.ONE, summary));
+            lines.add(new VoucherRequests.Line(accountId, side, currency, amount, BigDecimal.ONE, summary));
         }
     }
 
     private BigDecimal monthly(AssetRecord row, LedgerResponses.Period period) {
-        BigDecimal before = assets.postedDepreciationBefore(row.ledgerId(), row.id(), period.id());
-        BigDecimal currentAccum = row.openingAccumulatedDepreciation().add(before);
-        return FixedAssetCalculation.monthly(new FixedAssetCalculation.Asset(row.serviceDate(), row.originalCost(), residual(row),
-                row.usefulLifeMonths(), currentAccum, row.openingDepreciatedMonths(), row.disposalDate(), row.impairmentAmount()), period.endDate());
+        FixedAssetRepository.DepreciationHistory history =
+                assets.depreciationBefore(row.ledgerId(), row.id(), period.id());
+        BigDecimal currentAccum = row.openingAccumulatedDepreciation().add(history.amount());
+        int depreciatedMonths = row.openingDepreciatedMonths() + history.periods();
+        return FixedAssetCalculation.monthly(new FixedAssetCalculation.Asset(
+                row.serviceDate(), row.originalCost(), residual(row), row.usefulLifeMonths(),
+                row.openingAccumulatedDepreciation(), row.openingDepreciatedMonths(), currentAccum,
+                depreciatedMonths, row.disposalDate(), row.impairmentAmount()), period.endDate());
     }
 
     private FixedAssetResponses.Asset asset(UUID actorId, UUID ledgerId, AssetRecord row, UUID periodId) {
         LedgerResponses.Period period = period(actorId, ledgerId, periodId);
-        BigDecimal before = row.openingAccumulatedDepreciation().add(assets.postedDepreciationBefore(ledgerId, row.id(), period.id()));
+        BigDecimal before = row.openingAccumulatedDepreciation()
+                .add(assets.depreciationBefore(ledgerId, row.id(), period.id()).amount());
         BigDecimal current = assets.periodDepreciation(ledgerId, row.id(), period.id());
         BigDecimal ending = before.add(current);
         BigDecimal residual = residual(row);

@@ -4,10 +4,11 @@ import type { ColumnsType } from 'antd/es/table'
 import { PlusOutlined, ReloadOutlined, UploadOutlined } from '@ant-design/icons'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import dayjs from 'dayjs'
-import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import { apiFetch, jsonBody } from '../api/client'
 import type { Account, FixedAsset, FixedAssetCategory, FixedAssetPage, FixedAssetPreview, Period } from '../api/types'
 import { useAuth } from '../auth/AuthProvider'
+import { useWorkspaceSearchParams } from '../components/workspaceSearch'
 
 export const formatFixedAssetMoney = (value: string | number | null | undefined) => value == null ? '-' : Number(value).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const money = formatFixedAssetMoney
@@ -21,7 +22,7 @@ function useLedgerData(ledgerId: string) {
 
 export function FixedAssetListPage() {
   const { ledgerId = '' } = useParams(); const { session, periods, categories } = useLedgerData(ledgerId)
-  const navigate = useNavigate(); const [search, setSearch] = useSearchParams(); const [tab, setTab] = useState(search.get('tab') || 'cards')
+  const navigate = useNavigate(); const [search, setSearch] = useWorkspaceSearchParams(); const [tab, setTab] = useState(search.get('tab') || 'cards')
   const period = periods.data?.find((item) => item.status === 'OPEN') || periods.data?.[periods.data.length - 1]
   const categoryId = search.get('categoryId') || undefined; const keyword = search.get('keyword') || undefined
   const assets = useQuery({ queryKey: ['fixed-assets', ledgerId, period?.id, categoryId, keyword], queryFn: () => apiFetch<FixedAssetPage>(`/ledgers/${ledgerId}/fixed-assets?periodId=${period!.id}&page=1&pageSize=100${categoryId ? `&categoryId=${categoryId}` : ''}${keyword ? `&search=${encodeURIComponent(keyword)}` : ''}`, session!), enabled: Boolean(session && ledgerId && period) })
@@ -63,7 +64,7 @@ function DepreciationTab({ ledgerId, period, session }: { ledgerId: string; peri
   const generate = useMutation({ mutationFn: (regenerate: boolean) => apiFetch(`/ledgers/${ledgerId}/fixed-asset-depreciation${regenerate ? ':regenerate' : ':generate'}`, session!, { method: 'POST', body: jsonBody({ periodId: period?.id, reason: regenerate ? form.getFieldValue('reason') : undefined }) }), onSuccess: () => { setReasonOpen(false); form.resetFields(); client.invalidateQueries({ queryKey: ['fixed-asset-preview', ledgerId, period?.id] }); message.success('折旧凭证已生成') } })
   if (!period) return <Empty description="暂无开放期间" />
   const data = preview.data
-  return <><Space direction="vertical" size={16} style={{ width: '100%' }}>{preview.isError && <Alert type="error" message="折旧预览失败" showIcon />}<Space wrap><Statistic title="应计金额" value={money(data?.totalAmount)} /><Statistic title="待处理资产" value={data?.pendingCount || 0} /><Statistic title="已完成" value={data?.completedCount || 0} /><Tag color={data?.readyToClose ? 'green' : 'orange'}>{data?.readyToClose ? '可关账' : '需处理'}</Tag></Space>{data?.blockers?.length ? <Alert type="warning" message="阻塞项" description={<ul>{data.blockers.map((item) => <li key={item}>{item}</li>)}</ul>} /> : null}<Space><Button type="primary" disabled={!data || data.pendingCount === 0 || data.blockers.length > 0} loading={generate.isPending} onClick={() => generate.mutate(false)}>生成折旧凭证</Button><Button disabled={!data || !data.blockers.some((item) => item.includes('失效'))} onClick={() => setReasonOpen(true)}>自动冲销并重新生成</Button></Space><Table rowKey="assetId" dataSource={data?.lines || []} columns={[{ title: '编号', dataIndex: 'assetCode' }, { title: '名称', dataIndex: 'assetName' }, { title: '金额', dataIndex: 'amount', render: money }, { title: '状态', dataIndex: 'status' }, { title: '说明', dataIndex: 'detail' }]} pagination={false} /></Space><Modal open={reasonOpen} title="重新生成折旧" onCancel={() => setReasonOpen(false)} onOk={() => form.submit()} confirmLoading={generate.isPending}><Form form={form} onFinish={() => generate.mutate(true)}><Form.Item name="reason" label="变更原因" rules={[{ required: true, min: 2 }]}><Input.TextArea rows={3} /></Form.Item></Form></Modal></>
+  return <><Space direction="vertical" size={16} style={{ width: '100%' }}>{preview.isError && <Alert type="error" message="折旧预览失败" showIcon />}<Space wrap><Statistic title="应计金额" value={money(data?.totalAmount)} /><Statistic title="待处理资产" value={data?.pendingCount || 0} /><Statistic title="已完成" value={data?.completedCount || 0} /><Tag color={data?.readyToClose ? 'green' : 'orange'}>{data?.readyToClose ? '可关账' : '需处理'}</Tag></Space>{data?.blockers?.length ? <Alert type="warning" message="阻塞项" description={<ul>{data.blockers.map((item) => <li key={item}>{item}</li>)}</ul>} /> : null}<Space><Button type="primary" disabled={!data || data.pendingCount === 0 || data.blockers.length > 0} loading={generate.isPending} onClick={() => generate.mutate(false)}>生成折旧凭证</Button><Button disabled={!data || !data.blockers.some((item) => item.includes('失效'))} onClick={() => setReasonOpen(true)}>更新并重新生成</Button></Space><Table rowKey="assetId" dataSource={data?.lines || []} columns={[{ title: '编号', dataIndex: 'assetCode' }, { title: '名称', dataIndex: 'assetName' }, { title: '金额', dataIndex: 'amount', render: money }, { title: '状态', dataIndex: 'status' }, { title: '说明', dataIndex: 'detail' }]} pagination={false} /></Space><Modal open={reasonOpen} title="重新生成折旧" onCancel={() => setReasonOpen(false)} onOk={() => form.submit()} confirmLoading={generate.isPending}><Form form={form} onFinish={() => generate.mutate(true)}><Form.Item name="reason" label="变更原因" rules={[{ required: true, min: 2 }]}><Input.TextArea rows={3} /></Form.Item></Form></Modal></>
 }
 
 export function FixedAssetEditorPage() {

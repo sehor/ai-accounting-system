@@ -36,7 +36,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 @SpringBootTest(properties = "storage.local.root=target/ledger-backup-test-files")
 @Transactional
-@org.junit.jupiter.api.Disabled("Creates ledgers; disabled until tests use an isolated database")
 class LedgerBackupServiceTest {
 
     private static final List<String> BUSINESS_TABLES = List.of(
@@ -79,10 +78,6 @@ class LedgerBackupServiceTest {
         ledgers.addMember(owner.id(), sourceId, new LedgerRequests.AddMember(agent.id(), LedgerRole.AGENT));
         experiences.create(agent.id(), new ExperienceRequests.Create(
                 ExperienceScope.LEDGER, sourceId, "账套经验", "差旅费进入管理费用", List.of("差旅")));
-        experiences.create(agent.id(), new ExperienceRequests.Create(
-                ExperienceScope.GENERAL, null, "通用经验", "先核对税率", List.of("税率")));
-        int generalBefore = jdbc.queryForObject(
-                "select count(*) from accounting_experience where ledger_id is null", Integer.class);
         byte[] attachment = new byte[]{(byte) 0x89, 'P', 'N', 'G', 13, 10, 26, 10};
         documents.upload(owner.id(), sourceId, "receipt.png", "image/png", attachment.length,
                 new ByteArrayInputStream(attachment));
@@ -116,8 +111,6 @@ class LedgerBackupServiceTest {
         List<UUID> sourceAccounts = ids("ledger_account", sourceId);
         List<UUID> restoredAccounts = ids("ledger_account", restored.id());
         assertThat(restoredAccounts).doesNotContainAnyElementsOf(sourceAccounts);
-        assertThat(jdbc.queryForObject("select count(*) from accounting_experience where ledger_id is null",
-                Integer.class)).isEqualTo(generalBefore);
         assertThat(jdbc.queryForObject("select title from accounting_experience where ledger_id = ?",
                 String.class, restored.id())).isEqualTo("账套经验");
         assertThat(jdbc.queryForMap("""

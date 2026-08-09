@@ -15,6 +15,8 @@ public interface VoucherRepository {
 
     Optional<Idempotency> findIdempotency(UUID ledgerId, UUID actorId, String key);
 
+    String nextVoucherNumber(UUID ledgerId, UUID periodId, String voucherType);
+
     Optional<LedgerContext> findLedgerContext(UUID ledgerId, UUID periodId);
 
     boolean activeAccountExists(UUID ledgerId, UUID accountId);
@@ -34,9 +36,14 @@ public interface VoucherRepository {
                                 boolean approvalRequired, UUID reversalOfId, UUID actorId,
                                 String sourceType, UUID sourceId);
 
-    boolean updateDraft(UUID ledgerId, UUID voucherId, UUID periodId, LocalDate voucherDate, String voucherType,
-                        String voucherNumber, String summary, boolean approvalRequired, UUID actorId,
-                        long expectedVersion);
+    boolean updateVoucher(UUID ledgerId, UUID voucherId, UUID periodId, LocalDate voucherDate, String voucherType,
+                          String voucherNumber, String summary, boolean approvalRequired, UUID actorId,
+                          long expectedVersion);
+
+    boolean replaceGeneratedVoucher(UUID ledgerId, UUID voucherId, UUID periodId, LocalDate voucherDate,
+                                    String voucherType, String voucherNumber, String summary,
+                                    boolean approvalRequired, UUID actorId, long expectedVersion,
+                                    String sourceType, UUID expectedSourceId, UUID nextSourceId);
 
     void deleteLines(UUID ledgerId, UUID voucherId);
 
@@ -49,6 +56,14 @@ public interface VoucherRepository {
     boolean controlsComplete(UUID ledgerId, UUID voucherId);
 
     List<VoucherResponses.Voucher> list(UUID ledgerId, int limit, int offset);
+
+    List<VoucherResponses.Voucher> list(UUID ledgerId, String periodCode, int limit, int offset);
+
+    List<VoucherResponses.Voucher> list(UUID ledgerId, VoucherRequests.Search search, int limit, int offset);
+
+    long count(UUID ledgerId, String periodCode);
+
+    long count(UUID ledgerId, VoucherRequests.Search search);
 
     Optional<VoucherResponses.Voucher> find(UUID ledgerId, UUID voucherId, boolean includeDeleted);
 
@@ -68,11 +83,7 @@ public interface VoucherRepository {
 
     void recordApproval(UUID ledgerId, UUID voucherId, String action, String comment, UUID actorId);
 
-    boolean reversalExists(UUID ledgerId, UUID voucherId);
-
-    void markDeleted(UUID ledgerId, UUID voucherId);
-
-    void restoreDeleted(UUID ledgerId, UUID voucherId, UUID actorId);
+    boolean deleteVoucher(UUID ledgerId, UUID voucherId);
 
     List<VoucherResponses.Revision> listRevisions(UUID ledgerId, UUID voucherId);
 
@@ -85,10 +96,6 @@ public interface VoucherRepository {
 
     void recordRevision(UUID ledgerId, UUID voucherId, int revision, String action, UUID actorId, String reason,
                         String beforeData, String afterData);
-
-    Optional<UUID> reversalOf(UUID ledgerId, UUID voucherId);
-
-    void markReversedBy(UUID ledgerId, UUID voucherId, UUID reversalId, UUID actorId);
 
     record Idempotency(String requestHash, UUID voucherId) {
     }

@@ -6,6 +6,9 @@ app:
     local-super-agent-enabled: true
     local-super-agent-user-id: ${LOCAL_SUPER_AGENT_USER_ID:00000000-0000-4000-8000-000000000099}
     local-super-agent-username: ${LOCAL_SUPER_AGENT_USERNAME:super-agent}
+    platform-admin-enabled: true
+    platform-admin-user-id: ${PLATFORM_ADMIN_USER_ID:a2757c7a-fb97-4979-8f4f-abe3e401dacc}
+    platform-admin-username: ${PLATFORM_ADMIN_USERNAME:admin}
     # Dev-only bearer token; disabled automatically when an OIDC issuer is configured.
     dev-bearer-token: ${DEV_BEARER_TOKEN:dev-admin-token}
     dev-bearer-user-id: ${DEV_BEARER_USER_ID:00000000-0000-4000-8000-000000000001}

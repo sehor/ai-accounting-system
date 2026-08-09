@@ -116,22 +116,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/ledgers/{ledgerId}/vouchers/{voucherId}:unpost": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["unpost"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/v1/ledgers/{ledgerId}/vouchers/{voucherId}:submit": {
         parameters: {
             query?: never;
@@ -142,38 +126,6 @@ export interface paths {
         get?: never;
         put?: never;
         post: operations["submit"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/ledgers/{ledgerId}/vouchers/{voucherId}:reverse": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["reverse"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/ledgers/{ledgerId}/vouchers/{voucherId}:restore-deleted": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: operations["restoreDeleted"];
         delete?: never;
         options?: never;
         head?: never;
@@ -324,6 +276,118 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/ledgers/{ledgerId}/fixed-assets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["assets"];
+        put?: never;
+        post: operations["createAsset"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/ledgers/{ledgerId}/fixed-assets/{assetId}:dispose": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["dispose"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/ledgers/{ledgerId}/fixed-assets/{assetId}:copy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["copyAsset"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/ledgers/{ledgerId}/fixed-assets/import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["importAssets"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/ledgers/{ledgerId}/fixed-asset-depreciation:regenerate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["regenerate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/ledgers/{ledgerId}/fixed-asset-depreciation:generate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["generate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/ledgers/{ledgerId}/fixed-asset-categories": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["categories"];
+        put?: never;
+        post: operations["createCategory"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/ledgers/{ledgerId}/finance-query": {
         parameters: {
             query?: never;
@@ -436,6 +500,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/ledgers/{ledgerId}/balance-rebuilds": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["request"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/ledgers/{ledgerId}/accounts": {
         parameters: {
             query?: never;
@@ -500,6 +580,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/users/{userId}:restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["restoreUser"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/ledgers/{ledgerId}:restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["restoreLedger"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/ledgers/{ledgerId}/members/{userId}": {
         parameters: {
             query?: never;
@@ -514,6 +626,38 @@ export interface paths {
         options?: never;
         head?: never;
         patch: operations["updateMember"];
+        trace?: never;
+    };
+    "/v1/ledgers/{ledgerId}/fixed-assets/{assetId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["asset"];
+        put?: never;
+        post?: never;
+        delete: operations["deleteAsset"];
+        options?: never;
+        head?: never;
+        patch: operations["updateAsset"];
+        trace?: never;
+    };
+    "/v1/ledgers/{ledgerId}/fixed-asset-categories/{categoryId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["category"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch: operations["updateCategory"];
         trace?: never;
     };
     "/v1/ledgers/{ledgerId}/accounts/{accountId}": {
@@ -724,6 +868,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/ledgers/{ledgerId}/fixed-assets/import-template": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["importTemplate"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/ledgers/{ledgerId}/fixed-asset-depreciation/runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["runs"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/ledgers/{ledgerId}/fixed-asset-depreciation/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["preview_1"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/ledgers/{ledgerId}/documents/{documentId}": {
         parameters: {
             query?: never;
@@ -804,6 +996,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/ledgers/{ledgerId}/books/sub-ledger": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["subLedger_1"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/ledgers/{ledgerId}/books/general-ledger": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["generalLedger_1"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/ledgers/{ledgerId}/balance-rebuilds/{jobId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["find"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/ledgers/{ledgerId}/backup": {
         parameters: {
             query?: never;
@@ -828,6 +1068,22 @@ export interface paths {
             cookie?: never;
         };
         get: operations["list_3"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/ledgers/{ledgerId}/accounts/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["searchAccounts"];
         put?: never;
         post?: never;
         delete?: never;
@@ -884,6 +1140,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/users": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listUsers"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/ledgers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listLedgers"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/accounting-standards": {
         parameters: {
             query?: never;
@@ -911,6 +1199,38 @@ export interface paths {
         put?: never;
         post?: never;
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/users/{userId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: operations["deleteUser"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/ledgers/{ledgerId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: operations["deleteLedger"];
         options?: never;
         head?: never;
         patch?: never;
@@ -969,6 +1289,9 @@ export interface components {
             /** Format: int64 */
             version?: number;
             lines?: components["schemas"]["Line"][];
+            sourceType?: string;
+            /** Format: uuid */
+            sourceId?: string;
         };
         OpeningBalanceLine: {
             /** Format: uuid */
@@ -1083,9 +1406,6 @@ export interface components {
             approvalEnabled?: boolean;
             status?: string;
         };
-        Reason: {
-            reason: string;
-        };
         Comment: {
             comment: string;
         };
@@ -1103,6 +1423,7 @@ export interface components {
             /** Format: date */
             endDate?: string;
             status?: string;
+            hasVouchers?: boolean;
         };
         AddMember: {
             /** Format: uuid */
@@ -1119,6 +1440,192 @@ export interface components {
             status?: "ACTIVE" | "INACTIVE";
             displayName?: string;
             email?: string;
+        };
+        AssetCreate: {
+            /** Format: uuid */
+            categoryId: string;
+            code: string;
+            name: string;
+            quantity: number;
+            /** Format: date */
+            serviceDate: string;
+            originalCost: number;
+            inputTax: number;
+            /** Format: int32 */
+            usefulLifeMonths: number;
+            residualRate: number;
+            openingAccumulatedDepreciation: number;
+            /** Format: int32 */
+            openingDepreciatedMonths: number;
+            impairmentAmount: number;
+            /** Format: uuid */
+            departmentValueId?: string;
+            /** Format: uuid */
+            acquisitionVoucherId?: string;
+            /** Format: uuid */
+            assetAccountId?: string;
+            /** Format: uuid */
+            accumulatedDepreciationAccountId?: string;
+            /** Format: uuid */
+            depreciationExpenseAccountId?: string;
+            /** Format: uuid */
+            impairmentAccountId?: string;
+            /** Format: uuid */
+            clearingAccountId?: string;
+            /** Format: uuid */
+            disposalGainAccountId?: string;
+            /** Format: uuid */
+            disposalLossAccountId?: string;
+            note?: string;
+        };
+        Asset: {
+            /** Format: uuid */
+            id?: string;
+            /** Format: uuid */
+            ledgerId?: string;
+            /** Format: uuid */
+            categoryId?: string;
+            categoryCode?: string;
+            categoryName?: string;
+            code?: string;
+            name?: string;
+            status?: string;
+            quantity?: number;
+            /** Format: date */
+            serviceDate?: string;
+            originalCost?: number;
+            inputTax?: number;
+            /** Format: int32 */
+            usefulLifeMonths?: number;
+            residualRate?: number;
+            residualAmount?: number;
+            openingAccumulatedDepreciation?: number;
+            /** Format: int32 */
+            openingDepreciatedMonths?: number;
+            impairmentAmount?: number;
+            currentDepreciation?: number;
+            currentAccumulatedDepreciation?: number;
+            endingAccumulatedDepreciation?: number;
+            openingNetValue?: number;
+            endingNetValue?: number;
+            /** Format: uuid */
+            departmentValueId?: string;
+            /** Format: uuid */
+            acquisitionVoucherId?: string;
+            /** Format: uuid */
+            assetAccountId?: string;
+            /** Format: uuid */
+            accumulatedDepreciationAccountId?: string;
+            /** Format: uuid */
+            depreciationExpenseAccountId?: string;
+            /** Format: uuid */
+            impairmentAccountId?: string;
+            /** Format: uuid */
+            clearingAccountId?: string;
+            /** Format: uuid */
+            disposalGainAccountId?: string;
+            /** Format: uuid */
+            disposalLossAccountId?: string;
+            /** Format: date */
+            disposalDate?: string;
+            note?: string;
+            /** Format: int64 */
+            version?: number;
+        };
+        Disposal: {
+            /** Format: uuid */
+            periodId: string;
+            /** Format: date */
+            disposalDate: string;
+            reason: string;
+            proceeds: number;
+            outputTax: number;
+            clearingCost: number;
+            clearingInputTax: number;
+            /** Format: uuid */
+            receiptAccountId?: string;
+            /** Format: uuid */
+            paymentAccountId?: string;
+            /** Format: uuid */
+            outputTaxAccountId?: string;
+            /** Format: uuid */
+            inputTaxAccountId?: string;
+        };
+        ImportResult: {
+            /** Format: int32 */
+            rowCount?: number;
+            /** Format: int32 */
+            errorCount?: number;
+            committed?: boolean;
+            errors?: string[];
+        };
+        DepreciationAction: {
+            /** Format: uuid */
+            periodId: string;
+            reason?: string;
+        };
+        DepreciationRun: {
+            /** Format: uuid */
+            id?: string;
+            /** Format: uuid */
+            periodId?: string;
+            runType?: string;
+            status?: string;
+            /** Format: uuid */
+            voucherId?: string;
+            totalAmount?: number;
+            inputFingerprint?: string;
+            /** Format: date-time */
+            createdAt?: string;
+        };
+        CategoryCreate: {
+            code: string;
+            name: string;
+            /** Format: int32 */
+            usefulLifeMonths: number;
+            residualRate: number;
+            /** Format: uuid */
+            assetAccountId: string;
+            /** Format: uuid */
+            accumulatedDepreciationAccountId: string;
+            /** Format: uuid */
+            depreciationExpenseAccountId: string;
+            /** Format: uuid */
+            impairmentAccountId?: string;
+            /** Format: uuid */
+            clearingAccountId: string;
+            /** Format: uuid */
+            disposalGainAccountId: string;
+            /** Format: uuid */
+            disposalLossAccountId: string;
+        };
+        Category: {
+            /** Format: uuid */
+            id?: string;
+            /** Format: uuid */
+            ledgerId?: string;
+            code?: string;
+            name?: string;
+            /** Format: int32 */
+            usefulLifeMonths?: number;
+            residualRate?: number;
+            /** Format: uuid */
+            assetAccountId?: string;
+            /** Format: uuid */
+            accumulatedDepreciationAccountId?: string;
+            /** Format: uuid */
+            depreciationExpenseAccountId?: string;
+            /** Format: uuid */
+            impairmentAccountId?: string;
+            /** Format: uuid */
+            clearingAccountId?: string;
+            /** Format: uuid */
+            disposalGainAccountId?: string;
+            /** Format: uuid */
+            disposalLossAccountId?: string;
+            status?: string;
+            /** Format: int64 */
+            version?: number;
         };
         Filters: {
             accountCodes?: string[];
@@ -1190,11 +1697,31 @@ export interface components {
             name?: string;
             status?: string;
         };
-        ImportResult: {
+        Job: {
+            /** Format: uuid */
+            id?: string;
+            /** Format: uuid */
+            ledgerId?: string;
+            periodFrom?: string;
+            periodTo?: string;
+            status?: string;
+            reason?: string;
+            /** Format: uuid */
+            requestedBy?: string;
             /** Format: int32 */
-            voucherCount?: number;
+            processedPeriods?: number;
             /** Format: int32 */
-            rowCount?: number;
+            totalPeriods?: number;
+            /** Format: int32 */
+            differenceCount?: number;
+            /** Format: date-time */
+            createdAt?: string;
+            /** Format: date-time */
+            startedAt?: string;
+            /** Format: date-time */
+            completedAt?: string;
+            errorCode?: string;
+            errorMessage?: string;
         };
         AccountCreate: {
             code: string;
@@ -1243,11 +1770,83 @@ export interface components {
             unitName?: string;
             dimensionRequirements?: components["schemas"]["DimensionRequirement"][];
         };
+        User: {
+            /** Format: uuid */
+            id?: string;
+            issuer?: string;
+            subject?: string;
+            displayName?: string;
+            email?: string;
+            /** @enum {string} */
+            userType?: "HUMAN" | "AGENT";
+            status?: string;
+            deleted?: boolean;
+            protectedUser?: boolean;
+        };
         UpdateMember: {
             /** @enum {string} */
             role: "OWNER" | "EDITOR" | "REVIEWER" | "VIEWER" | "AGENT";
             /** @enum {string} */
             status: "ACTIVE" | "INACTIVE";
+        };
+        AssetPatch: {
+            /** Format: int64 */
+            expectedVersion: number;
+            name?: string;
+            quantity?: number;
+            /** Format: date */
+            serviceDate?: string;
+            originalCost?: number;
+            inputTax?: number;
+            /** Format: int32 */
+            usefulLifeMonths?: number;
+            residualRate?: number;
+            impairmentAmount?: number;
+            /** Format: uuid */
+            departmentValueId?: string;
+            /** Format: uuid */
+            acquisitionVoucherId?: string;
+            /** Format: uuid */
+            assetAccountId?: string;
+            /** Format: uuid */
+            accumulatedDepreciationAccountId?: string;
+            /** Format: uuid */
+            depreciationExpenseAccountId?: string;
+            /** Format: uuid */
+            impairmentAccountId?: string;
+            /** Format: uuid */
+            clearingAccountId?: string;
+            /** Format: uuid */
+            disposalGainAccountId?: string;
+            /** Format: uuid */
+            disposalLossAccountId?: string;
+            /** Format: uuid */
+            effectivePeriodId?: string;
+            reason?: string;
+            note?: string;
+        };
+        CategoryPatch: {
+            /** Format: int64 */
+            expectedVersion: number;
+            name?: string;
+            /** Format: int32 */
+            usefulLifeMonths?: number;
+            residualRate?: number;
+            /** Format: uuid */
+            assetAccountId?: string;
+            /** Format: uuid */
+            accumulatedDepreciationAccountId?: string;
+            /** Format: uuid */
+            depreciationExpenseAccountId?: string;
+            /** Format: uuid */
+            impairmentAccountId?: string;
+            /** Format: uuid */
+            clearingAccountId?: string;
+            /** Format: uuid */
+            disposalGainAccountId?: string;
+            /** Format: uuid */
+            disposalLossAccountId?: string;
+            status?: string;
         };
         AccountPatch: {
             /** Format: int64 */
@@ -1273,6 +1872,7 @@ export interface components {
             subject?: string;
             displayName?: string;
             email?: string;
+            /** @enum {string} */
             userType?: "HUMAN" | "AGENT";
             status?: string;
         };
@@ -1322,20 +1922,40 @@ export interface components {
             name?: string;
             amount?: number;
         };
-        Job: {
-            /** Format: uuid */
-            id?: string;
-            /** Format: uuid */
-            ledgerId?: string;
-            jobType?: string;
-            /** Format: uuid */
-            aggregateId?: string;
-            status?: string;
+        Page: {
+            data?: components["schemas"]["Asset"][];
             /** Format: int32 */
-            attempts?: number;
-            /** Format: date-time */
-            nextRunAt?: string;
-            lockedBy?: string;
+            page?: number;
+            /** Format: int32 */
+            pageSize?: number;
+            /** Format: int64 */
+            totalItems?: number;
+            /** Format: int32 */
+            totalPages?: number;
+        };
+        DepreciationPreview: {
+            /** Format: uuid */
+            periodId?: string;
+            periodCode?: string;
+            totalAmount?: number;
+            /** Format: int32 */
+            eligibleCount?: number;
+            /** Format: int32 */
+            completedCount?: number;
+            /** Format: int32 */
+            pendingCount?: number;
+            readyToClose?: boolean;
+            blockers?: string[];
+            lines?: components["schemas"]["PreviewLine"][];
+        };
+        PreviewLine: {
+            /** Format: uuid */
+            assetId?: string;
+            assetCode?: string;
+            assetName?: string;
+            amount?: number;
+            status?: string;
+            detail?: string;
         };
         CashFlowItem: {
             /** Format: uuid */
@@ -1346,6 +1966,63 @@ export interface components {
             name?: string;
             status?: string;
             template?: boolean;
+        };
+        Pagination: {
+            /** Format: int32 */
+            page?: number;
+            /** Format: int32 */
+            pageSize?: number;
+            /** Format: int64 */
+            totalItems?: number;
+            /** Format: int32 */
+            totalPages?: number;
+        };
+        SubLedgerEntry: {
+            /** Format: uuid */
+            voucherId?: string;
+            voucherNumber?: string;
+            /** Format: date */
+            voucherDate?: string;
+            summary?: string;
+            debit?: number;
+            credit?: number;
+            direction?: string;
+            balance?: number;
+        };
+        SubLedgerPage: {
+            periodCode?: string;
+            /** Format: uuid */
+            accountId?: string;
+            accountCode?: string;
+            accountName?: string;
+            openingDirection?: string;
+            openingBalance?: number;
+            data?: components["schemas"]["SubLedgerEntry"][];
+            periodDebit?: number;
+            periodCredit?: number;
+            endingDirection?: string;
+            endingBalance?: number;
+            pagination?: components["schemas"]["Pagination"];
+        };
+        GeneralLedgerAccount: {
+            /** Format: uuid */
+            accountId?: string;
+            accountCode?: string;
+            accountName?: string;
+            normalBalance?: string;
+            openingDirection?: string;
+            openingBalance?: number;
+            periodDebit?: number;
+            periodCredit?: number;
+            yearDebit?: number;
+            yearCredit?: number;
+            endingDirection?: string;
+            endingBalance?: number;
+        };
+        GeneralLedgerPage: {
+            periodCode?: string;
+            data?: components["schemas"]["GeneralLedgerAccount"][];
+            pagination?: components["schemas"]["Pagination"];
         };
         Entry: {
             /** Format: uuid */
@@ -1361,6 +2038,18 @@ export interface components {
             reason?: string;
             /** Format: date-time */
             createdAt?: string;
+        };
+        AccountSearchResult: {
+            account?: components["schemas"]["Account"];
+            parent?: components["schemas"]["AccountSummary"];
+            children?: components["schemas"]["AccountSummary"][];
+        };
+        AccountSummary: {
+            /** Format: uuid */
+            id?: string;
+            code?: string;
+            name?: string;
+            status?: string;
         };
         Formula: {
             code?: string;
@@ -1609,6 +2298,7 @@ export interface operations {
     list_1: {
         parameters: {
             query?: {
+                periodCode?: string;
                 limit?: number;
                 offset?: number;
             };
@@ -1623,6 +2313,8 @@ export interface operations {
             /** @description OK */
             200: {
                 headers: {
+                    /** @description Total number of vouchers matching the period filter */
+                    "X-Total-Count"?: unknown[];
                     [name: string]: unknown;
                 };
                 content: {
@@ -1680,80 +2372,7 @@ export interface operations {
             };
         };
     };
-    unpost: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                ledgerId: string;
-                voucherId: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["Reason"];
-            };
-        };
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "*/*": components["schemas"]["Voucher"];
-                };
-            };
-        };
-    };
     submit: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                ledgerId: string;
-                voucherId: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "*/*": components["schemas"]["Voucher"];
-                };
-            };
-        };
-    };
-    reverse: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                ledgerId: string;
-                voucherId: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "*/*": components["schemas"]["Voucher"];
-                };
-            };
-        };
-    };
-    restoreDeleted: {
         parameters: {
             query?: never;
             header?: never;
@@ -2032,6 +2651,241 @@ export interface operations {
             };
         };
     };
+    assets: {
+        parameters: {
+            query?: {
+                periodId?: string;
+                status?: string;
+                categoryId?: string;
+                departmentValueId?: string;
+                search?: string;
+                page?: number;
+                pageSize?: number;
+            };
+            header?: never;
+            path: {
+                ledgerId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["Page"];
+                };
+            };
+        };
+    };
+    createAsset: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ledgerId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AssetCreate"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["Asset"];
+                };
+            };
+        };
+    };
+    dispose: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ledgerId: string;
+                assetId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Disposal"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["Disposal"];
+                };
+            };
+        };
+    };
+    copyAsset: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ledgerId: string;
+                assetId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["Asset"];
+                };
+            };
+        };
+    };
+    importAssets: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ledgerId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "multipart/form-data": {
+                    /** Format: binary */
+                    file: string;
+                };
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ImportResult"];
+                };
+            };
+        };
+    };
+    regenerate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ledgerId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DepreciationAction"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["DepreciationRun"];
+                };
+            };
+        };
+    };
+    generate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ledgerId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DepreciationAction"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["DepreciationRun"];
+                };
+            };
+        };
+    };
+    categories: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ledgerId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["Category"][];
+                };
+            };
+        };
+    };
+    createCategory: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ledgerId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CategoryCreate"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["Category"];
+                };
+            };
+        };
+    };
     query: {
         parameters: {
             query?: never;
@@ -2287,6 +3141,32 @@ export interface operations {
             };
         };
     };
+    request: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ledgerId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Create"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["Job"];
+                };
+            };
+        };
+    };
     listAccounts: {
         parameters: {
             query?: never;
@@ -2418,6 +3298,50 @@ export interface operations {
             };
         };
     };
+    restoreUser: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                userId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["User"];
+                };
+            };
+        };
+    };
+    restoreLedger: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ledgerId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["Ledger"];
+                };
+            };
+        };
+    };
     removeMember: {
         parameters: {
             query?: never;
@@ -2462,6 +3386,129 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["Member"];
+                };
+            };
+        };
+    };
+    asset: {
+        parameters: {
+            query?: {
+                periodId?: string;
+            };
+            header?: never;
+            path: {
+                ledgerId: string;
+                assetId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["Asset"];
+                };
+            };
+        };
+    };
+    deleteAsset: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ledgerId: string;
+                assetId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    updateAsset: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ledgerId: string;
+                assetId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AssetPatch"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["Asset"];
+                };
+            };
+        };
+    };
+    category: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ledgerId: string;
+                categoryId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["Category"];
+                };
+            };
+        };
+    };
+    updateCategory: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ledgerId: string;
+                categoryId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CategoryPatch"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["Category"];
                 };
             };
         };
@@ -2818,6 +3865,76 @@ export interface operations {
             };
         };
     };
+    importTemplate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ledgerId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": string;
+                };
+            };
+        };
+    };
+    runs: {
+        parameters: {
+            query: {
+                periodId: string;
+            };
+            header?: never;
+            path: {
+                ledgerId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["DepreciationRun"][];
+                };
+            };
+        };
+    };
+    preview_1: {
+        parameters: {
+            query: {
+                periodId: string;
+            };
+            header?: never;
+            path: {
+                ledgerId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["DepreciationPreview"];
+                };
+            };
+        };
+    };
     get_3: {
         parameters: {
             query?: never;
@@ -2933,6 +4050,82 @@ export interface operations {
             };
         };
     };
+    subLedger_1: {
+        parameters: {
+            query: {
+                periodCode: string;
+                accountId: string;
+                page?: number;
+                pageSize?: number;
+            };
+            header?: never;
+            path: {
+                ledgerId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["SubLedgerPage"];
+                };
+            };
+        };
+    };
+    generalLedger_1: {
+        parameters: {
+            query: {
+                periodCode: string;
+                page?: number;
+                pageSize?: number;
+            };
+            header?: never;
+            path: {
+                ledgerId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["GeneralLedgerPage"];
+                };
+            };
+        };
+    };
+    find: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ledgerId: string;
+                jobId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["Job"];
+                };
+            };
+        };
+    };
     backup: {
         parameters: {
             query?: never;
@@ -2973,6 +4166,32 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["Entry"][];
+                };
+            };
+        };
+    };
+    searchAccounts: {
+        parameters: {
+            query: {
+                query: string;
+                matchMode?: "EXACT" | "FUZZY";
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                ledgerId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["AccountSearchResult"][];
                 };
             };
         };
@@ -3048,6 +4267,46 @@ export interface operations {
             };
         };
     };
+    listUsers: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["User"][];
+                };
+            };
+        };
+    };
+    listLedgers: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["Ledger"][];
+                };
+            };
+        };
+    };
     list_4: {
         parameters: {
             query?: never;
@@ -3088,6 +4347,46 @@ export interface operations {
                 content: {
                     "*/*": components["schemas"]["Package"];
                 };
+            };
+        };
+    };
+    deleteUser: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                userId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    deleteLedger: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ledgerId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

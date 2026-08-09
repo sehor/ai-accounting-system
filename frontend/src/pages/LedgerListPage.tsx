@@ -10,6 +10,7 @@ import { useAuth } from '../auth/AuthProvider'
 
 interface CreateLedgerForm {
   name: string
+  description?: string
   standard: string
   startDate: Dayjs
   approvalEnabled?: boolean
@@ -30,6 +31,7 @@ export function LedgerListPage() {
       const [accountingStandardCode, accountingStandardVersion] = value.standard.split('/')
       return apiFetch<Ledger>('/ledgers', session!, { method: 'POST', body: jsonBody({
         name: value.name,
+        description: value.description || '',
         accountingStandardCode,
         accountingStandardVersion,
         baseCurrency: 'CNY',
@@ -59,6 +61,7 @@ export function LedgerListPage() {
     <Modal title="新建账套" open={open} footer={null} onCancel={() => setOpen(false)} destroyOnHidden>
       <Form layout="vertical" onFinish={(value) => create.mutate(value as CreateLedgerForm)} initialValues={{ standard: 'SME/2011-17', startDate: dayjs(), approvalEnabled: false, level2Width: 2, level3Width: 2, level4Width: 2 }}>
         <Form.Item name="name" label="账套名称" rules={[{ required: true, message: '请输入账套名称' }]}><Input autoFocus /></Form.Item>
+        <Form.Item name="description" label="公司主营业务" rules={[{ max: 2000, message: '主营业务描述不能超过 2000 个字符' }]}><Input.TextArea rows={4} maxLength={2000} showCount placeholder="例如：研发、生产和销售智能硬件及配套软件" /></Form.Item>
         <Form.Item name="standard" label="会计准则版本" rules={[{ required: true }]}>
           <Select loading={standards.isLoading} options={(standards.data || []).map((standard) => ({
             value: `${standard.code}/${standard.version}`,

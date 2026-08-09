@@ -49,6 +49,12 @@
 - `GET/PUT /v1/ledgers/{ledgerId}/opening-balances`
 - `POST /v1/ledgers/{ledgerId}/opening-balances:import-csv`
 - `POST /v1/ledgers/{ledgerId}/opening-balances:confirm`
+- `GET /v1/admin/users`
+- `DELETE /v1/admin/users/{userId}`
+- `POST /v1/admin/users/{userId}:restore`
+- `GET /v1/admin/ledgers`
+- `DELETE /v1/admin/ledgers/{ledgerId}`
+- `POST /v1/admin/ledgers/{ledgerId}:restore`
 
 `spring-boot:run` 会自动启用本地联调身份；直接运行打包产物时仍需显式设置 `LOCAL_USER_HEADER_ENABLED=true`。本地请求使用 `X-User-Id: <UUID>`。
 启用 OIDC 时使用 `oidc` profile，并设置 `OIDC_ISSUER_URI`，接口和 MCP 使用标准 Bearer JWT：
@@ -68,6 +74,8 @@ codex mcp add accounting --url http://127.0.0.1:8080/mcp --bearer-token-env-var 
 
 `local` profile 会自动创建 `super-agent`（`UserType.AGENT`），将其关联到全部账套，并在 MCP 请求未携带认证头时默认使用该用户。该用户拥有完整业务权限（权限检查等效 `OWNER`），但不能查找、添加、修改或删除账套成员。该开发便利功能不会在 OIDC profile 中启用。
 
+`local` profile 同时将固定本地用户 `admin`（默认 ID `a2757c7a-fb97-4979-8f4f-abe3e401dacc`）设为平台管理员。`admin` 对全部活动账套等效 `OWNER`，并可在前端“平台管理”页面查看、删除和恢复全部用户与账套，以及把任意账套按 `OWNER`、`EDITOR`、`REVIEWER` 或 `VIEWER` 角色分配给同事。删除使用现有 `status`/`deleted_at` 软删除；`admin` 自身和 `super-agent` 不可删除。可通过 `PLATFORM_ADMIN_USER_ID` 和 `PLATFORM_ADMIN_USERNAME` 覆盖默认身份。
+
 生产环境才切换为 OIDC Bearer JWT。
 
 MCP 使用 `POST /mcp`。本地联调启用上述开关后，`X-User-Id` 同时建立 MCP 认证身份；Agent 可使用除账套创建、成员管理和审计日志查询外的 REST 能力，包括账套设置、科目、期间、期初、维度、凭证、附件、导入导出、备份恢复和报表查询。文件导出工具返回 `fileName`、`contentType`、`base64Content` 和 `byteLength`。
@@ -77,4 +85,4 @@ MCP 使用 `POST /mcp`。本地联调启用上述开关后，`X-User-Id` 同时�
 你提供的 `postgresql+asyncpg://...` 是 Python 异步客户端格式；本项目 Spring JDBC 对应使用 `DB_URL=jdbc:postgresql://localhost:5432/ai-accounting`。
 ## Agent 做账经验
 
-MCP 提供 `create_accounting_experience`、`search_accounting_experiences`、`update_accounting_experience` 和 `archive_accounting_experience`。通用经验在当前部署内由 AGENT 共享；账套查询会同时返回通用经验和该账套经验。账套经验随账套备份恢复，通用经验不会进入账套备份。只有 `UserType.AGENT` 且具有对应账套成员关系的调用方可以访问账套经验。
+MCP 提供 `create_accounting_experience`、`search_accounting_experiences`、`update_accounting_experience` 和 `archive_accounting_experience`，全部仅处理账套经验。账套经验随账套备份恢复；跨账套做账规则随插件 Skill 发布。只有 `UserType.AGENT` 且具有对应账套成员关系的调用方可以访问账套经验。

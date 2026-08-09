@@ -38,6 +38,12 @@ storage:
   local:
     root: ${STORAGE_ROOT:./data/files}
 
+accounting:
+  balance:
+    read-mode: ${ACCOUNTING_BALANCE_READ_MODE:auto}
+    worker-enabled: ${ACCOUNTING_BALANCE_WORKER_ENABLED:true}
+    worker-delay-ms: ${ACCOUNTING_BALANCE_WORKER_DELAY_MS:250}
+
 springdoc:
   api-docs:
     path: /v1/openapi.json

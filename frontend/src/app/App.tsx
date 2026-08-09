@@ -13,6 +13,8 @@ import { ReportsPage } from '../pages/ReportsPage'
 import { SettingsPage } from '../pages/SettingsPage'
 import { VoucherEditorPage, VoucherListPage } from '../pages/VoucherPages'
 import { FixedAssetEditorPage, FixedAssetListPage } from '../pages/FixedAssetPages'
+import { AdminPage } from '../pages/AdminPage'
+import { BooksPage } from '../pages/BooksPage'
 
 const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: 15_000, retry: 1 } } })
 
@@ -28,12 +30,14 @@ function AppRoutes() {
     <Route path="/" element={<RequireAuth><AppShell /></RequireAuth>}>
       <Route index element={<Navigate to="/ledgers" replace />} />
       <Route path="ledgers" element={<LedgerListPage />} />
+      <Route path="admin" element={<AdminPage />} />
       <Route path="ledgers/:ledgerId/overview" element={<LedgerOverviewPage />} />
       <Route path="ledgers/:ledgerId/vouchers" element={<VoucherListPage />} />
       <Route path="ledgers/:ledgerId/vouchers/:voucherId" element={<VoucherEditorPage />} />
       <Route path="ledgers/:ledgerId/fixed-assets" element={<FixedAssetListPage />} />
       <Route path="ledgers/:ledgerId/fixed-assets/new" element={<FixedAssetEditorPage />} />
       <Route path="ledgers/:ledgerId/fixed-assets/:assetId" element={<FixedAssetEditorPage />} />
+      <Route path="ledgers/:ledgerId/books/:bookType" element={<BooksPage />} />
       <Route path="ledgers/:ledgerId/reports/:reportType" element={<ReportsPage />} />
       <Route path="ledgers/:ledgerId/documents/*" element={<DocumentsPage />} />
       <Route path="ledgers/:ledgerId/settings/*" element={<SettingsPage />} />
@@ -45,7 +49,7 @@ function AppRoutes() {
 
 export function App() {
   return <QueryClientProvider client={queryClient}>
-    <ConfigProvider theme={{ token: { colorPrimary: '#153b5b', colorInfo: '#153b5b', colorTextSecondary: '#595959', borderRadius: 4 }, components: { Table: { cellPaddingBlock: 10 }, Layout: { siderBg: '#fff' } } }}>
+    <ConfigProvider theme={{ token: { colorPrimary: '#1598d4', colorInfo: '#1598d4', colorTextSecondary: '#595959', borderRadius: 2, fontSize: 13 }, components: { Table: { cellPaddingBlock: 7, cellPaddingInline: 8 }, Layout: { siderBg: '#17658a', headerBg: '#fff' }, Menu: { darkItemBg: '#17658a', darkItemSelectedBg: '#0f83b8' } } }}>
       <BrowserRouter><AuthProvider><AppRoutes /></AuthProvider></BrowserRouter>
     </ConfigProvider>
   </QueryClientProvider>

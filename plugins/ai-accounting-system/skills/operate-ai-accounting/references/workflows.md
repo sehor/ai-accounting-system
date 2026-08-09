@@ -68,7 +68,7 @@ For opening balances:
 1. Upload the original document with the correct ledger ID and file name.
 2. Trigger extraction and check job or extraction status until terminal.
 3. Inspect all extracted fields and source evidence. Do not trust extraction blindly.
-4. Do not load accounting experience merely to upload or extract a document. If the requested outcome is a voucher or voucher draft, load the complete `GENERAL` experience set immediately before mapping the document; reuse it for all extracted lines. Search ledger-specific experience separately only if needed.
+4. Do not load accounting experience merely to upload or extract a document. For a voucher or voucher draft, use the matching bundled template skill; search ledger-specific experience separately only if needed.
 5. Map each proposed line to an exact account ID, side, amount, summary, currency, dimensions and cash-flow item when required, using the experience only as guidance.
 6. Present unresolved fields or accounting judgments to the user.
 7. Create a voucher draft only when the requested workflow authorizes it.
@@ -87,7 +87,7 @@ Before creation, verify:
 - required dimensions, quantities and cash-flow items;
 - whether approval is enabled.
 
-Immediately before mapping voucher lines or creating a voucher draft, load all `GENERAL` experience with the unfiltered paginated search (`ledgerId: null`, no `query`/`tags`, `pageSize: 50`) and follow every page through `totalPages`. Do not repeat the full load for each line. This is the only standard workflow trigger for the general-experience context.
+Immediately before mapping voucher lines or creating a voucher draft, use the matching bundled template skill. Search `LEDGER` experience only when a company-specific issue remains unresolved.
 
 Use an idempotency key derived from a stable source identifier when the tool supports one. After creation:
 
@@ -147,9 +147,9 @@ Report exact ledger name and ID. Separate verified facts, assumptions and items 
 Save experience only after user confirmation or an unambiguous completed correction.
 
 1. Search existing experience by ledger, keywords and tags.
-2. Choose `GENERAL` only for cross-ledger rules; otherwise choose `LEDGER` with the exact ledger ID.
+2. Save confirmed company-specific knowledge as `LEDGER` experience with the exact ledger ID. Propose a plugin-skill update for a cross-ledger rule.
 3. Prefer updating the matching active experience over creating a duplicate.
 4. Use a short title, complete actionable content and useful search tags.
 5. Re-read the saved experience and report its ID, scope and version.
 
-If the MCP input schema cannot represent a valid `GENERAL` request, report the server contract defect. Do not write the experience table directly.
+If the MCP input schema cannot represent a valid `LEDGER` request, report the server contract defect. Do not write the experience table directly.

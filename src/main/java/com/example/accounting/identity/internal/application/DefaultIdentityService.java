@@ -4,6 +4,7 @@ import com.example.accounting.identity.CurrentUserResolver;
 import com.example.accounting.identity.IdentityService;
 import com.example.accounting.identity.UserResponse;
 import com.example.accounting.identity.internal.port.IdentityRepository;
+import com.example.accounting.shared.web.ApiProblemException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import java.util.Optional;
@@ -21,6 +22,11 @@ public class DefaultIdentityService implements IdentityService {
     @Override
     @Transactional
     public UserResponse ensureUser(CurrentUserResolver.ResolvedUser actor) {
+        Optional<UserResponse> existingById = users.findByIdIncludingDeleted(actor.id());
+        if (existingById.isPresent() && !"ACTIVE".equals(existingById.get().status())) {
+            throw new ApiProblemException(403, "USER_INACTIVE", "User is inactive",
+                    "The user has been deleted or disabled by the platform administrator", false);
+        }
         String subject = actor.subject() == null ? actor.id().toString() : actor.subject();
         String fallback = "User " + subject.substring(0, Math.min(8, subject.length()));
         String displayName = actor.displayName() == null || actor.displayName().isBlank()

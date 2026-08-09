@@ -29,6 +29,8 @@ import org.apache.poi.ss.usermodel.DataFormatter;
 import org.apache.poi.ss.usermodel.WorkbookFactory;
 import org.apache.poi.hssf.usermodel.HSSFWorkbook;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.mockito.ArgumentCaptor;
 
 class DataExchangeServiceTest {
@@ -150,6 +152,43 @@ class DataExchangeServiceTest {
     }
 
     @Test
+    void keepsEveryVoucherOnOneBackgroundStripe() throws Exception {
+        UUID actorId = UUID.randomUUID();
+        UUID ledgerId = UUID.randomUUID();
+        UUID debitAccount = UUID.randomUUID();
+        UUID creditAccount = UUID.randomUUID();
+        when(ledgers.listAccounts(actorId, ledgerId)).thenReturn(List.of(
+                new LedgerResponses.Account(debitAccount, ledgerId, "1002", "银行存款",
+                        "ASSET", "DEBIT", "ACTIVE"),
+                new LedgerResponses.Account(creditAccount, ledgerId, "2241", "其他应付款",
+                        "LIABILITY", "CREDIT", "ACTIVE")));
+        when(vouchers.list(actorId, ledgerId, 500, 0)).thenReturn(List.of(
+                voucher(ledgerId, LocalDate.of(2026, 7, 1), "1", "三行凭证",
+                        line(debitAccount, 1, "DEBIT"),
+                        line(debitAccount, 2, "DEBIT"),
+                        line(creditAccount, 3, "CREDIT")),
+                voucher(ledgerId, LocalDate.of(2026, 7, 2), "2", "两行凭证",
+                        line(debitAccount, 1, "DEBIT"),
+                        line(creditAccount, 2, "CREDIT"))));
+        when(vouchers.list(actorId, ledgerId, 500, 500)).thenReturn(List.of());
+
+        byte[] output = service.exportKingdee(actorId, ledgerId);
+
+        try (var workbook = WorkbookFactory.create(new ByteArrayInputStream(output))) {
+            var sheet = workbook.getSheet("AccountEntries");
+            short firstStripe = sheet.getRow(1).getCell(0).getCellStyle().getFillForegroundColor();
+            short secondStripe = sheet.getRow(4).getCell(0).getCellStyle().getFillForegroundColor();
+            assertThat(sheet.getRow(2).getCell(0).getCellStyle().getFillForegroundColor())
+                    .isEqualTo(firstStripe);
+            assertThat(sheet.getRow(3).getCell(0).getCellStyle().getFillForegroundColor())
+                    .isEqualTo(firstStripe);
+            assertThat(sheet.getRow(5).getCell(0).getCellStyle().getFillForegroundColor())
+                    .isEqualTo(secondStripe);
+            assertThat(secondStripe).isNotEqualTo(firstStripe);
+        }
+    }
+
+    @Test
     void mergesSimilarVouchersWithinTheSamePeriodWhenRequested() throws Exception {
         UUID actorId = UUID.randomUUID();
         UUID ledgerId = UUID.randomUUID();
@@ -162,11 +201,11 @@ class DataExchangeServiceTest {
                         "ASSET", "DEBIT", "ACTIVE")));
         when(vouchers.list(actorId, ledgerId, 500, 0)).thenReturn(List.of(
                 voucher(ledgerId, LocalDate.of(2026, 7, 2), "1", "支付供应商甲",
-                        line(payableAccount, 1, "DEBIT", "100.00", "支付供应商甲"),
-                        line(bankAccount, 2, "CREDIT", "100.00", "支付供应商甲")),
+                        line(bankAccount, 1, "CREDIT", "100.00", "支付供应商甲"),
+                        line(payableAccount, 2, "DEBIT", "100.00", "支付供应商甲")),
                 voucher(ledgerId, LocalDate.of(2026, 7, 18), "2", "支付供应商乙",
-                        line(payableAccount, 1, "DEBIT", "250.00", "支付供应商乙"),
-                        line(bankAccount, 2, "CREDIT", "250.00", "支付供应商乙"))));
+                        line(bankAccount, 1, "CREDIT", "250.00", "支付供应商乙"),
+                        line(payableAccount, 2, "DEBIT", "250.00", "支付供应商乙"))));
         when(vouchers.list(actorId, ledgerId, 500, 500)).thenReturn(List.of());
 
         byte[] output = service.exportKingdee(actorId, ledgerId, true);
@@ -181,6 +220,106 @@ class DataExchangeServiceTest {
             assertThat(sheet.getRow(1).getCell(8).getNumericCellValue()).isEqualTo(350.0);
             assertThat(format.formatCellValue(sheet.getRow(2).getCell(6))).isEqualTo("1002");
             assertThat(sheet.getRow(2).getCell(9).getNumericCellValue()).isEqualTo(350.0);
+        }
+    }
+
+    @Test
+    void ignoresVoucherTypeWhenApplyingBusinessMergeRules() throws Exception {
+        UUID actorId = UUID.randomUUID();
+        UUID ledgerId = UUID.randomUUID();
+        UUID payableAccount = UUID.randomUUID();
+        UUID bankAccount = UUID.randomUUID();
+        when(ledgers.listAccounts(actorId, ledgerId)).thenReturn(List.of(
+                new LedgerResponses.Account(payableAccount, ledgerId, "2202", "应付账款",
+                        "LIABILITY", "CREDIT", "ACTIVE"),
+                new LedgerResponses.Account(bankAccount, ledgerId, "1002", "银行存款",
+                        "ASSET", "DEBIT", "ACTIVE")));
+        when(vouchers.list(actorId, ledgerId, 500, 0)).thenReturn(List.of(
+                voucher(ledgerId, LocalDate.of(2026, 7, 2), "记", "1", "支付供应商甲",
+                        line(payableAccount, 1, "DEBIT", "100.00", "支付供应商甲"),
+                        line(bankAccount, 2, "CREDIT", "100.00", "支付供应商甲")),
+                voucher(ledgerId, LocalDate.of(2026, 7, 18), "转", "2", "支付供应商乙",
+                        line(payableAccount, 1, "DEBIT", "250.00", "支付供应商乙"),
+                        line(bankAccount, 2, "CREDIT", "250.00", "支付供应商乙"))));
+        when(vouchers.list(actorId, ledgerId, 500, 500)).thenReturn(List.of());
+
+        byte[] output = service.exportKingdee(actorId, ledgerId, true);
+
+        try (var workbook = WorkbookFactory.create(new ByteArrayInputStream(output))) {
+            var sheet = workbook.getSheet("AccountEntries");
+            assertThat(sheet.getLastRowNum()).isEqualTo(2);
+        }
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @CsvSource({
+            "收款-主营,应收账款,CREDIT,DEBIT",
+            "付款-日常,其他应付款,DEBIT,CREDIT",
+            "付款-主营,应付账款,DEBIT,CREDIT",
+            "银行费用,财务费用,DEBIT,CREDIT"
+    })
+    void mergesConfiguredFirstLevelAccountPatterns(
+            String ruleName, String businessAccountName,
+            String businessSide, String bankSide) throws Exception {
+        UUID actorId = UUID.randomUUID();
+        UUID ledgerId = UUID.randomUUID();
+        UUID businessRoot = UUID.randomUUID();
+        UUID businessAccount = UUID.randomUUID();
+        UUID bankRoot = UUID.randomUUID();
+        UUID bankAccount = UUID.randomUUID();
+        when(ledgers.listAccounts(actorId, ledgerId)).thenReturn(List.of(
+                account(businessRoot, ledgerId, "2000", businessAccountName, null, 1),
+                account(businessAccount, ledgerId, "200001", businessAccountName + "明细", businessRoot, 2),
+                account(bankRoot, ledgerId, "1002", "银行存款", null, 1),
+                account(bankAccount, ledgerId, "100201", "银行存款明细", bankRoot, 2)));
+        when(vouchers.list(actorId, ledgerId, 500, 0)).thenReturn(List.of(
+                voucher(ledgerId, LocalDate.of(2026, 7, 2), "1", ruleName,
+                        line(businessAccount, 1, businessSide, "100.00", ruleName),
+                        line(bankAccount, 2, bankSide, "100.00", ruleName)),
+                voucher(ledgerId, LocalDate.of(2026, 7, 18), "2", ruleName,
+                        line(businessAccount, 1, businessSide, "250.00", ruleName),
+                        line(bankAccount, 2, bankSide, "250.00", ruleName))));
+        when(vouchers.list(actorId, ledgerId, 500, 500)).thenReturn(List.of());
+
+        byte[] output = service.exportKingdee(actorId, ledgerId, true);
+
+        try (var workbook = WorkbookFactory.create(new ByteArrayInputStream(output))) {
+            var sheet = workbook.getSheet("AccountEntries");
+            var format = new DataFormatter();
+            String expectedDebitCode = "DEBIT".equals(businessSide) ? "200001" : "100201";
+            String expectedCreditCode = "CREDIT".equals(businessSide) ? "200001" : "100201";
+            assertThat(sheet.getLastRowNum()).isEqualTo(2);
+            assertThat(format.formatCellValue(sheet.getRow(1).getCell(6))).isEqualTo(expectedDebitCode);
+            assertThat(sheet.getRow(1).getCell(8).getNumericCellValue()).isEqualTo(350.0);
+            assertThat(format.formatCellValue(sheet.getRow(2).getCell(6))).isEqualTo(expectedCreditCode);
+            assertThat(sheet.getRow(2).getCell(9).getNumericCellValue()).isEqualTo(350.0);
+        }
+    }
+
+    @Test
+    void doesNotMergeUnconfiguredSalaryPayments() throws Exception {
+        UUID actorId = UUID.randomUUID();
+        UUID ledgerId = UUID.randomUUID();
+        UUID salaryAccount = UUID.randomUUID();
+        UUID bankAccount = UUID.randomUUID();
+        when(ledgers.listAccounts(actorId, ledgerId)).thenReturn(List.of(
+                new LedgerResponses.Account(salaryAccount, ledgerId, "2211", "应付职工薪酬",
+                        "LIABILITY", "CREDIT", "ACTIVE"),
+                new LedgerResponses.Account(bankAccount, ledgerId, "1002", "银行存款",
+                        "ASSET", "DEBIT", "ACTIVE")));
+        when(vouchers.list(actorId, ledgerId, 500, 0)).thenReturn(List.of(
+                voucher(ledgerId, LocalDate.of(2026, 7, 2), "1", "发放一组工资",
+                        line(salaryAccount, 1, "DEBIT", "100.00", "发放一组工资"),
+                        line(bankAccount, 2, "CREDIT", "100.00", "发放一组工资")),
+                voucher(ledgerId, LocalDate.of(2026, 7, 18), "2", "发放二组工资",
+                        line(salaryAccount, 1, "DEBIT", "250.00", "发放二组工资"),
+                        line(bankAccount, 2, "CREDIT", "250.00", "发放二组工资"))));
+        when(vouchers.list(actorId, ledgerId, 500, 500)).thenReturn(List.of());
+
+        byte[] output = service.exportKingdee(actorId, ledgerId, true);
+
+        try (var workbook = WorkbookFactory.create(new ByteArrayInputStream(output))) {
+            assertThat(workbook.getSheet("AccountEntries").getLastRowNum()).isEqualTo(4);
         }
     }
 
@@ -273,8 +412,14 @@ class DataExchangeServiceTest {
 
     private VoucherResponses.Voucher voucher(
             UUID ledgerId, LocalDate date, String number, String summary, VoucherResponses.Line... lines) {
+        return voucher(ledgerId, date, "记", number, summary, lines);
+    }
+
+    private VoucherResponses.Voucher voucher(
+            UUID ledgerId, LocalDate date, String type, String number, String summary,
+            VoucherResponses.Line... lines) {
         return new VoucherResponses.Voucher(UUID.randomUUID(), ledgerId, UUID.randomUUID(),
-                date, "记", number, summary, "POSTED", false, 1, List.of(lines));
+                date, type, number, summary, "POSTED", false, 1, List.of(lines));
     }
 
     private LedgerResponses.Account account(

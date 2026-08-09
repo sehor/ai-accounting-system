@@ -39,7 +39,8 @@ public class JdbcIdentityRepository implements IdentityRepository {
         return Optional.ofNullable(jdbc.query("""
                 select id, issuer, subject, display_name, email, user_type, status
                 from app_user
-                where issuer = 'local' and lower(display_name) = lower(?) and deleted_at is null
+                where issuer = 'local' and lower(display_name) = lower(?)
+                    and status = 'ACTIVE' and deleted_at is null
                 """, rs -> rs.next() ? mapUser(rs, 0) : null, username));
     }
 
@@ -47,7 +48,15 @@ public class JdbcIdentityRepository implements IdentityRepository {
     public Optional<UserResponse> findById(UUID id) {
         return Optional.ofNullable(jdbc.query("""
                 select id, issuer, subject, display_name, email, user_type, status
-                from app_user where id = ? and deleted_at is null
+                from app_user where id = ? and status = 'ACTIVE' and deleted_at is null
+                """, rs -> rs.next() ? mapUser(rs, 0) : null, id));
+    }
+
+    @Override
+    public Optional<UserResponse> findByIdIncludingDeleted(UUID id) {
+        return Optional.ofNullable(jdbc.query("""
+                select id, issuer, subject, display_name, email, user_type, status
+                from app_user where id = ?
                 """, rs -> rs.next() ? mapUser(rs, 0) : null, id));
     }
 

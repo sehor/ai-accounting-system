@@ -10,8 +10,15 @@ public final class LedgerResponses {
     private LedgerResponses() {
     }
 
-    public record Ledger(UUID id, String name, String accountingStandardCode, String accountingStandardVersion,
+    public record Ledger(UUID id, String name, String description,
+                         String accountingStandardCode, String accountingStandardVersion,
                          String baseCurrency, LocalDate startDate, boolean approvalEnabled, String status) {
+
+        public Ledger(UUID id, String name, String accountingStandardCode, String accountingStandardVersion,
+                      String baseCurrency, LocalDate startDate, boolean approvalEnabled, String status) {
+            this(id, name, "", accountingStandardCode, accountingStandardVersion, baseCurrency, startDate,
+                    approvalEnabled, status);
+        }
     }
 
     public record Member(UUID userId, LedgerRole role, MembershipStatus status,
@@ -64,7 +71,12 @@ public final class LedgerResponses {
     }
 
     public record Period(UUID id, UUID ledgerId, String periodCode, LocalDate startDate,
-                         LocalDate endDate, String status) {
+                         LocalDate endDate, String status, boolean hasVouchers) {
+
+        public Period(UUID id, UUID ledgerId, String periodCode, LocalDate startDate,
+                      LocalDate endDate, String status) {
+            this(id, ledgerId, periodCode, startDate, endDate, status, false);
+        }
     }
 
     public record DimensionType(UUID id, UUID ledgerId, String code, String name, boolean required, String status) {

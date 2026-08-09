@@ -1,8 +1,13 @@
 package com.example.accounting.voucher;
 
 import com.example.accounting.identity.CurrentUserResolver;
+import io.swagger.v3.oas.annotations.headers.Header;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.http.HttpStatus;
@@ -30,10 +35,25 @@ public class VoucherController {
     }
 
     @GetMapping
-    public List<VoucherResponses.Voucher> list(HttpServletRequest request, @PathVariable UUID ledgerId,
+    @ApiResponse(responseCode = "200", headers = @Header(
+            name = "X-Total-Count",
+            description = "Total number of vouchers matching the supplied filters",
+            schema = @Schema(type = "integer", format = "int64")))
+    public List<VoucherResponses.Voucher> list(HttpServletRequest request, HttpServletResponse response,
+                                                @PathVariable UUID ledgerId,
+                                                @RequestParam(required = false) String periodCode,
+                                                @RequestParam(required = false) LocalDate startDate,
+                                                @RequestParam(required = false) LocalDate endDate,
+                                                @RequestParam(required = false) String keyword,
                                                 @RequestParam(defaultValue = "100") int limit,
                                                 @RequestParam(defaultValue = "0") int offset) {
-        return voucherService.list(user(request), ledgerId, limit, offset);
+        UUID actorId = user(request);
+        VoucherRequests.Search search = new VoucherRequests.Search(periodCode, startDate, endDate, keyword);
+        List<VoucherResponses.Voucher> result = voucherService.list(
+                actorId, ledgerId, search, limit, offset);
+        response.setHeader("X-Total-Count", Long.toString(voucherService.count(actorId, ledgerId, search)));
+        response.setHeader("Access-Control-Expose-Headers", "X-Total-Count");
+        return result;
     }
 
     @PostMapping
@@ -88,29 +108,10 @@ public class VoucherController {
         return voucherService.post(user(request), ledgerId, voucherId);
     }
 
-    @PostMapping("/{voucherId}:unpost")
-    public VoucherResponses.Voucher unpost(HttpServletRequest request, @PathVariable UUID ledgerId,
-                                           @PathVariable UUID voucherId,
-                                           @Valid @RequestBody VoucherRequests.Reason body) {
-        return voucherService.unpost(user(request), ledgerId, voucherId, body.reason());
-    }
-
-    @PostMapping("/{voucherId}:reverse")
-    public VoucherResponses.Voucher reverse(HttpServletRequest request, @PathVariable UUID ledgerId,
-                                            @PathVariable UUID voucherId) {
-        return voucherService.reverse(user(request), ledgerId, voucherId);
-    }
-
     @DeleteMapping("/{voucherId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void delete(HttpServletRequest request, @PathVariable UUID ledgerId, @PathVariable UUID voucherId) {
         voucherService.delete(user(request), ledgerId, voucherId);
-    }
-
-    @PostMapping("/{voucherId}:restore-deleted")
-    public VoucherResponses.Voucher restoreDeleted(HttpServletRequest request, @PathVariable UUID ledgerId,
-                                                    @PathVariable UUID voucherId) {
-        return voucherService.restoreDeleted(user(request), ledgerId, voucherId);
     }
 
     @GetMapping("/{voucherId}/revisions")

@@ -47,7 +47,7 @@ public interface FixedAssetRepository {
 
     boolean hasActiveLine(UUID ledgerId, UUID assetId, UUID periodId);
 
-    BigDecimal postedDepreciationBefore(UUID ledgerId, UUID assetId, UUID periodStartPeriodId);
+    DepreciationHistory depreciationBefore(UUID ledgerId, UUID assetId, UUID periodStartPeriodId);
 
     BigDecimal periodDepreciation(UUID ledgerId, UUID assetId, UUID periodId);
 
@@ -88,6 +88,9 @@ public interface FixedAssetRepository {
     record LineRecord(UUID id, UUID ledgerId, UUID runId, UUID assetId, UUID periodId, BigDecimal amount,
                       UUID expenseAccountId, UUID accumulatedAccountId, UUID departmentValueId,
                       UUID voucherLineId, String status) {
+    }
+
+    record DepreciationHistory(BigDecimal amount, int periods) {
     }
 
     record DisposalRecord(UUID id, UUID ledgerId, UUID assetId, UUID periodId, LocalDate disposalDate,

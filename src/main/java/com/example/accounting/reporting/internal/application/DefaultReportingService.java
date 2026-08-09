@@ -97,6 +97,40 @@ public class DefaultReportingService implements ReportingService {
 
     @Override
     @Transactional(readOnly = true)
+    public ReportResponses.GeneralLedgerPage generalLedgerBook(
+            UUID actorId, UUID ledgerId, String periodCode, int page, int pageSize) {
+        requireView(actorId, ledgerId);
+        validateBookRequest(ledgerId, periodCode, page, pageSize);
+        return reports.generalLedgerBook(ledgerId, periodCode, page, pageSize);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public ReportResponses.SubLedgerPage subLedgerBook(
+            UUID actorId, UUID ledgerId, String periodCode, UUID accountId, int page, int pageSize) {
+        requireView(actorId, ledgerId);
+        validateBookRequest(ledgerId, periodCode, page, pageSize);
+        if (accountId == null || !reports.accountExists(ledgerId, accountId)) {
+            throw problem(404, "ACCOUNT_NOT_FOUND", "Account not found",
+                    "The account is not available to this ledger");
+        }
+        return reports.subLedgerBook(ledgerId, periodCode, accountId, page, pageSize);
+    }
+
+    private void validateBookRequest(UUID ledgerId, String periodCode, int page, int pageSize) {
+        if (periodCode == null || !periodCode.matches("\\d{4}-(0[1-9]|1[0-2])")
+                || !reports.periodExists(ledgerId, periodCode)) {
+            throw problem(404, "PERIOD_NOT_FOUND", "Period not found",
+                    "The period is not available to this ledger");
+        }
+        if (page < 1 || pageSize < 1 || pageSize > 500) {
+            throw problem(400, "PAGINATION_INVALID", "Invalid pagination",
+                    "page must be positive and pageSize must be between 1 and 500");
+        }
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public List<ReportResponses.FinanceQueryLine> financeQuery(UUID actorId, UUID ledgerId,
                                                                FinanceQueryRequests.Query request) {
         requireView(actorId, ledgerId);

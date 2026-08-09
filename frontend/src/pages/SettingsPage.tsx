@@ -5,7 +5,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { apiFetch, ApiError, jsonBody } from '../api/client'
-import type { Account, DimensionType, DimensionValue, FixedAssetPreview, LedgerRole, Member, OpeningBalance, Period, User } from '../api/types'
+import type { Account, DimensionType, DimensionValue, FixedAssetPreview, Ledger, LedgerRole, Member, OpeningBalance, Period, User } from '../api/types'
 import { useAuth } from '../auth/AuthProvider'
 import { decimalOrZero } from '../features/vouchers/money'
 import { AccountsTab } from './AccountsTab'
@@ -17,12 +17,20 @@ const decimalRule = { pattern: /^\d+(?:\.\d+)?$/, message: '请输入有效数�
 export function SettingsPage() {
   const { ledgerId = '', '*': tab = 'periods' } = useParams(); const { session } = useAuth(); const client = useQueryClient(); const navigate = useNavigate(); const { modal } = AntApp.useApp(); const [messageApi, contextHolder] = message.useMessage()
   const periods = useQuery({ queryKey: ['periods', ledgerId], queryFn: () => apiFetch<Period[]>(`/ledgers/${ledgerId}/periods`, session!), enabled: Boolean(session && ledgerId) })
+  const ledger = useQuery({ queryKey: ['ledger', ledgerId], queryFn: () => apiFetch<Ledger>(`/ledgers/${ledgerId}`, session!), enabled: Boolean(session && ledgerId) })
   const accounts = useQuery({ queryKey: ['accounts', ledgerId], queryFn: () => apiFetch<Account[]>(`/ledgers/${ledgerId}/accounts`, session!), enabled: Boolean(session && ledgerId) })
   const openings = useQuery({ queryKey: ['openings', ledgerId], queryFn: () => apiFetch<OpeningBalance[]>(`/ledgers/${ledgerId}/opening-balances`, session!), enabled: Boolean(session && ledgerId) })
   const members = useQuery({ queryKey: ['members', ledgerId], queryFn: () => apiFetch<Member[]>(`/ledgers/${ledgerId}/members`, session!), enabled: Boolean(session && ledgerId) })
   const ledgerRole = useQuery({ queryKey: ['ledger-role', ledgerId], queryFn: () => apiFetch<{ role: LedgerRole }>(`/ledgers/${ledgerId}/role`, session!), enabled: Boolean(session && ledgerId) })
   const dimensionTypes = useQuery({ queryKey: ['dimension-types', ledgerId], queryFn: () => apiFetch<DimensionType[]>(`/ledgers/${ledgerId}/dimension-types`, session!), enabled: Boolean(session && ledgerId) })
   const [selectedTypeId, setSelectedTypeId] = useState<string>()
+  const [ledgerForm] = Form.useForm<{ name: string; description: string }>()
+  useEffect(() => { if (ledger.data) ledgerForm.setFieldsValue({ name: ledger.data.name, description: ledger.data.description || '' }) }, [ledger.data, ledgerForm])
+  const ledgerUpdate = useMutation({
+    mutationFn: (value: { name: string; description: string }) => apiFetch<Ledger>(`/ledgers/${ledgerId}`, session!, { method: 'PATCH', body: jsonBody(value) }),
+    onSuccess: (value) => { ledgerForm.setFieldsValue({ name: value.name, description: value.description || '' }); void client.invalidateQueries({ queryKey: ['ledger', ledgerId] }); messageApi.success('账套信息已保存') },
+    onError: (error) => messageApi.error(error instanceof ApiError ? error.message : '账套信息保存失败'),
+  })
   const dimensionValues = useQuery({ queryKey: ['dimension-values', ledgerId, selectedTypeId], queryFn: () => apiFetch<DimensionValue[]>(`/ledgers/${ledgerId}/dimension-types/${selectedTypeId}/values`, session!), enabled: Boolean(session && ledgerId && selectedTypeId) })
   const periodAction = useMutation({ mutationFn: ({ period, operation, reason }: { period: Period; operation: 'close' | 'reopen'; reason: string }) => apiFetch<Period>(`/ledgers/${ledgerId}/periods/${period.id}:${operation}`, session!, { method: 'POST', body: jsonBody({ reason }) }), onSuccess: () => void client.invalidateQueries({ queryKey: ['periods', ledgerId] }) })
   const openingSave = useMutation({ mutationFn: (lines: OpeningFormLine[]) => apiFetch<OpeningBalance[]>(`/ledgers/${ledgerId}/opening-balances`, session!, { method: 'PUT', body: jsonBody({ lines: lines.map((line) => ({ ...line, debitOriginal: String(line.debitOriginal), creditOriginal: String(line.creditOriginal), exchangeRate: String(line.exchangeRate) })) }) }), onSuccess: () => { messageApi.success('期初余额已保存'); void client.invalidateQueries({ queryKey: ['openings', ledgerId] }) }, onError: (error) => messageApi.error(error instanceof ApiError ? error.message : '期初余额保存失败') })
@@ -40,8 +48,8 @@ export function SettingsPage() {
     } catch (error) { messageApi.error(error instanceof ApiError ? error.message : '期末处理检查失败') }
   }
   const changeTab = (key: string) => navigate(`/ledgers/${ledgerId}/settings/${key}`)
-  return <>{contextHolder}<Space direction="vertical" size={16} style={{ width: '100%' }}><Typography.Title level={1}>账套设置</Typography.Title><Tabs activeKey={tab} onChange={changeTab} items={[
-    { key: 'periods', label: '会计期间', children: <PeriodsTab periods={periods.data || []} onAction={(period, operation) => operation === 'close' ? void openClosePanel(period) : openReasonModal('重开期间', (reason) => periodAction.mutate({ period, operation, reason }))} /> },
+  return <>{contextHolder}<Space direction="vertical" size={16} style={{ width: '100%' }}><Typography.Title level={1}>账套设置</Typography.Title><Card title="账套基本信息"><Form form={ledgerForm} layout="vertical" onFinish={(value) => ledgerUpdate.mutate(value)}><Form.Item name="name" label="账套名称" rules={[{ required: true, message: '请输入账套名称' }]}><Input disabled={!['OWNER', 'EDITOR'].includes(ledgerRole.data?.role || '')} /></Form.Item><Form.Item name="description" label="公司主营业务" rules={[{ max: 2000, message: '主营业务描述不能超过 2000 个字符' }]}><Input.TextArea rows={4} maxLength={2000} showCount disabled={!['OWNER', 'EDITOR'].includes(ledgerRole.data?.role || '')} placeholder="例如：研发、生产和销售智能硬件及配套软件" /></Form.Item><Button type="primary" htmlType="submit" loading={ledgerUpdate.isPending} disabled={!['OWNER', 'EDITOR'].includes(ledgerRole.data?.role || '')}>保存</Button></Form></Card><Tabs activeKey={tab} onChange={changeTab} items={[
+    { key: 'periods', label: '会计期间', children: <PeriodsTab periods={periods.data || []} onAction={(period, operation) => operation === 'close' ? void openClosePanel(period) : openReasonModal('反结账', (reason) => periodAction.mutate({ period, operation, reason }))} /> },
     { key: 'accounts', label: '科目', children: <AccountsTab ledgerId={ledgerId} session={session!} accounts={accounts.data || []} dimensionTypes={dimensionTypes.data || []} loading={accounts.isLoading} writable={['OWNER', 'EDITOR'].includes(ledgerRole.data?.role || '')} onChanged={() => void client.invalidateQueries({ queryKey: ['accounts', ledgerId] })} /> },
     { key: 'openings', label: '期初余额', children: <OpeningsTab rows={openings.data || []} accounts={accounts.data || []} periods={periods.data || []} onSave={(lines) => openingSave.mutate(lines)} saving={openingSave.isPending} onImport={(file) => openingImport.mutate(file)} importing={openingImport.isPending} onConfirm={requestConfirmOpening} confirming={confirmOpening.isPending} /> },
     { key: 'dimensions', label: '辅助核算', children: <DimensionsTab ledgerId={ledgerId} session={session!} types={dimensionTypes.data || []} values={dimensionValues.data || []} selectedTypeId={selectedTypeId} onSelect={setSelectedTypeId} onChanged={() => { void client.invalidateQueries({ queryKey: ['dimension-types', ledgerId] }); void client.invalidateQueries({ queryKey: ['dimension-values', ledgerId, selectedTypeId] }) }} /> },
@@ -50,7 +58,7 @@ export function SettingsPage() {
   ]} /></Space></>
 }
 
-function PeriodsTab({ periods, onAction }: { periods: Period[]; onAction: (period: Period, operation: 'close' | 'reopen') => void }) { return <Card><Table rowKey="id" dataSource={periods} columns={[{ title: '期间', dataIndex: 'periodCode' }, { title: '起止日期', render: (_: unknown, p: Period) => `${p.startDate} ~ ${p.endDate}` }, { title: '状态', dataIndex: 'status', render: (value: string) => <Tag color={value === 'OPEN' ? 'green' : 'default'}>{value}</Tag> }, { title: '操作', render: (_: unknown, p: Period) => p.status === 'OPEN' ? <Button onClick={() => onAction(p, 'close')}>关账</Button> : <Button onClick={() => onAction(p, 'reopen')}>重开</Button> }]} /></Card> }
+function PeriodsTab({ periods, onAction }: { periods: Period[]; onAction: (period: Period, operation: 'close' | 'reopen') => void }) { return <Card><Table rowKey="id" dataSource={periods} columns={[{ title: '期间', dataIndex: 'periodCode' }, { title: '起止日期', render: (_: unknown, p: Period) => `${p.startDate} ~ ${p.endDate}` }, { title: '状态', dataIndex: 'status', render: (value: string) => <Tag color={value === 'OPEN' ? 'green' : 'default'}>{value}</Tag> }, { title: '操作', render: (_: unknown, p: Period) => p.status === 'OPEN' ? <Button onClick={() => onAction(p, 'close')}>关账</Button> : <Button onClick={() => onAction(p, 'reopen')}>反结账</Button> }]} /></Card> }
 
 function OpeningsTab({ rows, accounts, periods, onSave, saving, onImport, importing, onConfirm, confirming }: { rows: OpeningBalance[]; accounts: Account[]; periods: Period[]; onSave: (lines: OpeningFormLine[]) => void; saving: boolean; onImport: (file: File) => void; importing: boolean; onConfirm: () => void; confirming: boolean }) {
   const [form] = Form.useForm<{ lines: OpeningFormLine[] }>()

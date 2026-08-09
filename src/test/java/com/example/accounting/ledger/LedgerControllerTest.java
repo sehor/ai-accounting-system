@@ -5,6 +5,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -54,6 +55,24 @@ class LedgerControllerTest {
     }
 
     @Test
+    void updatesLedgerDescription() throws Exception {
+        UUID userId = UUID.randomUUID();
+        UUID ledgerId = UUID.randomUUID();
+        when(ledgerService.renameLedger(eq(userId), eq(ledgerId), any())).thenReturn(
+                new LedgerResponses.Ledger(ledgerId, "Demo", "研发、生产和销售智能硬件", "SME", "v1", "CNY",
+                        LocalDate.of(2026, 1, 1), false, "ACTIVE"));
+
+        mockMvc.perform(patch("/v1/ledgers/{ledgerId}", ledgerId)
+                        .header("X-User-Id", userId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"Demo\",\"description\":\"研发、生产和销售智能硬件\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.description").value("研发、生产和销售智能硬件"));
+
+        verify(ledgerService).renameLedger(eq(userId), eq(ledgerId), any());
+    }
+
+    @Test
     void rejectsLedgerRequestsWithoutAnIdentity() throws Exception {
         mockMvc.perform(get("/v1/ledgers"))
                 .andExpect(status().isUnauthorized())
@@ -80,14 +99,15 @@ class LedgerControllerTest {
                 new LedgerResponses.Account(UUID.randomUUID(), ledgerId, "1002", "银行存款", "ASSET", "DEBIT", "ACTIVE")));
         when(ledgerService.listPeriods(userId, ledgerId)).thenReturn(List.of(
                 new LedgerResponses.Period(UUID.randomUUID(), ledgerId, "2026-01",
-                        LocalDate.of(2026, 1, 1), LocalDate.of(2026, 1, 31), "OPEN")));
+                        LocalDate.of(2026, 1, 1), LocalDate.of(2026, 1, 31), "OPEN", true)));
 
         mockMvc.perform(get("/v1/ledgers/{ledgerId}/accounts", ledgerId).header("X-User-Id", userId))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].code").value("1002"));
         mockMvc.perform(get("/v1/ledgers/{ledgerId}/periods", ledgerId).header("X-User-Id", userId))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0].periodCode").value("2026-01"));
+                .andExpect(jsonPath("$[0].periodCode").value("2026-01"))
+                .andExpect(jsonPath("$[0].hasVouchers").value(true));
 
         verify(ledgerService).listAccounts(userId, ledgerId);
         verify(ledgerService).listPeriods(userId, ledgerId);

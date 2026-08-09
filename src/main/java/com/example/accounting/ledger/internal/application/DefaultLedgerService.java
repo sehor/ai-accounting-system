@@ -1,5 +1,6 @@
 package com.example.accounting.ledger.internal.application;
 
+import com.example.accounting.administration.PlatformAdminPolicy;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.example.accounting.identity.CurrentUserResolver;
@@ -15,6 +16,7 @@ import com.example.accounting.ledger.LedgerRole;
 import com.example.accounting.ledger.LedgerService;
 import com.example.accounting.ledger.MembershipStatus;
 import com.example.accounting.ledger.PeriodCloseGuard;
+import com.example.accounting.shared.balance.BalanceProjectionService;
 import com.example.accounting.ledger.internal.persistence.AccountManagementRepository;
 import com.example.accounting.ledger.internal.port.LedgerRepository;
 import com.example.accounting.shared.web.ApiProblemException;
@@ -37,11 +39,16 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class DefaultLedgerService implements LedgerService {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(DefaultLedgerService.class);
 
     private static final Set<LedgerRole> VIEW_ROLES = Set.of(
             LedgerRole.OWNER, LedgerRole.EDITOR, LedgerRole.REVIEWER, LedgerRole.VIEWER, LedgerRole.AGENT);
@@ -61,12 +68,17 @@ public class DefaultLedgerService implements LedgerService {
     private final AccountingStandardCatalog standards;
     private final ObjectProvider<PeriodCloseGuard> periodCloseGuard;
     private final LocalSuperAgentPolicy localSuperAgent;
+    private final PlatformAdminPolicy platformAdmin;
+    private final BalanceProjectionService balanceProjection;
     private final ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
 
+    @Autowired
     public DefaultLedgerService(LedgerRepository ledgers, AccountManagementRepository accounts,
                                 LedgerAccessService ledgerAccess, IdentityService identityService,
                                 AccountingStandardCatalog standards, ObjectProvider<PeriodCloseGuard> periodCloseGuard,
-                                LocalSuperAgentPolicy localSuperAgent) {
+                                LocalSuperAgentPolicy localSuperAgent,
+                                PlatformAdminPolicy platformAdmin,
+                                BalanceProjectionService balanceProjection) {
         this.ledgers = ledgers;
         this.accounts = accounts;
         this.ledgerAccess = ledgerAccess;
@@ -74,6 +86,17 @@ public class DefaultLedgerService implements LedgerService {
         this.standards = standards;
         this.periodCloseGuard = periodCloseGuard;
         this.localSuperAgent = localSuperAgent;
+        this.platformAdmin = platformAdmin;
+        this.balanceProjection = balanceProjection;
+    }
+
+    /** Compatibility constructor for focused unit tests that do not load the projection module. */
+    public DefaultLedgerService(LedgerRepository ledgers, AccountManagementRepository accounts,
+                                LedgerAccessService ledgerAccess, IdentityService identityService,
+                                AccountingStandardCatalog standards, ObjectProvider<PeriodCloseGuard> periodCloseGuard,
+                                LocalSuperAgentPolicy localSuperAgent, PlatformAdminPolicy platformAdmin) {
+        this(ledgers, accounts, ledgerAccess, identityService, standards, periodCloseGuard,
+                localSuperAgent, platformAdmin, new NoopBalanceProjectionService());
     }
 
     @Override
@@ -86,7 +109,8 @@ public class DefaultLedgerService implements LedgerService {
         AccountCodeRule rule = request.accountCodeRule() == null
                 ? standard.accountCodeRule() : request.accountCodeRule();
         UUID ledgerId = UUID.randomUUID();
-        ledgers.createLedger(ledgerId, request.name().trim(), request.accountingStandardCode().trim(),
+        String description = normalizeDescription(request.description());
+        ledgers.createLedger(ledgerId, request.name().trim(), description, request.accountingStandardCode().trim(),
                 request.accountingStandardVersion().trim(), request.baseCurrency(), request.startDate(),
                 Boolean.TRUE.equals(request.approvalEnabled()), actorId);
         ledgers.createOwner(ledgerId, actorId);
@@ -98,7 +122,7 @@ public class DefaultLedgerService implements LedgerService {
     @Override
     @Transactional(readOnly = true)
     public List<LedgerResponses.Ledger> list(UUID actorId) {
-        return ledgers.list(actorId);
+        return platformAdmin.isPlatformAdmin(actorId) ? ledgers.listAllActive() : ledgers.list(actorId);
     }
 
     @Override
@@ -118,7 +142,8 @@ public class DefaultLedgerService implements LedgerService {
             throw problem(422, "INVALID_LEDGER_NAME", "Invalid ledger name",
                     "Ledger name must contain between 1 and 200 characters");
         }
-        ledgers.updateLedgerName(ledgerId, name, actorId);
+        String description = request.description() == null ? null : normalizeDescription(request.description());
+        ledgers.updateLedger(ledgerId, name, description, actorId);
         return requireLedger(ledgerId);
     }
 
@@ -273,14 +298,35 @@ public class DefaultLedgerService implements LedgerService {
     public void deleteAccount(UUID actorId, UUID ledgerId, UUID accountId, long expectedVersion) {
         requireRole(actorId, ledgerId, WRITE_ROLES);
         LedgerResponses.Account before = requireAccount(ledgerId, accountId);
-        if (!accounts.delete(ledgerId, accountId, expectedVersion)) {
-            if (before.version() != expectedVersion) {
-                throw versionConflict();
-            }
+        if (before.version() != expectedVersion) {
+            throw versionConflict();
+        }
+        if (before.isTemplate() || !before.isLeaf()) {
             throw problem(409, "ACCOUNT_DELETE_FORBIDDEN", "Account cannot be deleted",
                     "Only an unused custom leaf account can be deleted; disable other accounts instead");
         }
-        accounts.recordRevision(ledgerId, accountId, "DELETE", actorId, json(before), "null");
+        if (accounts.hasVoucherLines(ledgerId, accountId)) {
+            throw problem(409, "ACCOUNT_HAS_VOUCHER_LINES", "Account cannot be deleted",
+                    "The account is referenced by voucher lines");
+        }
+        if (accounts.hasOpeningBalances(ledgerId, accountId)) {
+            throw problem(409, "ACCOUNT_HAS_OPENING_BALANCE", "Account cannot be deleted",
+                    "The account is referenced by opening balances");
+        }
+        accounts.findConfigurationReference(ledgerId, accountId).ifPresent(reference -> {
+            throw problem(409, "ACCOUNT_REFERENCED_BY_CONFIGURATION", "Account cannot be deleted",
+                    "The account is referenced by " + reference);
+        });
+        try {
+            if (!accounts.delete(ledgerId, accountId, expectedVersion)) {
+                throw problem(409, "ACCOUNT_DELETE_CONFLICT", "Account cannot be deleted",
+                        "The account acquired a reference or changed before deletion");
+            }
+        } catch (DataIntegrityViolationException exception) {
+            throw problem(409, "ACCOUNT_REFERENCED_BY_CONFIGURATION", "Account cannot be deleted",
+                    "The account is still referenced by a business configuration");
+        }
+        LOGGER.info("Account deleted: ledgerId={}, accountId={}, actorId={}", ledgerId, accountId, actorId);
     }
 
     @Override
@@ -403,6 +449,7 @@ public class DefaultLedgerService implements LedgerService {
         }
         ledgers.deleteUnconfirmedOpeningBalances(ledgerId);
         for (LedgerRequests.OpeningBalanceLine line : lines) {
+            balanceProjection.requireOpenPeriod(ledgerId, line.periodId());
             validateOpeningBalanceLine(ledgerId, line);
             BigDecimal debit = money(line.debitOriginal());
             BigDecimal credit = money(line.creditOriginal());
@@ -430,7 +477,21 @@ public class DefaultLedgerService implements LedgerService {
             throw problem(422, "OPENING_BALANCE_UNBALANCED", "Opening balance is not balanced",
                     "Opening balance debit and credit totals must balance");
         }
-        return ledgers.confirmOpeningBalances(ledgerId);
+        int confirmed = ledgers.confirmOpeningBalances(ledgerId);
+        if (confirmed > 0) {
+            ledgers.listOpeningBalances(ledgerId).stream().filter(LedgerResponses.OpeningBalance::confirmed)
+                    .forEach(balance -> balanceProjection.publishOpeningBalances(
+                            new BalanceProjectionService.OpeningBalanceEvent(
+                                    ledgerId, balance.periodId(), balance.id(), 1,
+                                    List.of(new BalanceProjectionService.Entry(balance.accountId(),
+                                            balance.debitBase().max(BigDecimal.ZERO)
+                                                    .add(balance.creditBase().negate().max(BigDecimal.ZERO)),
+                                            balance.creditBase().max(BigDecimal.ZERO)
+                                                    .add(balance.debitBase().negate().max(BigDecimal.ZERO)),
+                                            BigDecimal.ZERO,
+                                            BigDecimal.ZERO)))));
+        }
+        return confirmed;
     }
 
     @Override
@@ -542,7 +603,13 @@ public class DefaultLedgerService implements LedgerService {
             throw problem(409, "PERIOD_STATE_INVALID", "Invalid period state",
                     "The period must be " + expectedStatus + " before it can be changed");
         }
+        String reason = request.reason() == null ? "" : request.reason().trim();
+        if (reason.isEmpty()) {
+            throw problem(422, "PERIOD_REASON_REQUIRED", "Reason is required",
+                    "A reason is required for period changes");
+        }
         if ("CLOSED".equals(nextStatus)) {
+            balanceProjection.requireReadyForClose(ledgerId, periodId);
             List<String> blockers = periodCloseGuard.orderedStream()
                     .flatMap(guard -> guard.blockers(actorId, ledgerId, periodId).stream())
                     .distinct().toList();
@@ -551,15 +618,13 @@ public class DefaultLedgerService implements LedgerService {
                         String.join("; ", blockers));
             }
         }
-        String reason = request.reason() == null ? "" : request.reason().trim();
-        if (reason.isEmpty()) {
-            throw problem(422, "PERIOD_REASON_REQUIRED", "Reason is required",
-                    "A reason is required for period changes");
-        }
         ledgers.updatePeriodStatus(ledgerId, periodId, nextStatus);
+        if ("OPEN".equals(nextStatus)) {
+            balanceProjection.markReopened(ledgerId, periodId);
+        }
         ledgers.recordPeriodAction(ledgerId, periodId, action, reason, actorId);
         return new LedgerResponses.Period(period.id(), period.ledgerId(), period.periodCode(), period.startDate(),
-                period.endDate(), nextStatus);
+                period.endDate(), nextStatus, period.hasVouchers());
     }
 
     private void requireDimensionType(UUID actorId, UUID ledgerId, UUID typeId, boolean write) {
@@ -780,6 +845,15 @@ public class DefaultLedgerService implements LedgerService {
         return provided == null ? fallback : provided;
     }
 
+    private String normalizeDescription(String description) {
+        String normalized = description == null ? "" : description.trim();
+        if (normalized.length() > 2000) {
+            throw problem(422, "INVALID_LEDGER_DESCRIPTION", "Invalid ledger description",
+                    "Ledger description must contain at most 2000 characters");
+        }
+        return normalized;
+    }
+
     private String json(Object value) {
         try {
             return objectMapper.writeValueAsString(value);
@@ -826,6 +900,17 @@ public class DefaultLedgerService implements LedgerService {
 
     private ApiProblemException problem(int status, String code, String title, String detail) {
         return new ApiProblemException(status, code, title, detail, false);
+    }
+
+    private static final class NoopBalanceProjectionService implements BalanceProjectionService {
+        @Override public void publishVoucher(VoucherEvent event) { }
+        @Override public void publishOpeningBalances(OpeningBalanceEvent event) { }
+        @Override public void requireOpenPeriod(UUID ledgerId, UUID periodId) { }
+        @Override public void requireReadyForClose(UUID ledgerId, UUID periodId) { }
+        @Override public void markReopened(UUID ledgerId, UUID periodId) { }
+        @Override public ProjectionStatus status(UUID ledgerId, String periodCode) {
+            return new ProjectionStatus("READY", 0, 0, null, null);
+        }
     }
 
     private record ParentResolution(

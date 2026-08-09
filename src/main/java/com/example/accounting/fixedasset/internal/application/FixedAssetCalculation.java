@@ -4,7 +4,6 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.YearMonth;
-import java.time.temporal.ChronoUnit;
 
 /** Pure monthly depreciation rules shared by previews and posting. */
 public final class FixedAssetCalculation {
@@ -21,33 +20,30 @@ public final class FixedAssetCalculation {
         if (asset.disposalDate() != null && period.isAfter(YearMonth.from(asset.disposalDate()))) {
             return BigDecimal.ZERO.setScale(2);
         }
-        BigDecimal basis = asset.originalCost()
+        BigDecimal depreciableAmount = asset.originalCost()
                 .subtract(asset.residualAmount())
-                .subtract(asset.impairmentAmount())
-                .subtract(asset.accumulatedDepreciation());
-        if (basis.signum() <= 0 || asset.usefulLifeMonths() <= asset.openingDepreciatedMonths()) {
+                .subtract(asset.impairmentAmount());
+        BigDecimal openingBasis = depreciableAmount.subtract(asset.openingAccumulatedDepreciation());
+        BigDecimal remainingAmount = depreciableAmount.subtract(asset.accumulatedDepreciation());
+        int openingRemainingMonths = asset.usefulLifeMonths() - asset.openingDepreciatedMonths();
+        int remainingMonths = asset.usefulLifeMonths() - asset.depreciatedMonths();
+        if (openingBasis.signum() <= 0 || remainingAmount.signum() <= 0
+                || openingRemainingMonths <= 0 || remainingMonths <= 0) {
             return BigDecimal.ZERO.setScale(2);
         }
 
-        long elapsedEligibleMonths = ChronoUnit.MONTHS.between(serviceMonth, period);
-        long currentDepreciatedMonths = Math.max(asset.openingDepreciatedMonths(), elapsedEligibleMonths);
-        long remainingBefore = asset.usefulLifeMonths() - currentDepreciatedMonths;
-        if (remainingBefore <= 0) {
-            return BigDecimal.ZERO.setScale(2);
+        BigDecimal regular = openingBasis.divide(
+                BigDecimal.valueOf(openingRemainingMonths), 2, RoundingMode.HALF_UP);
+        if (remainingMonths == 1) {
+            return remainingAmount.setScale(2, RoundingMode.HALF_UP);
         }
-        BigDecimal regular = basis.divide(BigDecimal.valueOf(
-                asset.usefulLifeMonths() - asset.openingDepreciatedMonths()), 2, RoundingMode.HALF_UP);
-        if (remainingBefore == 1) {
-            BigDecimal alreadyAllocated = regular.multiply(BigDecimal.valueOf(
-                    asset.usefulLifeMonths() - asset.openingDepreciatedMonths() - 1));
-            return basis.subtract(alreadyAllocated).max(BigDecimal.ZERO).setScale(2, RoundingMode.HALF_UP);
-        }
-        return regular;
+        return regular.min(remainingAmount).setScale(2, RoundingMode.HALF_UP);
     }
 
     public record Asset(LocalDate serviceDate, BigDecimal originalCost, BigDecimal residualAmount,
-                        int usefulLifeMonths, BigDecimal accumulatedDepreciation,
-                        int openingDepreciatedMonths, LocalDate disposalDate,
+                        int usefulLifeMonths, BigDecimal openingAccumulatedDepreciation,
+                        int openingDepreciatedMonths, BigDecimal accumulatedDepreciation,
+                        int depreciatedMonths, LocalDate disposalDate,
                         BigDecimal impairmentAmount) {
     }
 }

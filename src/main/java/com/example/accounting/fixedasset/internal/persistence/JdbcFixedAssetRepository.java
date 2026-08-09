@@ -236,15 +236,17 @@ public class JdbcFixedAssetRepository implements FixedAssetRepository {
     }
 
     @Override
-    public BigDecimal postedDepreciationBefore(UUID ledgerId, UUID assetId, UUID periodStartPeriodId) {
+    public DepreciationHistory depreciationBefore(UUID ledgerId, UUID assetId, UUID periodStartPeriodId) {
         return jdbc.queryForObject("""
-                select coalesce(sum(l.amount), 0)
+                select coalesce(sum(l.amount), 0) amount, count(*) periods
                 from fixed_asset_depreciation_line l
                 join accounting_period p on p.ledger_id = l.ledger_id and p.id = l.period_id
                 join accounting_period target on target.ledger_id = ? and target.id = ?
                 where l.ledger_id = ? and l.asset_id = ? and l.status = 'ACTIVE'
                     and p.start_date < target.start_date
-                """, BigDecimal.class, ledgerId, periodStartPeriodId, ledgerId, assetId);
+                """, (rs, row) -> new DepreciationHistory(
+                rs.getBigDecimal("amount"), rs.getInt("periods")),
+                ledgerId, periodStartPeriodId, ledgerId, assetId);
     }
 
     @Override

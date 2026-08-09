@@ -104,6 +104,40 @@ class McpStatelessHttpIntegrationTest {
     }
 
     @Test
+    void createSchemasRequireLedgerExperience() throws Exception {
+        HttpResponse<String> tools = post("""
+                {"jsonrpc":"2.0","id":7,"method":"tools/list","params":{}}
+                """);
+        List<JsonNode> definitions = objectMapper.readTree(tools.body()).path("result").path("tools").valueStream()
+                .toList();
+        JsonNode createVoucher = definitions.stream()
+                .filter(tool -> "create_voucher".equals(tool.path("name").asText())).findFirst().orElseThrow();
+        JsonNode createExperience = definitions.stream()
+                .filter(tool -> "create_accounting_experience".equals(tool.path("name").asText()))
+                .findFirst().orElseThrow();
+
+        assertThat(createVoucher.path("inputSchema").path("properties").path("request").path("required"))
+                .extracting(JsonNode::asText).doesNotContain("voucherNumber");
+        assertThat(createExperience.path("inputSchema").path("properties").path("request").path("required"))
+                .extracting(JsonNode::asText).contains("ledgerId");
+    }
+
+    @Test
+    void voucherListingSchemaSupportsKeywordAndDateRangeFilters() throws Exception {
+        HttpResponse<String> tools = post("""
+                {"jsonrpc":"2.0","id":8,"method":"tools/list","params":{}}
+                """);
+        JsonNode listVouchers = objectMapper.readTree(tools.body()).path("result").path("tools").valueStream()
+                .filter(tool -> "list_vouchers".equals(tool.path("name").asText())).findFirst().orElseThrow();
+        JsonNode properties = listVouchers.path("inputSchema").path("properties");
+
+        assertThat(properties.has("keyword")).isTrue();
+        assertThat(properties.path("startDate").path("format").asText()).isEqualTo("date");
+        assertThat(properties.path("endDate").path("format").asText()).isEqualTo("date");
+        assertThat(properties.has("periodCode")).isTrue();
+    }
+
+    @Test
     void accountImportExposesOnlyTheAtomicBatchDecisionTool() throws Exception {
         HttpResponse<String> tools = post("""
                 {"jsonrpc":"2.0","id":6,"method":"tools/list","params":{}}

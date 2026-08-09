@@ -36,7 +36,7 @@ For the local `super-agent`, `get_ledger_role` returns effective role `OWNER` fo
 - `list_vouchers`, `get_voucher`: read and verify.
 - `create_voucher_draft`, `create_voucher`: create using exact ledger IDs and account IDs.
 - `validate_voucher`, `submit_voucher`, `approve_voucher`, `reject_voucher`, `post_voucher`: advance state only as authorized.
-- `update_voucher`, `reverse_voucher`, `unpost_voucher`, `delete_voucher`, `restore_deleted_voucher`, `restore_voucher_revision`: corrective operations requiring exact targets and explicit scope.
+- `update_voucher`, `reverse_voucher`, `unpost_voucher`, `delete_voucher`, `restore_voucher_revision`: corrective operations requiring exact targets and explicit scope.
 - `import_kingdee_vouchers`, `export_kingdee_vouchers`: batch exchange.
 
 Do not assume every listed state tool exists in every server version. Follow the tool schema currently exposed.
@@ -63,8 +63,8 @@ Confirm targets and output handling. Never overwrite or discard an existing ledg
 
 ## Accounting experience
 
-- `search_accounting_experiences`: load active experience only when generating a voucher or voucher draft. Immediately before line mapping, send `{"ledgerId":null,"page":1,"pageSize":50}` without `query` or `tags`, then request every page through `totalPages`; a null ledger ID returns only `GENERAL` records. Keep the complete result set in context and reuse it across all lines. Use the selected ledger ID in a separate search only when ledger-specific guidance is needed.
-- `create_accounting_experience`: save confirmed experience.
+- `search_accounting_experiences`: search only directly relevant `LEDGER` experience for an unresolved company-specific question. Use the bundled template skills for cross-ledger rules.
+- `create_accounting_experience`: save confirmed `LEDGER` experience. Cross-ledger rules require a plugin-skill update.
 - `update_accounting_experience`: revise using the expected version.
 - `archive_accounting_experience`: soft-archive only on explicit request.
 
