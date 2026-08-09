@@ -1273,6 +1273,7 @@ export interface components {
             subject?: string;
             displayName?: string;
             email?: string;
+            userType?: "HUMAN" | "AGENT";
             status?: string;
         };
         Revision: {
@@ -2888,7 +2889,9 @@ export interface operations {
     };
     exportKingdee: {
         parameters: {
-            query?: never;
+            query?: {
+                mergeEntries?: boolean;
+            };
             header?: never;
             path: {
                 ledgerId: string;

@@ -7,6 +7,7 @@ import com.example.accounting.identity.internal.port.IdentityRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import java.util.Optional;
+import java.util.UUID;
 
 @Service
 public class DefaultIdentityService implements IdentityService {
@@ -30,7 +31,20 @@ public class DefaultIdentityService implements IdentityService {
                 return existing.get();
             }
         }
-        return users.upsert(actor.id(), actor.issuer(), subject, displayName, actor.email());
+
+        return users.upsert(actor.id(), actor.issuer(), subject, displayName, actor.email(), actor.userType());
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<UserResponse> findLocalUser(String username) {
+        return users.findByLocalUsername(username.trim());
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<UserResponse> findUser(UUID id) {
+        return users.findById(id);
     }
 
     @Override

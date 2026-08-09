@@ -41,6 +41,17 @@ describe('local login', () => {
     expect(sessionStorage.getItem('ai-accounting.session')).toBeNull()
   })
 
+  it('shows that an unknown local username does not exist', async () => {
+    vi.mocked(apiFetch).mockRejectedValue(new ApiError(401, { code: 'UNKNOWN_LOCAL_USER' }))
+    render(<MemoryRouter><AuthProvider><LoginPage /></AuthProvider></MemoryRouter>)
+
+    fireEvent.change(screen.getByLabelText('用户名'), { target: { value: 'missing-user' } })
+    fireEvent.click(screen.getByRole('button', { name: '进入本地工作台' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('用户不存在')
+    expect(sessionStorage.getItem('ai-accounting.session')).toBeNull()
+  })
+
   it('creates the session only after the backend accepts the username', async () => {
     const canonicalUserId = '00000000-0000-4000-8000-000000000123'
     vi.mocked(apiFetch).mockResolvedValue({
@@ -49,6 +60,7 @@ describe('local login', () => {
       subject: 'admin',
       displayName: 'admin',
       email: null,
+      userType: 'HUMAN',
       status: 'ACTIVE',
     })
     render(<MemoryRouter><AuthProvider><LoginPage /></AuthProvider></MemoryRouter>)

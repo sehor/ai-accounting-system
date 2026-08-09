@@ -1,0 +1,26 @@
+{
+  "name": "ai-accounting-system",
+  "version": "0.1.3",
+  "description": "Guides AI agents to record accounting materials, vouchers, balances, assets, and accounting experience through the local ai-accounting-system MCP service.",
+  "author": {
+    "name": "Local developer"
+  },
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "AI 会计系统记账助手",
+    "shortDescription": "通过本地 MCP 安全录入会计资料与凭证。",
+    "longDescription": "指导 AI Agent 使用 ai-accounting-system 的现有 MCP 工具完成账套识别、科目核对、资料上传、期初与固定资产导入、凭证处理、报表复核和经验沉淀。",
+    "developerName": "Local developer",
+    "category": "Productivity",
+    "capabilities": [
+      "Read",
+      "Write"
+    ],
+    "defaultPrompt": [
+      "把这些会计资料核对后记入 AI 会计系统。",
+      "查询指定账套的科目、凭证和财务报表。",
+      "将确认后的做账规则保存为账套经验。"
+    ]
+  },
+  "mcpServers": "./.mcp.json"
+}

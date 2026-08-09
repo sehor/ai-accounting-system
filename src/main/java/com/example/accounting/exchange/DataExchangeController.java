@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestPart;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -42,10 +43,12 @@ public class DataExchangeController {
 
     @GetMapping(value = "/kingdee:export", produces =
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-    public ResponseEntity<byte[]> exportKingdee(HttpServletRequest request, @PathVariable UUID ledgerId) {
+    public ResponseEntity<byte[]> exportKingdee(
+            HttpServletRequest request, @PathVariable UUID ledgerId,
+            @RequestParam(defaultValue = "false") boolean mergeEntries) {
         return ResponseEntity.ok()
                 .contentType(XLSX)
                 .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"kingdee-vouchers.xlsx\"")
-                .body(kingdee.exportKingdee(currentUserResolver.resolve(request), ledgerId));
+                .body(kingdee.exportKingdee(currentUserResolver.resolve(request), ledgerId, mergeEntries));
     }
 }

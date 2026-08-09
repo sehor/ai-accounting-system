@@ -32,7 +32,7 @@ class DataExchangeControllerTest {
         UUID ledgerId = UUID.randomUUID();
         when(service.importKingdee(eq(actorId), eq(ledgerId), eq("upload-1"), eq(3L), any()))
                 .thenReturn(new KingdeeExchange.ImportResult(1, 2));
-        when(service.exportKingdee(actorId, ledgerId)).thenReturn(new byte[]{1, 2, 3});
+        when(service.exportKingdee(actorId, ledgerId, false)).thenReturn(new byte[]{1, 2, 3});
 
         mockMvc.perform(multipart("/v1/ledgers/{ledgerId}/data-exchange/kingdee:import", ledgerId)
                         .file(new MockMultipartFile("file", "kingdee.xlsx",
@@ -51,6 +51,21 @@ class DataExchangeControllerTest {
                         "attachment; filename=\"kingdee-vouchers.xlsx\""))
                 .andExpect(content().bytes(new byte[]{1, 2, 3}));
 
-        verify(service).exportKingdee(actorId, ledgerId);
+        verify(service).exportKingdee(actorId, ledgerId, false);
+    }
+
+    @Test
+    void passesTheMergeChoiceToTheExporter() throws Exception {
+        UUID actorId = UUID.randomUUID();
+        UUID ledgerId = UUID.randomUUID();
+        when(service.exportKingdee(actorId, ledgerId, true)).thenReturn(new byte[]{4, 5, 6});
+
+        mockMvc.perform(get("/v1/ledgers/{ledgerId}/data-exchange/kingdee:export", ledgerId)
+                        .queryParam("mergeEntries", "true")
+                        .header("X-User-Id", actorId))
+                .andExpect(status().isOk())
+                .andExpect(content().bytes(new byte[]{4, 5, 6}));
+
+        verify(service).exportKingdee(actorId, ledgerId, true);
     }
 }

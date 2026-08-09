@@ -15,9 +15,11 @@ import java.time.YearMonth;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 import org.apache.poi.ss.usermodel.Cell;
@@ -74,6 +76,11 @@ public class KingdeeExchange {
 
     @Transactional(readOnly = true)
     public byte[] exportKingdee(UUID actorId, UUID ledgerId) {
+        return exportKingdee(actorId, ledgerId, false);
+    }
+
+    @Transactional(readOnly = true)
+    public byte[] exportKingdee(UUID actorId, UUID ledgerId, boolean mergeEntries) {
         Map<UUID, LedgerResponses.Account> accounts = ledgers.listAccounts(actorId, ledgerId).stream()
                 .collect(Collectors.toMap(LedgerResponses.Account::id, account -> account));
         List<VoucherResponses.Voucher> all = new ArrayList<>();
@@ -87,6 +94,12 @@ public class KingdeeExchange {
         all.sort(Comparator.comparing(VoucherResponses.Voucher::voucherDate)
                 .thenComparing(VoucherResponses.Voucher::voucherType)
                 .thenComparing(VoucherResponses.Voucher::voucherNumber));
+        if (mergeEntries) {
+            all = mergeSimilarVouchers(all, accounts);
+            all.sort(Comparator.comparing(VoucherResponses.Voucher::voucherDate)
+                    .thenComparing(VoucherResponses.Voucher::voucherType)
+                    .thenComparing(VoucherResponses.Voucher::voucherNumber));
+        }
         try (InputStream template = getClass().getResourceAsStream("/template/jindie.xlsx")) {
             if (template == null) {
                 throw problem(500, "KINGDEE_TEMPLATE_MISSING", "Kingdee template missing",
@@ -124,6 +137,259 @@ public class KingdeeExchange {
         } catch (Exception exception) {
             throw problem(500, "KINGDEE_EXPORT_FAILED", "Kingdee export failed",
                     "The Kingdee workbook could not be generated");
+        }
+    }
+
+    private List<VoucherResponses.Voucher> mergeSimilarVouchers(
+            List<VoucherResponses.Voucher> source,
+            Map<UUID, LedgerResponses.Account> accounts) {
+        Map<YearMonth, List<VoucherResponses.Voucher>> byPeriod = new LinkedHashMap<>();
+        for (VoucherResponses.Voucher voucher : source) {
+            byPeriod.computeIfAbsent(YearMonth.from(voucher.voucherDate()), ignored -> new ArrayList<>())
+                    .add(voucher);
+        }
+        List<VoucherResponses.Voucher> result = new ArrayList<>();
+        for (List<VoucherResponses.Voucher> period : byPeriod.values()) {
+            result.addAll(mergePeriod(period, accounts));
+        }
+        return result;
+    }
+
+    private List<VoucherResponses.Voucher> mergePeriod(
+            List<VoucherResponses.Voucher> period,
+            Map<UUID, LedgerResponses.Account> accounts) {
+        Map<MergeGroupKey, List<VoucherResponses.Voucher>> groups = new LinkedHashMap<>();
+        List<VoucherResponses.Voucher> unchanged = new ArrayList<>();
+        for (VoucherResponses.Voucher voucher : period) {
+            MergeCategory category = category(voucher, accounts);
+            if (category == null) {
+                unchanged.add(voucher);
+                continue;
+            }
+            MergeGroupKey key = new MergeGroupKey(category, bankAccountIds(voucher, accounts));
+            groups.computeIfAbsent(key, ignored -> new ArrayList<>()).add(voucher);
+        }
+
+        int nextVoucherNumber = period.stream()
+                .map(VoucherResponses.Voucher::voucherNumber)
+                .map(KingdeeExchange::numericVoucherNumber)
+                .filter(number -> number != null)
+                .max(Integer::compareTo)
+                .map(number -> number + 1)
+                .orElse(1000);
+        List<VoucherResponses.Voucher> merged = new ArrayList<>();
+        for (Map.Entry<MergeGroupKey, List<VoucherResponses.Voucher>> entry : groups.entrySet()) {
+            if (entry.getValue().size() < 2) {
+                unchanged.addAll(entry.getValue());
+                continue;
+            }
+            merged.add(mergeGroup(entry.getKey().category(), entry.getValue(), nextVoucherNumber++));
+        }
+        unchanged.addAll(merged);
+        return unchanged;
+    }
+
+    private VoucherResponses.Voucher mergeGroup(
+            MergeCategory category, List<VoucherResponses.Voucher> group, int voucherNumber) {
+        VoucherResponses.Voucher base = group.stream()
+                .max(Comparator.comparing(VoucherResponses.Voucher::voucherDate))
+                .orElseThrow();
+        Map<ExportLineKey, MergedLine> aggregate = new LinkedHashMap<>();
+        for (VoucherResponses.Voucher voucher : group) {
+            String sourceSummary = voucher.summary() == null ? "" : voucher.summary();
+            for (VoucherResponses.Line line : voucher.lines()) {
+                ExportLineKey key = new ExportLineKey(line.accountId(), line.side(), line.currency(),
+                        line.exchangeRate().stripTrailingZeros());
+                aggregate.computeIfAbsent(key, ignored -> new MergedLine(line, sourceSummary)).add(line);
+            }
+        }
+        String fixedSummary = category.fixedSummary();
+        List<MergedLine> ordered = aggregate.values().stream()
+                .sorted(Comparator.comparingInt(line -> "DEBIT".equals(line.first.side()) ? 0 : 1))
+                .toList();
+        List<VoucherResponses.Line> lines = new ArrayList<>();
+        int lineNumber = 1;
+        for (MergedLine line : ordered) {
+            lines.add(line.toLine(lineNumber++, fixedSummary));
+        }
+        return new VoucherResponses.Voucher(base.id(), base.ledgerId(), base.periodId(), base.voucherDate(),
+                base.voucherType(), Integer.toString(voucherNumber),
+                fixedSummary == null ? base.summary() : fixedSummary,
+                base.status(), base.approvalRequired(), base.version(), lines);
+    }
+
+    private MergeCategory category(
+            VoucherResponses.Voucher voucher,
+            Map<UUID, LedgerResponses.Account> accounts) {
+        if (hasLine(voucher, accounts, "DEBIT", "应付账款", false)) {
+            return MergeCategory.PURCHASE_PAYMENT;
+        }
+        if (hasLine(voucher, accounts, "CREDIT", "应收账款", false)) {
+            return MergeCategory.SALES_COLLECTION;
+        }
+        if (hasLine(voucher, accounts, "DEBIT", "财务费用", false)) {
+            return MergeCategory.BANK_FEE;
+        }
+        if (hasLine(voucher, accounts, "DEBIT", "其他应收款", false)) {
+            return MergeCategory.OTHER_RECEIVABLE;
+        }
+        if (hasLine(voucher, accounts, "CREDIT", "其他应付款", false)) {
+            return MergeCategory.OTHER_PAYABLE;
+        }
+        if (hasLine(voucher, accounts, "DEBIT", "预付账款", false)) {
+            return MergeCategory.ADVANCE_PAYMENT;
+        }
+        if (hasLine(voucher, accounts, "CREDIT", "预收账款", false)) {
+            return MergeCategory.ADVANCE_RECEIPT;
+        }
+        List<LedgerResponses.Account> employeeCompensation = matchingAccounts(
+                voucher, accounts, "DEBIT", "应付职工薪酬", true);
+        if (employeeCompensation.stream().anyMatch(account -> containsAny(account.name(), "社保", "社会保险"))) {
+            return MergeCategory.SOCIAL_SECURITY_PAYMENT;
+        }
+        if (employeeCompensation.stream().anyMatch(account -> account.name().contains("公积金"))) {
+            return MergeCategory.PROVIDENT_FUND_PAYMENT;
+        }
+        if (!employeeCompensation.isEmpty()) {
+            return MergeCategory.SALARY_PAYMENT;
+        }
+        if (hasLine(voucher, accounts, null, "应交税费", true)
+                || contains(voucher.summary(), "缴纳税费")) {
+            return MergeCategory.TAX_PAYMENT;
+        }
+        if (hasLine(voucher, accounts, "CREDIT", "主营业务收入", true)) {
+            return MergeCategory.INVOICE_ISSUED;
+        }
+        if (hasLine(voucher, accounts, "DEBIT", "库存商品", true)
+                || contains(voucher.summary(), "收到发票确认成本")) {
+            return MergeCategory.INVOICE_RECEIVED;
+        }
+        return contains(voucher.summary(), "报销") ? MergeCategory.EXPENSE_REIMBURSEMENT : null;
+    }
+
+    private boolean hasLine(
+            VoucherResponses.Voucher voucher,
+            Map<UUID, LedgerResponses.Account> accounts,
+            String side, String topLevelName, boolean prefix) {
+        return !matchingAccounts(voucher, accounts, side, topLevelName, prefix).isEmpty();
+    }
+
+    private List<LedgerResponses.Account> matchingAccounts(
+            VoucherResponses.Voucher voucher,
+            Map<UUID, LedgerResponses.Account> accounts,
+            String side, String topLevelName, boolean prefix) {
+        return voucher.lines().stream()
+                .filter(line -> side == null || side.equals(line.side()))
+                .map(line -> accounts.get(line.accountId()))
+                .filter(account -> account != null)
+                .filter(account -> {
+                    String name = topLevelAccount(account, accounts).name();
+                    return prefix ? name.startsWith(topLevelName) : name.equals(topLevelName);
+                })
+                .toList();
+    }
+
+    private Set<UUID> bankAccountIds(
+            VoucherResponses.Voucher voucher,
+            Map<UUID, LedgerResponses.Account> accounts) {
+        Set<UUID> bankAccounts = new LinkedHashSet<>();
+        for (VoucherResponses.Line line : voucher.lines()) {
+            LedgerResponses.Account account = accounts.get(line.accountId());
+            if (account != null && topLevelAccount(account, accounts).name().startsWith("银行存款")) {
+                bankAccounts.add(line.accountId());
+            }
+        }
+        return Set.copyOf(bankAccounts);
+    }
+
+    private LedgerResponses.Account topLevelAccount(
+            LedgerResponses.Account account,
+            Map<UUID, LedgerResponses.Account> accounts) {
+        Set<UUID> visited = new LinkedHashSet<>();
+        LedgerResponses.Account current = account;
+        while (current.parentId() != null && visited.add(current.id())) {
+            LedgerResponses.Account parent = accounts.get(current.parentId());
+            if (parent == null) {
+                break;
+            }
+            current = parent;
+        }
+        return current;
+    }
+
+    private static Integer numericVoucherNumber(String value) {
+        if (value == null) {
+            return null;
+        }
+        try {
+            return Integer.valueOf(value.trim());
+        } catch (NumberFormatException exception) {
+            return null;
+        }
+    }
+
+    private static boolean contains(String value, String expected) {
+        return value != null && value.contains(expected);
+    }
+
+    private static boolean containsAny(String value, String first, String second) {
+        return value.contains(first) || value.contains(second);
+    }
+
+    private enum MergeCategory {
+        PURCHASE_PAYMENT(null),
+        SALES_COLLECTION(null),
+        BANK_FEE(null),
+        OTHER_RECEIVABLE(null),
+        OTHER_PAYABLE(null),
+        ADVANCE_PAYMENT(null),
+        ADVANCE_RECEIPT(null),
+        SOCIAL_SECURITY_PAYMENT("缴纳社保"),
+        PROVIDENT_FUND_PAYMENT("缴纳公积金"),
+        SALARY_PAYMENT("发放工资"),
+        TAX_PAYMENT("缴税"),
+        INVOICE_ISSUED(null),
+        INVOICE_RECEIVED(null),
+        EXPENSE_REIMBURSEMENT(null);
+
+        private final String fixedSummary;
+
+        MergeCategory(String fixedSummary) {
+            this.fixedSummary = fixedSummary;
+        }
+
+        String fixedSummary() {
+            return fixedSummary;
+        }
+    }
+
+    private record MergeGroupKey(MergeCategory category, Set<UUID> bankAccountIds) {
+    }
+
+    private record ExportLineKey(
+            UUID accountId, String side, String currency, BigDecimal exchangeRate) {
+    }
+
+    private static final class MergedLine {
+        private final VoucherResponses.Line first;
+        private final String sourceSummary;
+        private BigDecimal originalAmount = BigDecimal.ZERO;
+        private BigDecimal baseAmount = BigDecimal.ZERO;
+
+        private MergedLine(VoucherResponses.Line first, String sourceSummary) {
+            this.first = first;
+            this.sourceSummary = sourceSummary;
+        }
+
+        private void add(VoucherResponses.Line line) {
+            originalAmount = originalAmount.add(line.originalAmount());
+            baseAmount = baseAmount.add(line.baseAmount());
+        }
+
+        private VoucherResponses.Line toLine(int lineNumber, String fixedSummary) {
+            return new VoucherResponses.Line(first.id(), lineNumber, first.accountId(), first.side(),
+                    first.currency(), originalAmount, first.exchangeRate(), baseAmount,
+                    fixedSummary == null ? sourceSummary : fixedSummary);
         }
     }
 

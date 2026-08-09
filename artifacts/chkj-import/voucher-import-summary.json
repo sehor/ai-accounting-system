@@ -1,0 +1,15 @@
+{
+  "ledgerId": "11d7a8d8-f34b-4d03-9f7f-53980b09bc88",
+  "sourceVoucherCount": 59,
+  "sourceEntryCount": 217,
+  "preImportVoucherCount": 0,
+  "mcpImportResult": {
+    "voucherCount": 59,
+    "rowCount": 217
+  },
+  "postImportVoucherCount": 59,
+  "postedVoucherCount": 59,
+  "postImportEntryCount": 217,
+  "idempotencyKey": "chkj-2026-06-4acd46c1e83a366fbb9a523b",
+  "convertedWorkbook": "E:\\projects\\ai-accouting-system\\artifacts\\chkj-import\\凭证列表-2026-06-转换.xlsx"
+}

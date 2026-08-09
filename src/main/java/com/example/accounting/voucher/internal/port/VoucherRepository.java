@@ -29,6 +29,11 @@ public interface VoucherRepository {
                        String voucherNumber, String summary, boolean approvalRequired, UUID reversalOfId,
                        UUID actorId);
 
+    void createGeneratedVoucher(UUID voucherId, UUID ledgerId, UUID periodId, LocalDate voucherDate,
+                                String voucherType, String voucherNumber, String summary,
+                                boolean approvalRequired, UUID reversalOfId, UUID actorId,
+                                String sourceType, UUID sourceId);
+
     boolean updateDraft(UUID ledgerId, UUID voucherId, UUID periodId, LocalDate voucherDate, String voucherType,
                         String voucherNumber, String summary, boolean approvalRequired, UUID actorId,
                         long expectedVersion);
@@ -92,7 +97,11 @@ public interface VoucherRepository {
                          LocalDate startDate, LocalDate endDate) {
     }
 
-    record VoucherState(String status, boolean approvalRequired, long version) {
+    record VoucherState(String status, boolean approvalRequired, long version, String sourceType, UUID sourceId) {
+
+        public boolean generated() {
+            return sourceType != null;
+        }
     }
 
     record AccountControls(boolean cashFlowRequired, UUID defaultCashFlowItemId,

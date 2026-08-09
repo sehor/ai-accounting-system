@@ -115,6 +115,19 @@ public class JdbcVoucherRepository implements VoucherRepository {
     }
 
     @Override
+    public void createGeneratedVoucher(UUID voucherId, UUID ledgerId, UUID periodId, LocalDate voucherDate,
+                                       String voucherType, String voucherNumber, String summary,
+                                       boolean approvalRequired, UUID reversalOfId, UUID actorId,
+                                       String sourceType, UUID sourceId) {
+        jdbcTemplate.update("""
+                insert into voucher (id, ledger_id, period_id, voucher_date, voucher_type, voucher_number,
+                    summary, approval_required, reversal_of_id, source_type, source_id, created_by, updated_by)
+                values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, voucherId, ledgerId, periodId, voucherDate, voucherType, voucherNumber, summary,
+                approvalRequired, reversalOfId, sourceType, sourceId, actorId, actorId);
+    }
+
+    @Override
     public boolean updateDraft(UUID ledgerId, UUID voucherId, UUID periodId, LocalDate voucherDate,
                                String voucherType, String voucherNumber, String summary, boolean approvalRequired,
                                UUID actorId, long expectedVersion) {
@@ -212,21 +225,22 @@ public class JdbcVoucherRepository implements VoucherRepository {
     public List<VoucherResponses.Voucher> list(UUID ledgerId, int limit, int offset) {
         return jdbcTemplate.query("""
                 select id, ledger_id, period_id, voucher_date, voucher_type, voucher_number, summary, status,
-                    approval_required, version
+                    approval_required, version, source_type, source_id
                 from voucher where ledger_id = ? and deleted_at is null
                 order by voucher_date, voucher_number, id limit ? offset ?
                 """, (rs, rowNum) -> voucher(rs.getObject("id", UUID.class),
                 rs.getObject("ledger_id", UUID.class), rs.getObject("period_id", UUID.class),
                 rs.getObject("voucher_date", LocalDate.class), rs.getString("voucher_type"),
                 rs.getString("voucher_number"), rs.getString("summary"), rs.getString("status"),
-                rs.getBoolean("approval_required"), rs.getLong("version"), List.of()), ledgerId, limit, offset);
+                rs.getBoolean("approval_required"), rs.getLong("version"), List.of(),
+                rs.getString("source_type"), rs.getObject("source_id", UUID.class)), ledgerId, limit, offset);
     }
 
     @Override
     public Optional<VoucherResponses.Voucher> find(UUID ledgerId, UUID voucherId, boolean includeDeleted) {
         String sql = """
                 select id, ledger_id, period_id, voucher_date, voucher_type, voucher_number, summary, status,
-                    approval_required, version
+                    approval_required, version, source_type, source_id
                 from voucher where ledger_id = ? and id = ?
                 """ + (includeDeleted ? "" : " and deleted_at is null");
         return Optional.ofNullable(jdbcTemplate.query(sql, rs -> rs.next() ? voucher(
@@ -234,7 +248,8 @@ public class JdbcVoucherRepository implements VoucherRepository {
                 rs.getObject("period_id", UUID.class), rs.getObject("voucher_date", LocalDate.class),
                 rs.getString("voucher_type"), rs.getString("voucher_number"), rs.getString("summary"),
                 rs.getString("status"), rs.getBoolean("approval_required"), rs.getLong("version"),
-                lines(ledgerId, voucherId)) : null,
+                lines(ledgerId, voucherId), rs.getString("source_type"),
+                rs.getObject("source_id", UUID.class)) : null,
                 ledgerId, voucherId));
     }
 
@@ -286,10 +301,11 @@ public class JdbcVoucherRepository implements VoucherRepository {
     public Optional<VoucherState> findState(UUID ledgerId, UUID voucherId, boolean deletedOnly) {
         String deletedClause = deletedOnly ? "deleted_at is not null" : "deleted_at is null";
         return Optional.ofNullable(jdbcTemplate.query("""
-                select status, approval_required, version from voucher
+                select status, approval_required, version, source_type, source_id from voucher
                 where ledger_id = ? and id = ? and %s
                 """.formatted(deletedClause), rs -> rs.next() ? new VoucherState(rs.getString("status"),
-                rs.getBoolean("approval_required"), rs.getLong("version")) : null, ledgerId, voucherId));
+                rs.getBoolean("approval_required"), rs.getLong("version"), rs.getString("source_type"),
+                rs.getObject("source_id", UUID.class)) : null, ledgerId, voucherId));
     }
 
     @Override
@@ -422,10 +438,11 @@ public class JdbcVoucherRepository implements VoucherRepository {
     }
 
     private VoucherResponses.Voucher voucher(UUID id, UUID ledgerId, UUID periodId, LocalDate voucherDate,
-                                              String voucherType, String voucherNumber, String summary, String status,
-                                              boolean approvalRequired, long version, List<VoucherResponses.Line> lines) {
+                                             String voucherType, String voucherNumber, String summary, String status,
+                                             boolean approvalRequired, long version, List<VoucherResponses.Line> lines,
+                                             String sourceType, UUID sourceId) {
         return new VoucherResponses.Voucher(id, ledgerId, periodId, voucherDate, voucherType, voucherNumber,
-                summary, status, approvalRequired, version, lines);
+                summary, status, approvalRequired, version, lines, sourceType, sourceId);
     }
 
     private VoucherResponses.Line line(UUID id, int lineNo, UUID accountId, String side, String currency,

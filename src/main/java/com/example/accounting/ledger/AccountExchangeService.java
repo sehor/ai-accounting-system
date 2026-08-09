@@ -202,9 +202,58 @@ public class AccountExchangeService {
     public Preview decide(UUID actorId, UUID ledgerId, UUID importId, int rowNo, Decision decision) {
         requireWrite(actorId, ledgerId);
         ImportHeader header = importHeader(ledgerId, importId);
+        requirePreview(header);
+        applyDecision(actorId, ledgerId, importId, rowNo, decision);
+        return get(actorId, ledgerId, importId);
+    }
+
+    @Transactional
+    public Preview decideAll(
+            UUID actorId, UUID ledgerId, UUID importId, List<RowDecision> decisions) {
+        requireWrite(actorId, ledgerId);
+        ImportHeader header = importHeader(ledgerId, importId);
+        requirePreview(header);
+        if (decisions == null || decisions.isEmpty()) {
+            throw problem(422, "ACCOUNT_IMPORT_DECISIONS_REQUIRED", "Import decisions are required",
+                    "Provide one decision for every account import row");
+        }
+        Set<Integer> rowNumbers = new HashSet<>();
+        for (RowDecision rowDecision : decisions) {
+            if (rowDecision == null || !rowNumbers.add(rowDecision.rowNo())) {
+                throw problem(422, "ACCOUNT_IMPORT_DECISION_INVALID", "Invalid import decision",
+                        "Each import row must have exactly one decision");
+            }
+        }
+        Set<Integer> expectedRowNumbers = imports.previewRows(importId).stream()
+                .map(AccountImportRepository.PreviewRow::rowNo)
+                .collect(Collectors.toSet());
+        if (!expectedRowNumbers.containsAll(rowNumbers)) {
+            throw problem(404, "ACCOUNT_IMPORT_ROW_NOT_FOUND", "Import row not found",
+                    "Every decision must target a row in this import");
+        }
+        if (rowNumbers.size() != expectedRowNumbers.size()
+                || !rowNumbers.containsAll(expectedRowNumbers)) {
+            throw problem(422, "ACCOUNT_IMPORT_DECISIONS_INCOMPLETE", "Import decisions are incomplete",
+                    "Submit exactly one decision for every preview row in a single call");
+        }
+        for (RowDecision rowDecision : decisions) {
+            applyDecision(actorId, ledgerId, importId, rowDecision.rowNo(), rowDecision.decision());
+        }
+        return get(actorId, ledgerId, importId);
+    }
+
+    private void requirePreview(ImportHeader header) {
         if (!"PREVIEW".equals(header.status())) {
             throw problem(409, "ACCOUNT_IMPORT_STATE_INVALID", "Account import cannot be changed",
                     "Only a preview import can be edited");
+        }
+    }
+
+    private void applyDecision(
+            UUID actorId, UUID ledgerId, UUID importId, int rowNo, Decision decision) {
+        if (decision == null) {
+            throw problem(422, "ACCOUNT_IMPORT_DECISION_INVALID", "Invalid import decision",
+                    "Every import row decision needs an action");
         }
         String action = decision.action() == null ? "" : decision.action().toUpperCase(Locale.ROOT);
         if (!Set.of("CREATE", "UPDATE", "MAP", "SKIP").contains(action)) {
@@ -230,7 +279,6 @@ public class AccountExchangeService {
             throw problem(404, "ACCOUNT_IMPORT_ROW_NOT_FOUND", "Import row not found",
                     "The import row does not exist");
         }
-        return get(actorId, ledgerId, importId);
     }
 
     @Transactional
@@ -803,6 +851,9 @@ public class AccountExchangeService {
     }
 
     public record Decision(String action, UUID targetAccountId, String accountCode) {
+    }
+
+    public record RowDecision(int rowNo, Decision decision) {
     }
 
     public record Preview(

@@ -29,6 +29,9 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class DefaultVoucherService implements VoucherService {
 
+    // 同时审批记账开关：改为 false 即恢复原有的人工提交、审批和记账流程。
+    private static final boolean AUTO_APPROVE_AND_POST_ON_SAVE = true;
+
     private final VoucherRepository vouchers;
     private final LedgerAccessService ledgerAccess;
     private final ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
@@ -53,6 +56,19 @@ public class DefaultVoucherService implements VoucherService {
 
     @Transactional
     @Override
+    public VoucherResponses.Voucher createGenerated(UUID actorId, UUID ledgerId, VoucherRequests.Create request,
+                                                    String idempotencyKey, String sourceType, UUID sourceId) {
+        requireRole(actorId, ledgerId, Set.of(LedgerRole.OWNER, LedgerRole.EDITOR));
+        if (sourceType == null || sourceType.isBlank() || sourceId == null) {
+            throw problem(422, "VOUCHER_SOURCE_REQUIRED", "Voucher source is required",
+                    "Generated vouchers must identify their owning business process");
+        }
+        return create(actorId, ledgerId, request, idempotencyKey,
+                Set.of(LedgerRole.OWNER, LedgerRole.EDITOR), sourceType.trim(), sourceId);
+    }
+
+    @Transactional
+    @Override
     public VoucherResponses.Voucher createAgentDraft(UUID actorId, UUID ledgerId, VoucherRequests.Create request,
                                                      String idempotencyKey) {
         return create(actorId, ledgerId, request, idempotencyKey,
@@ -61,6 +77,12 @@ public class DefaultVoucherService implements VoucherService {
 
     private VoucherResponses.Voucher create(UUID actorId, UUID ledgerId, VoucherRequests.Create request,
                                              String idempotencyKey, Set<LedgerRole> roles) {
+        return create(actorId, ledgerId, request, idempotencyKey, roles, null, null);
+    }
+
+    private VoucherResponses.Voucher create(UUID actorId, UUID ledgerId, VoucherRequests.Create request,
+                                             String idempotencyKey, Set<LedgerRole> roles,
+                                             String sourceType, UUID sourceId) {
         requireRole(actorId, ledgerId, roles);
         String key = idempotencyKey == null || idempotencyKey.isBlank() ? null : idempotencyKey.trim();
         UUID voucherId = UUID.randomUUID();
@@ -79,12 +101,18 @@ public class DefaultVoucherService implements VoucherService {
             }
         }
         LedgerContext context = ledgerContext(ledgerId, request.periodId(), request.voucherDate());
-        vouchers.createVoucher(voucherId, ledgerId, request.periodId(), request.voucherDate(),
-                request.voucherType().trim(), request.voucherNumber().trim(), request.summary(),
-                context.approvalRequired(), null, actorId);
+        if (sourceType == null) {
+            vouchers.createVoucher(voucherId, ledgerId, request.periodId(), request.voucherDate(),
+                    request.voucherType().trim(), request.voucherNumber().trim(), request.summary(),
+                    context.approvalRequired(), null, actorId);
+        } else {
+            vouchers.createGeneratedVoucher(voucherId, ledgerId, request.periodId(), request.voucherDate(),
+                    request.voucherType().trim(), request.voucherNumber().trim(), request.summary(),
+                    context.approvalRequired(), null, actorId, sourceType, sourceId);
+        }
         insertLines(ledgerId, voucherId, context, request.lines());
         audit(ledgerId, voucherId, "CREATE", actorId, null, null, snapshot(ledgerId, voucherId));
-        return find(actorId, ledgerId, voucherId);
+        return finalizeOnSave(actorId, ledgerId, voucherId, roles);
     }
 
     @Transactional
@@ -93,6 +121,7 @@ public class DefaultVoucherService implements VoucherService {
                                            VoucherRequests.Update request) {
         requireRole(actorId, ledgerId, Set.of(LedgerRole.OWNER, LedgerRole.EDITOR));
         VoucherState state = stateWithVersion(ledgerId, voucherId);
+        ensureManual(state);
         if (!"DRAFT".equals(state.status())) {
             throw problem(409, "VOUCHER_STATE_INVALID", "Invalid voucher state",
                     "Only draft vouchers can be updated");
@@ -108,7 +137,7 @@ public class DefaultVoucherService implements VoucherService {
         vouchers.deleteLines(ledgerId, voucherId);
         insertLines(ledgerId, voucherId, context, request.lines());
         audit(ledgerId, voucherId, "UPDATE", actorId, null, before, snapshot(ledgerId, voucherId));
-        return find(actorId, ledgerId, voucherId);
+        return finalizeOnSave(actorId, ledgerId, voucherId, Set.of(LedgerRole.OWNER, LedgerRole.EDITOR));
     }
 
     private void insertLines(UUID ledgerId, UUID voucherId, LedgerContext context, List<VoucherRequests.Line> lines) {
@@ -207,7 +236,8 @@ public class DefaultVoucherService implements VoucherService {
         return result.stream().map(voucher -> new VoucherResponses.Voucher(
                 voucher.id(), voucher.ledgerId(), voucher.periodId(), voucher.voucherDate(), voucher.voucherType(),
                 voucher.voucherNumber(), voucher.summary(), voucher.status(), voucher.approvalRequired(),
-                voucher.version(), linesByVoucher.getOrDefault(voucher.id(), List.of()))).toList();
+                voucher.version(), linesByVoucher.getOrDefault(voucher.id(), List.of()),
+                voucher.sourceType(), voucher.sourceId())).toList();
     }
 
     @Transactional(readOnly = true)
@@ -254,11 +284,31 @@ public class DefaultVoucherService implements VoucherService {
         return find(actorId, ledgerId, voucherId);
     }
 
+    private VoucherResponses.Voucher finalizeOnSave(
+            UUID actorId, UUID ledgerId, UUID voucherId, Set<LedgerRole> roles) {
+        VoucherResponses.Voucher validated = validate(actorId, ledgerId, voucherId, roles);
+        if (!AUTO_APPROVE_AND_POST_ON_SAVE) {
+            return validated;
+        }
+        VoucherSnapshot beforeSubmit = snapshot(ledgerId, voucherId);
+        changeStatus(ledgerId, voucherId, "VALIDATED", "SUBMITTED", actorId);
+        approval(ledgerId, voucherId, "SUBMIT", null, actorId);
+        audit(ledgerId, voucherId, "SUBMIT", actorId, null, beforeSubmit, snapshot(ledgerId, voucherId));
+
+        String comment = "Automatically approved on save";
+        VoucherSnapshot beforeApprove = snapshot(ledgerId, voucherId);
+        changeStatus(ledgerId, voucherId, "SUBMITTED", "APPROVED", actorId);
+        approval(ledgerId, voucherId, "APPROVE", comment, actorId);
+        audit(ledgerId, voucherId, "APPROVE", actorId, comment, beforeApprove, snapshot(ledgerId, voucherId));
+        return post(actorId, ledgerId, voucherId, roles, true);
+    }
+
     @Transactional
     @Override
     public VoucherResponses.Voucher submit(UUID actorId, UUID ledgerId, UUID voucherId) {
         requireRole(actorId, ledgerId, Set.of(LedgerRole.OWNER, LedgerRole.EDITOR));
         VoucherState state = state(ledgerId, voucherId);
+        ensureManual(state);
         if (!state.approvalRequired() || !"VALIDATED".equals(state.status())) {
             throw problem(409, "VOUCHER_STATE_INVALID", "Invalid voucher state",
                     "Only validated vouchers with approval enabled can be submitted");
@@ -275,6 +325,7 @@ public class DefaultVoucherService implements VoucherService {
     @Override
     public VoucherResponses.Voucher approve(UUID actorId, UUID ledgerId, UUID voucherId, String comment) {
         requireRole(actorId, ledgerId, Set.of(LedgerRole.OWNER, LedgerRole.REVIEWER));
+        ensureManual(state(ledgerId, voucherId));
         ensureComment(comment);
         VoucherSnapshot before = snapshot(ledgerId, voucherId);
         changeStatus(ledgerId, voucherId, "SUBMITTED", "APPROVED", actorId);
@@ -287,6 +338,7 @@ public class DefaultVoucherService implements VoucherService {
     @Override
     public VoucherResponses.Voucher reject(UUID actorId, UUID ledgerId, UUID voucherId, String comment) {
         requireRole(actorId, ledgerId, Set.of(LedgerRole.OWNER, LedgerRole.REVIEWER));
+        ensureManual(state(ledgerId, voucherId));
         ensureComment(comment);
         VoucherSnapshot before = snapshot(ledgerId, voucherId);
         changeStatus(ledgerId, voucherId, "SUBMITTED", "DRAFT", actorId);
@@ -298,12 +350,14 @@ public class DefaultVoucherService implements VoucherService {
     @Transactional
     @Override
     public VoucherResponses.Voucher post(UUID actorId, UUID ledgerId, UUID voucherId) {
+        ensureManual(state(ledgerId, voucherId));
         return post(actorId, ledgerId, voucherId, Set.of(LedgerRole.OWNER, LedgerRole.EDITOR), false);
     }
 
     @Transactional
     @Override
     public VoucherResponses.Voucher postAgentVoucher(UUID actorId, UUID ledgerId, UUID voucherId) {
+        ensureManual(state(ledgerId, voucherId));
         return post(actorId, ledgerId, voucherId,
                 Set.of(LedgerRole.OWNER, LedgerRole.EDITOR, LedgerRole.AGENT), true);
     }
@@ -315,7 +369,8 @@ public class DefaultVoucherService implements VoucherService {
         if (idempotent && "POSTED".equals(state.status())) {
             return find(actorId, ledgerId, voucherId);
         }
-        String requiredStatus = state.approvalRequired() ? "APPROVED" : "VALIDATED";
+        String requiredStatus = "APPROVED".equals(state.status()) || state.approvalRequired()
+                ? "APPROVED" : "VALIDATED";
         if (!requiredStatus.equals(state.status())) {
             throw problem(409, "VOUCHER_STATE_INVALID", "Invalid voucher state",
                     "The voucher must be " + requiredStatus + " before posting");
@@ -335,7 +390,7 @@ public class DefaultVoucherService implements VoucherService {
     public VoucherResponses.Voucher unpost(UUID actorId, UUID ledgerId, UUID voucherId, String reason) {
         requireRole(actorId, ledgerId, Set.of(LedgerRole.OWNER, LedgerRole.EDITOR));
         ensureReason(reason);
-        state(ledgerId, voucherId);
+        ensureManual(state(ledgerId, voucherId));
         VoucherSnapshot before = snapshot(ledgerId, voucherId);
         changeStatus(ledgerId, voucherId, "POSTED", "DRAFT", actorId);
         audit(ledgerId, voucherId, "UNPOST", actorId, reason.trim(), before, snapshot(ledgerId, voucherId));
@@ -345,8 +400,33 @@ public class DefaultVoucherService implements VoucherService {
     @Transactional
     @Override
     public VoucherResponses.Voucher reverse(UUID actorId, UUID ledgerId, UUID voucherId) {
+        return reverse(actorId, ledgerId, voucherId, null, null, false);
+    }
+
+    @Transactional
+    @Override
+    public VoucherResponses.Voucher reverseGenerated(UUID actorId, UUID ledgerId, UUID voucherId,
+                                                     String sourceType, UUID sourceId) {
+        requireRole(actorId, ledgerId, Set.of(LedgerRole.OWNER, LedgerRole.EDITOR));
+        if (sourceType == null || sourceType.isBlank() || sourceId == null) {
+            throw problem(422, "VOUCHER_SOURCE_REQUIRED", "Voucher source is required",
+                    "Generated reversal must identify its owning business process");
+        }
+        return reverse(actorId, ledgerId, voucherId, sourceType.trim(), sourceId, true);
+    }
+
+    private VoucherResponses.Voucher reverse(UUID actorId, UUID ledgerId, UUID voucherId,
+                                             String sourceType, UUID sourceId, boolean generatedFlow) {
         requireRole(actorId, ledgerId, Set.of(LedgerRole.OWNER, LedgerRole.EDITOR));
         VoucherState state = state(ledgerId, voucherId);
+        if (generatedFlow) {
+            if (!state.generated() || !sourceType.equals(state.sourceType()) || !sourceId.equals(state.sourceId())) {
+                throw problem(409, "VOUCHER_SOURCE_MISMATCH", "Voucher source mismatch",
+                        "The generated voucher is owned by another process");
+            }
+        } else {
+            ensureManual(state);
+        }
         if (!"POSTED".equals(state.status())) {
             throw problem(409, "VOUCHER_STATE_INVALID", "Invalid voucher state",
                     "Only posted vouchers can be reversed");
@@ -360,8 +440,14 @@ public class DefaultVoucherService implements VoucherService {
         String number = (original.voucherNumber() + "-R-" + reversalId.toString().substring(0, 8));
         number = number.substring(0, Math.min(32, number.length()));
         UUID periodId = original.periodId();
-        vouchers.createVoucher(reversalId, ledgerId, periodId, original.voucherDate(), original.voucherType(),
-                number, "Reversal of " + original.voucherNumber(), original.approvalRequired(), voucherId, actorId);
+        if (generatedFlow) {
+            vouchers.createGeneratedVoucher(reversalId, ledgerId, periodId, original.voucherDate(),
+                    original.voucherType(), number, "Reversal of " + original.voucherNumber(),
+                    original.approvalRequired(), voucherId, actorId, sourceType + "_REVERSAL", sourceId);
+        } else {
+            vouchers.createVoucher(reversalId, ledgerId, periodId, original.voucherDate(), original.voucherType(),
+                    number, "Reversal of " + original.voucherNumber(), original.approvalRequired(), voucherId, actorId);
+        }
         for (VoucherResponses.Line line : original.lines()) {
             UUID lineId = UUID.randomUUID();
             vouchers.createLine(lineId, ledgerId, reversalId, line.lineNo(), line.accountId(),
@@ -375,7 +461,7 @@ public class DefaultVoucherService implements VoucherService {
         }
         audit(ledgerId, reversalId, "CREATE_REVERSAL", actorId, "reversal-of:" + voucherId,
                 null, snapshot(ledgerId, reversalId));
-        return find(actorId, ledgerId, reversalId);
+        return finalizeOnSave(actorId, ledgerId, reversalId, Set.of(LedgerRole.OWNER, LedgerRole.EDITOR));
     }
 
     @Transactional
@@ -383,6 +469,7 @@ public class DefaultVoucherService implements VoucherService {
     public void delete(UUID actorId, UUID ledgerId, UUID voucherId) {
         requireRole(actorId, ledgerId, Set.of(LedgerRole.OWNER, LedgerRole.EDITOR));
         VoucherState state = state(ledgerId, voucherId);
+        ensureManual(state);
         if (!Set.of("DRAFT", "VALIDATED").contains(state.status())) {
             throw problem(409, "VOUCHER_STATE_INVALID", "Invalid voucher state",
                     "Only draft or validated vouchers can be deleted");
@@ -401,10 +488,11 @@ public class DefaultVoucherService implements VoucherService {
         if (state == null || !"DELETED".equals(state.status())) {
             throw problem(404, "VOUCHER_NOT_FOUND", "Deleted voucher not found", "The deleted voucher is not available");
         }
+        ensureManual(state);
         VoucherSnapshot before = snapshot(ledgerId, voucherId);
         vouchers.restoreDeleted(ledgerId, voucherId, actorId);
         audit(ledgerId, voucherId, "RESTORE_DELETED", actorId, null, before, snapshot(ledgerId, voucherId));
-        return find(actorId, ledgerId, voucherId);
+        return finalizeOnSave(actorId, ledgerId, voucherId, Set.of(LedgerRole.OWNER, LedgerRole.EDITOR));
     }
 
     @Transactional(readOnly = true)
@@ -420,7 +508,7 @@ public class DefaultVoucherService implements VoucherService {
     @Override
     public VoucherResponses.Voucher restoreRevision(UUID actorId, UUID ledgerId, UUID voucherId, int revision) {
         requireRole(actorId, ledgerId, Set.of(LedgerRole.OWNER, LedgerRole.EDITOR));
-        state(ledgerId, voucherId);
+        ensureManual(state(ledgerId, voucherId));
         String targetData = vouchers.findRevisionData(ledgerId, voucherId, revision).orElseThrow(() ->
                 problem(404, "REVISION_NOT_FOUND", "Revision not found",
                         "The requested voucher revision does not exist"));
@@ -432,7 +520,7 @@ public class DefaultVoucherService implements VoucherService {
         insertSnapshotLines(ledgerId, voucherId, target.lines());
         audit(ledgerId, voucherId, "RESTORE_REVISION", actorId, "revision:" + revision,
                 before, snapshot(ledgerId, voucherId));
-        return find(actorId, ledgerId, voucherId);
+        return finalizeOnSave(actorId, ledgerId, voucherId, Set.of(LedgerRole.OWNER, LedgerRole.EDITOR));
     }
 
     private VoucherState state(UUID ledgerId, UUID voucherId) {
@@ -443,6 +531,13 @@ public class DefaultVoucherService implements VoucherService {
 
     private VoucherState stateWithVersion(UUID ledgerId, UUID voucherId) {
         return state(ledgerId, voucherId);
+    }
+
+    private void ensureManual(VoucherState state) {
+        if (state.generated()) {
+            throw problem(409, "VOUCHER_MANAGED_BY_SOURCE", "Voucher is managed by a source process",
+                    "Generated vouchers can only be changed by their owning asset or settlement workflow");
+        }
     }
 
     private void changeStatus(UUID ledgerId, UUID voucherId, String expected, String next, UUID actorId) {

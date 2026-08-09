@@ -23,7 +23,9 @@ export function LoginPage() {
       signIn({ ...session, localUserId: user.id })
       navigate('/ledgers', { replace: true })
     } catch (cause) {
-      setError(cause instanceof ApiError && cause.status === 401
+      setError(cause instanceof ApiError && cause.problem.code === 'UNKNOWN_LOCAL_USER'
+        ? '用户不存在，请确认用户名。'
+        : cause instanceof ApiError && cause.status === 401
         ? '后端未开启本地登录，请设置 LOCAL_USER_HEADER_ENABLED=true 并重启后端。'
         : '无法连接后端，请确认后端已在 8080 端口启动。')
     } finally {

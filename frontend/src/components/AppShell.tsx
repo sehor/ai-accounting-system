@@ -1,5 +1,5 @@
 import { App as AntApp, Avatar, Button, Layout, Menu, Select, Space, Spin, Typography } from 'antd'
-import { BankOutlined, BookOutlined, FileSearchOutlined, FileTextOutlined, LogoutOutlined, SettingOutlined } from '@ant-design/icons'
+import { BankOutlined, BookOutlined, FileSearchOutlined, FileTextOutlined, LogoutOutlined, SettingOutlined, HddOutlined } from '@ant-design/icons'
 import { useQuery } from '@tanstack/react-query'
 import { Outlet, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { apiFetch } from '../api/client'
@@ -27,6 +27,8 @@ export function AppShell() {
 
   const selectedKey = location.pathname.includes('/vouchers')
     ? 'vouchers'
+    : location.pathname.includes('/fixed-assets')
+      ? 'fixed-assets'
     : location.pathname.includes('/reports')
       ? 'reports'
       : location.pathname.includes('/documents')
@@ -60,6 +62,7 @@ export function AppShell() {
             items={[
               { key: 'overview', icon: <BankOutlined />, label: '账套概览', onClick: () => ledgerId && navigate(`/ledgers/${ledgerId}/overview`) },
               { key: 'vouchers', icon: <BookOutlined />, label: '凭证', onClick: () => ledgerId && navigate(`/ledgers/${ledgerId}/vouchers`) },
+              { key: 'fixed-assets', icon: <HddOutlined />, label: '固定资产', onClick: () => ledgerId && navigate(`/ledgers/${ledgerId}/fixed-assets`) },
               { key: 'reports', icon: <FileTextOutlined />, label: '账簿与报表', onClick: () => ledgerId && navigate(`/ledgers/${ledgerId}/reports/trial-balance`) },
               { key: 'documents', icon: <FileSearchOutlined />, label: '附件与提取', onClick: () => ledgerId && navigate(`/ledgers/${ledgerId}/documents`) },
               { key: 'settings', icon: <SettingOutlined />, label: '账套设置', onClick: () => ledgerId && navigate(`/ledgers/${ledgerId}/settings/periods`) },

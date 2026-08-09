@@ -9,6 +9,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
+import org.jspecify.annotations.Nullable;
 
 public final class VoucherRequests {
 
@@ -19,7 +20,7 @@ public final class VoucherRequests {
                          @NotNull LocalDate voucherDate,
                          @NotBlank String voucherType,
                          @NotBlank String voucherNumber,
-                         String summary,
+                         @Nullable String summary,
                          @NotEmpty List<@Valid Line> lines) {
     }
 
@@ -28,7 +29,7 @@ public final class VoucherRequests {
                          @NotNull LocalDate voucherDate,
                          @NotBlank String voucherType,
                          @NotBlank String voucherNumber,
-                         String summary,
+                         @Nullable String summary,
                          @NotEmpty List<@Valid Line> lines) {
     }
 
@@ -37,11 +38,11 @@ public final class VoucherRequests {
                        @NotBlank @Pattern(regexp = "[A-Z]{3}") String currency,
                        @NotNull BigDecimal originalAmount,
                        @NotNull BigDecimal exchangeRate,
-                       String summary,
-                       UUID cashFlowItemId,
-                       BigDecimal quantity,
-                       BigDecimal unitPrice,
-                       List<@Valid Dimension> dimensions) {
+                       @Nullable String summary,
+                       @Nullable UUID cashFlowItemId,
+                       @Nullable BigDecimal quantity,
+                       @Nullable BigDecimal unitPrice,
+                       @Nullable List<@Valid Dimension> dimensions) {
 
         public Line(UUID accountId, String side, String currency, BigDecimal originalAmount,
                     BigDecimal exchangeRate, String summary) {

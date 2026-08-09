@@ -539,6 +539,8 @@ GET  /v1/ledgers/{ledgerId}/audit
 
 ### 9.1 状态机
 
+当前 `AUTO_APPROVE_AND_POST_ON_SAVE` 开启，凭证保存时在同一事务内自动走完校验、提交、审批和记账；将该开关改为 `false` 即恢复以下人工流程，相关状态、审批记录和接口均保留。
+
 未开启审批：
 
 ```text

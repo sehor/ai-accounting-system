@@ -13,7 +13,14 @@ public final class VoucherResponses {
 
     public record Voucher(UUID id, UUID ledgerId, UUID periodId, LocalDate voucherDate, String voucherType,
                           String voucherNumber, String summary, String status, boolean approvalRequired,
-                          long version, List<Line> lines) {
+                          long version, List<Line> lines, String sourceType, UUID sourceId) {
+
+        public Voucher(UUID id, UUID ledgerId, UUID periodId, LocalDate voucherDate, String voucherType,
+                       String voucherNumber, String summary, String status, boolean approvalRequired,
+                       long version, List<Line> lines) {
+            this(id, ledgerId, periodId, voucherDate, voucherType, voucherNumber, summary, status,
+                    approvalRequired, version, lines, null, null);
+        }
     }
 
     public record Line(UUID id, int lineNo, UUID accountId, String side, String currency,

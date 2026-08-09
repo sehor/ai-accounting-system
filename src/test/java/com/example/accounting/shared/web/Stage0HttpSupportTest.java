@@ -1,7 +1,12 @@
 package com.example.accounting.shared.web;
 
 import com.example.accounting.shared.audit.AuditContext;
+import com.example.accounting.identity.IdentityService;
+import com.example.accounting.identity.UserResponse;
+import com.example.accounting.identity.UserType;
 import jakarta.servlet.FilterChain;
+import java.util.Optional;
+import java.util.UUID;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockFilterChain;
@@ -15,6 +20,8 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 class Stage0HttpSupportTest {
 
@@ -88,6 +95,91 @@ class Stage0HttpSupportTest {
                 });
 
         assertTrue(SecurityContextHolder.getContext().getAuthentication() == null);
+    }
+
+    @Test
+    void localDevBearerTokenAuthenticatesTheConfiguredUser() throws Exception {
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.addHeader("Authorization", "Bearer dev-token");
+
+        new LocalUserHeaderAuthenticationFilter(true, "dev-token",
+                "00000000-0000-4000-8000-000000000001").doFilter(
+                request, new MockHttpServletResponse(), new MockFilterChain() {
+                    @Override
+                    public void doFilter(jakarta.servlet.ServletRequest servletRequest,
+                                         jakarta.servlet.ServletResponse servletResponse) {
+                        assertEquals("00000000-0000-4000-8000-000000000001",
+                                SecurityContextHolder.getContext().getAuthentication().getName());
+                    }
+                });
+
+        assertTrue(SecurityContextHolder.getContext().getAuthentication() == null);
+    }
+
+    @Test
+    void localDevIdentityAuthenticatesRequestsWithoutHeaders() throws Exception {
+        MockHttpServletRequest request = new MockHttpServletRequest();
+
+        new LocalUserHeaderAuthenticationFilter(true, "dev-token",
+                "00000000-0000-4000-8000-000000000001", true).doFilter(
+                request, new MockHttpServletResponse(), new MockFilterChain() {
+                    @Override
+                    public void doFilter(jakarta.servlet.ServletRequest servletRequest,
+                                         jakarta.servlet.ServletResponse servletResponse) {
+                        assertEquals("00000000-0000-4000-8000-000000000001",
+                                SecurityContextHolder.getContext().getAuthentication().getName());
+                    }
+                });
+
+        assertTrue(SecurityContextHolder.getContext().getAuthentication() == null);
+    }
+
+    @Test
+    void configuredDevIdentityDoesNotEnableImplicitLoginByDefault() throws Exception {
+        MockHttpServletRequest request = new MockHttpServletRequest();
+
+        new LocalUserHeaderAuthenticationFilter(true, "dev-token",
+                "00000000-0000-4000-8000-000000000001").doFilter(
+                request, new MockHttpServletResponse(), new MockFilterChain() {
+                    @Override
+                    public void doFilter(jakarta.servlet.ServletRequest servletRequest,
+                                         jakarta.servlet.ServletResponse servletResponse) {
+                        assertTrue(SecurityContextHolder.getContext().getAuthentication() == null);
+                    }
+                });
+    }
+
+    @Test
+    void configuredDevIdentityIsIgnoredWhenLocalAuthenticationIsDisabled() throws Exception {
+        MockHttpServletRequest request = new MockHttpServletRequest();
+
+        new LocalUserHeaderAuthenticationFilter(false, "dev-token",
+                "00000000-0000-4000-8000-000000000001", true).doFilter(
+                request, new MockHttpServletResponse(), new MockFilterChain() {
+                    @Override
+                    public void doFilter(jakarta.servlet.ServletRequest servletRequest,
+                                         jakarta.servlet.ServletResponse servletResponse) {
+                        assertTrue(SecurityContextHolder.getContext().getAuthentication() == null);
+                    }
+                });
+    }
+
+    @Test
+    void authenticatedLocalPrincipalPreservesTheStoredAgentIdentity() {
+        UUID userId = UUID.randomUUID();
+        IdentityService identities = mock(IdentityService.class);
+        when(identities.findUser(userId)).thenReturn(Optional.of(new UserResponse(
+                userId, "local", "super-agent", "super-agent", null, UserType.AGENT, "ACTIVE")));
+        SecurityContextHolder.getContext().setAuthentication(
+                new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(
+                        userId.toString(), "n/a", java.util.List.of()));
+
+        var resolved = new com.example.accounting.identity.CurrentUserResolver(false, identities)
+                .resolveAuthenticatedUserDetails();
+
+        assertEquals(userId, resolved.id());
+        assertEquals("super-agent", resolved.displayName());
+        assertEquals(UserType.AGENT, resolved.userType());
     }
 
     @Test

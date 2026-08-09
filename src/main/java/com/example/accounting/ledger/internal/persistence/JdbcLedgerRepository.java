@@ -87,12 +87,24 @@ public class JdbcLedgerRepository implements LedgerRepository {
     }
 
     @Override
+    public List<UUID> listAllLedgerIds() {
+        return jdbc.query("select id from ledger where deleted_at is null order by id",
+                (rs, rowNum) -> rs.getObject("id", UUID.class));
+    }
+
+    @Override
     public Optional<LedgerResponses.Ledger> findLedger(UUID ledgerId) {
         return Optional.ofNullable(jdbc.query("""
                 select id, name, accounting_standard_code, accounting_standard_version,
                     base_currency, start_date, approval_enabled, status
                 from ledger where id = ? and deleted_at is null
                 """, rs -> rs.next() ? mapLedger(rs) : null, ledgerId));
+    }
+
+    @Override
+    public void updateLedgerName(UUID ledgerId, String name, UUID actorId) {
+        jdbc.update("update ledger set name = ?, updated_at = now(), updated_by = ?, version = version + 1 "
+                + "where id = ? and deleted_at is null", name, actorId, ledgerId);
     }
 
     @Override
