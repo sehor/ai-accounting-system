@@ -37,12 +37,8 @@ public class JdbcAccountingExperienceRepository implements AccountingExperienceR
     public Page search(UUID ledgerId, String query, List<String> tags, int limit, int offset) {
         StringBuilder where = new StringBuilder("status = 'ACTIVE'");
         List<Object> args = new ArrayList<>();
-        if (ledgerId == null) {
-            where.append(" and ledger_id is null");
-        } else {
-            where.append(" and (ledger_id is null or ledger_id = ?)");
-            args.add(ledgerId);
-        }
+        where.append(" and ledger_id = ?");
+        args.add(ledgerId);
         if (query != null && !query.isBlank()) {
             where.append(" and (title ilike ? escape '\\' or content ilike ? escape '\\')");
             String pattern = "%" + escapeLike(query) + "%";

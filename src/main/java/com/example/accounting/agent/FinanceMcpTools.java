@@ -110,10 +110,10 @@ public class FinanceMcpTools {
         return audited(actorId, "get_operator_context", null, "", AgentContextResponses::toolCatalog);
     }
 
-    @McpTool(name = "create_accounting_experience", description = "Create accounting experience")
+    @McpTool(name = "create_accounting_experience", description = "Create ledger accounting experience")
     @PreAuthorize("isAuthenticated()")
     public ExperienceResponses.Experience createAccountingExperience(
-            @McpToolParam(description = "Experience payload with GENERAL or LEDGER scope")
+            @McpToolParam(description = "Ledger accounting experience payload")
             ExperienceRequests.Create request) {
         UUID actorId = actor();
         UUID ledgerId = request == null ? null : request.ledgerId();
@@ -121,11 +121,10 @@ public class FinanceMcpTools {
                 () -> experienceService.create(actorId, request));
     }
 
-    @McpTool(name = "search_accounting_experiences", description = "Search accounting experiences")
+    @McpTool(name = "search_accounting_experiences", description = "Search ledger accounting experiences")
     @PreAuthorize("isAuthenticated()")
     public ExperienceResponses.Page searchAccountingExperiences(
-            @McpToolParam(description = "Search payload with optional ledgerId, query, tags and pagination",
-                    required = false)
+            @McpToolParam(description = "Search payload with ledgerId, query, tags and pagination")
             ExperienceRequests.Search request) {
         UUID actorId = actor();
         UUID ledgerId = request == null ? null : request.ledgerId();

@@ -40,31 +40,31 @@ class AccountingExperienceServiceTest {
     }
 
     @Test
-    void createsGeneralExperienceWithNormalizedTextAndTags() {
+    void createsLedgerExperienceWithNormalizedTextAndTags() {
         UUID id = UUID.randomUUID();
-        when(repository.create(eq(ExperienceScope.GENERAL), eq(null), eq("如何处理进项发票"),
+        when(repository.create(eq(ExperienceScope.LEDGER), eq(ledgerId), eq("如何处理进项发票"),
                 eq("先核对税率，再确认费用归属"), eq(List.of("发票", "差旅")), eq(agentId)))
-                .thenReturn(record(id, ExperienceScope.GENERAL, null, "如何处理进项发票",
+                .thenReturn(record(id, ExperienceScope.LEDGER, ledgerId, "如何处理进项发票",
                         "先核对税率，再确认费用归属", List.of("发票", "差旅"), 0));
 
         ExperienceResponses.Experience result = service.create(agentId,
-                new ExperienceRequests.Create(ExperienceScope.GENERAL, null,
+                new ExperienceRequests.Create(ExperienceScope.LEDGER, ledgerId,
                         "  如何处理进项发票 ", " 先核对税率，再确认费用归属 ",
                         List.of("发票", "发票", "差旅")));
 
         assertThat(result.id()).isEqualTo(id);
-        assertThat(result.scope()).isEqualTo(ExperienceScope.GENERAL);
-        verify(repository).create(ExperienceScope.GENERAL, null, "如何处理进项发票",
+        assertThat(result.scope()).isEqualTo(ExperienceScope.LEDGER);
+        verify(repository).create(ExperienceScope.LEDGER, ledgerId, "如何处理进项发票",
                 "先核对税率，再确认费用归属", List.of("发票", "差旅"), agentId);
     }
 
     @Test
-    void searchesGeneralAndLedgerExperiencesTogether() {
+    void searchesLedgerExperiences() {
         AccountingExperienceRepository.Page page = new AccountingExperienceRepository.Page(
                 List.of(
                         record(UUID.randomUUID(), ExperienceScope.LEDGER, ledgerId, "本账套税率",
                                 "使用 6%", List.of("税率"), 0),
-                        record(UUID.randomUUID(), ExperienceScope.GENERAL, null, "发票核对",
+                        record(UUID.randomUUID(), ExperienceScope.LEDGER, ledgerId, "发票核对",
                                 "核对税率", List.of("税率"), 1)), 2);
         when(ledgerAccess.requireMembership(agentId, ledgerId)).thenReturn(LedgerRole.AGENT);
         when(repository.search(eq(ledgerId), eq("税率"), eq(List.of("税率")), eq(20), eq(0)))
@@ -92,7 +92,7 @@ class AccountingExperienceServiceTest {
     @Test
     void rejectsStaleVersionWhenUpdatingExperience() {
         UUID id = UUID.randomUUID();
-        when(repository.find(id)).thenReturn(Optional.of(record(id, ExperienceScope.GENERAL, null,
+        when(repository.find(id)).thenReturn(Optional.of(record(id, ExperienceScope.LEDGER, ledgerId,
                 "原经验", "原内容", List.of(), 3)));
         when(repository.update(eq(id), eq(2L), any(), any(), any(), eq(agentId))).thenReturn(false);
 

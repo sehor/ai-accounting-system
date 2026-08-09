@@ -152,4 +152,4 @@ Save experience only after user confirmation or an unambiguous completed correct
 4. Use a short title, complete actionable content and useful search tags.
 5. Re-read the saved experience and report its ID, scope and version.
 
-If the MCP input schema cannot represent a valid `GENERAL` request, report the server contract defect. Do not write the experience table directly.
+If the MCP input schema cannot represent a valid `LEDGER` request, report the server contract defect. Do not write the experience table directly.

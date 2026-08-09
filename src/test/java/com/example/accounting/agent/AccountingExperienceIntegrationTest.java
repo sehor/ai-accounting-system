@@ -62,7 +62,7 @@ class AccountingExperienceIntegrationTest {
         String runTag = "exp-" + UUID.randomUUID().toString().substring(0, 8);
         AuditContext.setTraceId(traceId);
         var general = tools.createAccountingExperience(new ExperienceRequests.Create(
-                ExperienceScope.GENERAL, null, "发票税率核对", "先核对票面税率再入账", List.of(runTag, "税率")));
+                ExperienceScope.LEDGER, ledgerId, "发票税率核对", "先核对票面税率再入账", List.of(runTag, "税率")));
         var ledger = tools.createAccountingExperience(new ExperienceRequests.Create(
                 ExperienceScope.LEDGER, ledgerId, "本账套差旅费", "差旅费进入管理费用", List.of(runTag, "差旅")));
 

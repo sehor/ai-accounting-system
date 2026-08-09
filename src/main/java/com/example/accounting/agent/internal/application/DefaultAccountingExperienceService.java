@@ -41,9 +41,8 @@ public class DefaultAccountingExperienceService implements AccountingExperienceS
                     "The experience payload is required", false);
         }
         ExperienceScope scope = requireScope(request.scope());
-        UUID ledgerId = request.ledgerId();
-        validateScope(scope, ledgerId);
-        requireLedgerMember(actorId, scope, ledgerId);
+        UUID ledgerId = requireLedgerId(request.ledgerId());
+        requireLedgerMember(actorId, ledgerId);
         String title = text(request.title(), 200, "EXPERIENCE_TITLE_INVALID", "Experience title");
         String content = text(request.content(), 10_000, "EXPERIENCE_CONTENT_INVALID", "Experience content");
         List<String> tags = tags(request.tags());
@@ -56,7 +55,8 @@ public class DefaultAccountingExperienceService implements AccountingExperienceS
         requireAgent(actorId);
         ExperienceRequests.Search input = request == null
                 ? new ExperienceRequests.Search(null, null, List.of(), 1, DEFAULT_PAGE_SIZE) : request;
-        requireLedgerMember(actorId, ExperienceScope.LEDGER, input.ledgerId());
+        UUID ledgerId = requireLedgerId(input.ledgerId());
+        requireLedgerMember(actorId, ledgerId);
         int page = positive(input.page(), 1, "EXPERIENCE_PAGE_INVALID");
         int pageSize = bounded(input.pageSize(), DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE, "EXPERIENCE_PAGE_SIZE_INVALID");
         String query = optionalText(input.query(), 200, "EXPERIENCE_QUERY_INVALID");
@@ -67,7 +67,7 @@ public class DefaultAccountingExperienceService implements AccountingExperienceS
                     "The requested page is too large", false);
         }
         int offset = (int) offsetLong;
-        AccountingExperienceRepository.Page result = experiences.search(input.ledgerId(), query, tags, pageSize, offset);
+        AccountingExperienceRepository.Page result = experiences.search(ledgerId, query, tags, pageSize, offset);
         int totalPages = result.totalItems() == 0 ? 0 : (int) ((result.totalItems() + pageSize - 1) / pageSize);
         return new ExperienceResponses.Page(result.items().stream().map(this::toResponse).toList(),
                 page, pageSize, result.totalItems(), totalPages);
@@ -82,7 +82,7 @@ public class DefaultAccountingExperienceService implements AccountingExperienceS
                     "The experience update payload is required", false);
         }
         AccountingExperienceRepository.Record current = find(experienceId);
-        requireLedgerMember(actorId, current.scope(), current.ledgerId());
+        requireLedgerMember(actorId, current.ledgerId());
         String title = text(request.title(), 200, "EXPERIENCE_TITLE_INVALID", "Experience title");
         String content = text(request.content(), 10_000, "EXPERIENCE_CONTENT_INVALID", "Experience content");
         List<String> tags = tags(request.tags());
@@ -97,7 +97,7 @@ public class DefaultAccountingExperienceService implements AccountingExperienceS
     public ExperienceResponses.Experience archive(UUID actorId, UUID experienceId, long expectedVersion) {
         requireAgent(actorId);
         AccountingExperienceRepository.Record current = find(experienceId);
-        requireLedgerMember(actorId, current.scope(), current.ledgerId());
+        requireLedgerMember(actorId, current.ledgerId());
         if (!experiences.archive(experienceId, expectedVersion, actorId)) {
             throw versionConflict();
         }
@@ -112,18 +112,8 @@ public class DefaultAccountingExperienceService implements AccountingExperienceS
         }
     }
 
-    private void requireLedgerMember(UUID actorId, ExperienceScope scope, UUID ledgerId) {
-        if (scope == ExperienceScope.LEDGER && ledgerId != null) {
-            ledgerAccess.requireMembership(actorId, ledgerId);
-        }
-    }
-
-    private void validateScope(ExperienceScope scope, UUID ledgerId) {
-        if ((scope == ExperienceScope.GENERAL && ledgerId != null)
-                || (scope == ExperienceScope.LEDGER && ledgerId == null)) {
-            throw problem(422, "EXPERIENCE_SCOPE_INVALID", "Invalid experience scope",
-                    "The ledger identifier must match the experience scope", false);
-        }
+    private void requireLedgerMember(UUID actorId, UUID ledgerId) {
+        ledgerAccess.requireMembership(actorId, requireLedgerId(ledgerId));
     }
 
     private ExperienceScope requireScope(ExperienceScope scope) {
@@ -132,6 +122,14 @@ public class DefaultAccountingExperienceService implements AccountingExperienceS
                     "The experience scope is required", false);
         }
         return scope;
+    }
+
+    private UUID requireLedgerId(UUID ledgerId) {
+        if (ledgerId == null) {
+            throw problem(422, "EXPERIENCE_LEDGER_REQUIRED", "Ledger required",
+                    "Accounting experience must belong to a ledger", false);
+        }
+        return ledgerId;
     }
 
     private AccountingExperienceRepository.Record find(UUID experienceId) {

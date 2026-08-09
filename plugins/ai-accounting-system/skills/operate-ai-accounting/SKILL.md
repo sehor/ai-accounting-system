@@ -1,6 +1,6 @@
 ---
 name: operate-ai-accounting
-description: Operate the local ai-accounting-system MCP service through its default super-agent identity to inspect ledgers, accounts, periods, vouchers and reports; upload and extract accounting documents; import account lists, opening balances, fixed assets and vouchers; create, validate and post vouchers; and save confirmed general or ledger-specific accounting experience. Use whenever an AI agent is asked to query, enter, import, verify, correct, or remember accounting business data in ai-accounting-system.
+description: Operate the local ai-accounting-system MCP service through its default super-agent identity to inspect ledgers, accounts, periods, vouchers and reports; upload and extract accounting documents; import account lists, opening balances, fixed assets and vouchers; create, validate and post vouchers; and save confirmed ledger-specific accounting experience. Use whenever an AI agent is asked to query, enter, import, verify, correct, or remember accounting business data in ai-accounting-system.
 ---
 
 # Operate AI Accounting System
@@ -20,7 +20,7 @@ In the local development profile, connect to `http://127.0.0.1:8080/mcp` without
 1. Use `get_operator_context` only when a compact, categorized MCP tool directory is needed. It returns tool groups and names, not identity or ledger data.
 2. Call `get_current_user` to verify the expected `super-agent`, then call `list_ledgers` and match the requested ledger by exact name. Retain its `ledgerId`; if names are ambiguous, ask the user.
 3. Prefer `get_ledger_context` to retrieve ledger status, effective role, periods, accounts, dimension types, and cash-flow items in one call. Fall back to the corresponding fine-grained tools on older servers. The local `super-agent` should receive effective role `OWNER` for business operations, but it must not manage ledger members.
-4. For a voucher or voucher draft, invoke the bundled template skill that matches the business type. Do not preload `GENERAL` accounting experience from MCP. Search only directly relevant `LEDGER` experience when source evidence and the bundled template do not resolve the entry.
+4. For a voucher or voucher draft, invoke the bundled template skill that matches the business type. Search only directly relevant `LEDGER` experience when source evidence and the bundled template do not resolve the entry.
 5. Inspect only the ledger evidence required by the task: prefer `search_accounts` for candidate codes or names, and query periods, prior vouchers, documents, balances, assets, or reports only as needed.
 6. Form a proposed accounting action using exact ledger account IDs and evidence from the current business record plus the experience context.
 7. Perform only the authorized write. Use idempotency keys where supported and do not retry a timed-out write blindly.
@@ -47,9 +47,9 @@ In the local development profile, connect to `http://127.0.0.1:8080/mcp` without
 
 ## Experience rules
 
-- Use the bundled template skills for cross-ledger rules. Do not preload `GENERAL` experience from MCP.
+- Use the bundled template skills for cross-ledger rules; cross-ledger rules are not stored in MCP.
 - Search `LEDGER` experience only for an unresolved, company-specific question, using relevant keywords or tags and a small result set.
-- Cross-ledger knowledge is released with this plugin. Do not create or update `GENERAL` experience during ordinary bookkeeping; propose a plugin-skill update after the rule is confirmed.
+- Cross-ledger knowledge is released with this plugin. Propose a plugin-skill update after a cross-ledger rule is confirmed.
 - Search before creating to avoid duplicates.
 - Save `LEDGER` experience for company, counterparty, subject, workflow, or correction knowledge specific to one ledger.
 - Create or update experience only after the user confirms the rule or a completed task establishes it unambiguously.

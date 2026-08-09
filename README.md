@@ -85,4 +85,4 @@ MCP 使用 `POST /mcp`。本地联调启用上述开关后，`X-User-Id` 同时�
 你提供的 `postgresql+asyncpg://...` 是 Python 异步客户端格式；本项目 Spring JDBC 对应使用 `DB_URL=jdbc:postgresql://localhost:5432/ai-accounting`。
 ## Agent 做账经验
 
-MCP 提供 `create_accounting_experience`、`search_accounting_experiences`、`update_accounting_experience` 和 `archive_accounting_experience`。通用经验在当前部署内由 AGENT 共享；账套查询会同时返回通用经验和该账套经验。账套经验随账套备份恢复，通用经验不会进入账套备份。只有 `UserType.AGENT` 且具有对应账套成员关系的调用方可以访问账套经验。
+MCP 提供 `create_accounting_experience`、`search_accounting_experiences`、`update_accounting_experience` 和 `archive_accounting_experience`，全部仅处理账套经验。账套经验随账套备份恢复；跨账套做账规则随插件 Skill 发布。只有 `UserType.AGENT` 且具有对应账套成员关系的调用方可以访问账套经验。

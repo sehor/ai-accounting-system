@@ -104,7 +104,7 @@ class McpStatelessHttpIntegrationTest {
     }
 
     @Test
-    void createSchemasAllowSystemGeneratedVoucherNumbersAndGeneralExperience() throws Exception {
+    void createSchemasRequireLedgerExperience() throws Exception {
         HttpResponse<String> tools = post("""
                 {"jsonrpc":"2.0","id":7,"method":"tools/list","params":{}}
                 """);
@@ -119,7 +119,7 @@ class McpStatelessHttpIntegrationTest {
         assertThat(createVoucher.path("inputSchema").path("properties").path("request").path("required"))
                 .extracting(JsonNode::asText).doesNotContain("voucherNumber");
         assertThat(createExperience.path("inputSchema").path("properties").path("request").path("required"))
-                .extracting(JsonNode::asText).doesNotContain("ledgerId");
+                .extracting(JsonNode::asText).contains("ledgerId");
     }
 
     @Test
