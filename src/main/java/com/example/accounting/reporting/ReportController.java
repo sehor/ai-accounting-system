@@ -29,23 +29,32 @@ public class ReportController {
                                                                 HttpServletResponse response,
                                                                 @PathVariable UUID ledgerId,
                                                                 @RequestParam(required = false) String periodCode,
+                                                                @RequestParam(required = false) String periodFrom,
+                                                                @RequestParam(required = false) String periodTo,
                                                                 @RequestParam(defaultValue = "false")
                                                                 boolean includeParents) {
-        return respond(response, () -> reportingService.trialBalance(user(request), ledgerId, periodCode, includeParents));
+        PeriodRange range = PeriodRange.normalize(periodCode, periodFrom, periodTo);
+        return respond(response, () -> reportingService.trialBalance(user(request), ledgerId, range, includeParents));
     }
 
     @GetMapping("/balance-sheet")
     public ReportResponses.Statement balanceSheet(HttpServletRequest request, HttpServletResponse response,
                                                   @PathVariable UUID ledgerId,
-                                                  @RequestParam(required = false) String periodCode) {
-        return respond(response, () -> reportingService.balanceSheet(user(request), ledgerId, periodCode));
+                                                  @RequestParam(required = false) String periodCode,
+                                                  @RequestParam(required = false) String periodFrom,
+                                                  @RequestParam(required = false) String periodTo) {
+        PeriodRange range = PeriodRange.normalize(periodCode, periodFrom, periodTo);
+        return respond(response, () -> reportingService.balanceSheet(user(request), ledgerId, range));
     }
 
     @GetMapping("/income-statement")
     public ReportResponses.Statement incomeStatement(HttpServletRequest request, HttpServletResponse response,
                                                      @PathVariable UUID ledgerId,
-                                                     @RequestParam(required = false) String periodCode) {
-        return respond(response, () -> reportingService.incomeStatement(user(request), ledgerId, periodCode));
+                                                     @RequestParam(required = false) String periodCode,
+                                                     @RequestParam(required = false) String periodFrom,
+                                                     @RequestParam(required = false) String periodTo) {
+        PeriodRange range = PeriodRange.normalize(periodCode, periodFrom, periodTo);
+        return respond(response, () -> reportingService.incomeStatement(user(request), ledgerId, range));
     }
 
     @GetMapping("/general-ledger")

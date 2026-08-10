@@ -10,8 +10,21 @@ public final class ReportResponses {
     private ReportResponses() {
     }
 
-    public record TrialBalanceLine(UUID accountId, String code, String name, String category,
-                                   BigDecimal debit, BigDecimal credit, BigDecimal balance) {
+    public record TrialBalanceLine(
+            UUID accountId, String code, String name, String category,
+            BigDecimal openingDebit, BigDecimal openingCredit,
+            BigDecimal periodDebit, BigDecimal periodCredit,
+            BigDecimal closingDebit, BigDecimal closingCredit,
+            BigDecimal debit, BigDecimal credit, BigDecimal balance) {
+
+        public TrialBalanceLine(UUID accountId, String code, String name, String category,
+                                BigDecimal debit, BigDecimal credit, BigDecimal balance) {
+            this(accountId, code, name, category,
+                    BigDecimal.ZERO, BigDecimal.ZERO, debit, credit,
+                    balance.signum() >= 0 ? balance : BigDecimal.ZERO,
+                    balance.signum() < 0 ? balance.negate() : BigDecimal.ZERO,
+                    debit, credit, balance);
+        }
     }
 
     public record StatementLine(String code, String name, BigDecimal amount) {
@@ -35,7 +48,13 @@ public final class ReportResponses {
             String endingDirection, BigDecimal endingBalance) {
     }
 
-    public record GeneralLedgerPage(String periodCode, List<GeneralLedgerAccount> data, Pagination pagination) {
+    public record GeneralLedgerPage(
+            String periodFrom, String periodTo, String periodCode,
+            List<GeneralLedgerAccount> data, Pagination pagination) {
+
+        public GeneralLedgerPage(String periodCode, List<GeneralLedgerAccount> data, Pagination pagination) {
+            this(periodCode, periodCode, periodCode, data, pagination);
+        }
     }
 
     public record SubLedgerEntry(
@@ -44,10 +63,21 @@ public final class ReportResponses {
     }
 
     public record SubLedgerPage(
-            String periodCode, UUID accountId, String accountCode, String accountName,
+            String periodFrom, String periodTo, String periodCode,
+            UUID accountId, String accountCode, String accountName,
             String openingDirection, BigDecimal openingBalance,
             List<SubLedgerEntry> data, BigDecimal periodDebit, BigDecimal periodCredit,
             String endingDirection, BigDecimal endingBalance, Pagination pagination) {
+
+        public SubLedgerPage(
+                String periodCode, UUID accountId, String accountCode, String accountName,
+                String openingDirection, BigDecimal openingBalance,
+                List<SubLedgerEntry> data, BigDecimal periodDebit, BigDecimal periodCredit,
+                String endingDirection, BigDecimal endingBalance, Pagination pagination) {
+            this(periodCode, periodCode, periodCode, accountId, accountCode, accountName,
+                    openingDirection, openingBalance, data, periodDebit, periodCredit,
+                    endingDirection, endingBalance, pagination);
+        }
     }
 
     public record FinanceQueryLine(String groupKey, BigDecimal amount) {

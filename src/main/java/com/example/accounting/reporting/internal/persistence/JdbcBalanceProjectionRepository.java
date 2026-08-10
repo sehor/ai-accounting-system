@@ -2,6 +2,7 @@ package com.example.accounting.reporting.internal.persistence;
 
 import com.example.accounting.shared.balance.BalanceProjectionService;
 import com.example.accounting.reporting.ReportResponses;
+import com.example.accounting.reporting.PeriodRange;
 import com.example.accounting.reporting.internal.port.BalanceProjectionRepository;
 import java.math.BigDecimal;
 import java.util.LinkedHashMap;
@@ -9,7 +10,6 @@ import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
@@ -18,19 +18,19 @@ import org.springframework.transaction.annotation.Transactional;
 public class JdbcBalanceProjectionRepository implements BalanceProjectionRepository {
 
     private final JdbcTemplate jdbc;
+    private final BalanceSnapshotRebuilder snapshots;
+    private final ThreadLocal<UUID> attemptedLedger = new ThreadLocal<>();
 
-    public JdbcBalanceProjectionRepository(JdbcTemplate jdbc) {
+    public JdbcBalanceProjectionRepository(JdbcTemplate jdbc, BalanceSnapshotRebuilder snapshots) {
         this.jdbc = jdbc;
+        this.snapshots = snapshots;
     }
 
     @Override
-    public void appendAndApplyVoucherEvent(BalanceProjectionService.VoucherEvent event) {
+    public void appendVoucherEvent(BalanceProjectionService.VoucherEvent event) {
         requireOpenPeriod(event.ledgerId(), event.periodId());
-        Long eventId = append(event.ledgerId(), event.periodId(), "VOUCHER", event.voucherId(), event.version(),
+        append(event.ledgerId(), event.periodId(), "VOUCHER", event.voucherId(), event.version(),
                 event.type().name(), event.entries());
-        if (eventId != null) {
-            applyThrough(event.ledgerId(), event.periodId(), eventId);
-        }
     }
 
     @Override
@@ -85,35 +85,93 @@ public class JdbcBalanceProjectionRepository implements BalanceProjectionReposit
                     "The balance projection has pending or failed events");
         }
         long differences = jdbc.queryForObject("""
-                with expected as (
+                with period_info as (
+                    select p.period_code,
+                        lag(p.id) over (order by p.period_code) previous_period_id,
+                        row_number() over (order by p.period_code) period_number
+                    from accounting_period p where p.ledger_id = ?
+                ), selected as (
+                    select * from period_info where period_code = (
+                        select period_code from accounting_period where ledger_id = ? and id = ?)
+                ), leaves as (
+                    select a.id from ledger_account a
+                    where a.ledger_id = ? and not exists (
+                        select 1 from ledger_account child
+                        where child.ledger_id = a.ledger_id and child.parent_id = a.id)
+                ), facts as (
                     select vl.account_id,
-                        0::numeric opening_debit, 0::numeric opening_credit,
-                        coalesce(sum(case when vl.side = 'DEBIT' then vl.base_amount else 0 end), 0) period_debit,
-                        coalesce(sum(case when vl.side = 'CREDIT' then vl.base_amount else 0 end), 0) period_credit
+                        sum(case when vl.side = 'DEBIT' then vl.base_amount else 0 end) debit,
+                        sum(case when vl.side = 'CREDIT' then vl.base_amount else 0 end) credit
                     from voucher_line vl
                     join voucher v on v.ledger_id = vl.ledger_id and v.id = vl.voucher_id
                     where v.ledger_id = ? and v.period_id = ? and v.status = 'POSTED'
                     group by vl.account_id
-                    union all
-                    select ob.account_id, sum(ob.debit_base), sum(ob.credit_base),
-                        0::numeric, 0::numeric
-                    from opening_balance ob
-                    where ob.ledger_id = ? and ob.period_id = ? and ob.confirmed
-                    group by ob.account_id
-                ), grouped as (
-                    select account_id, sum(opening_debit) opening_debit, sum(opening_credit) opening_credit,
-                        sum(period_debit) period_debit, sum(period_credit) period_credit
-                    from expected group by account_id
-                ), differences as (
-                    select coalesce(g.account_id, b.account_id) account_id
-                    from grouped g full join account_period_balance b
-                      on b.ledger_id = ? and b.period_id = ? and b.account_id = g.account_id
-                    where coalesce(g.opening_debit, 0) <> coalesce(b.opening_debit_base, 0)
-                       or coalesce(g.opening_credit, 0) <> coalesce(b.opening_credit_base, 0)
-                       or coalesce(g.period_debit, 0) <> coalesce(b.period_debit_base, 0)
-                       or coalesce(g.period_credit, 0) <> coalesce(b.period_credit_base, 0)
-                ) select count(*) from differences
-                """, Long.class, ledgerId, periodId, ledgerId, periodId, ledgerId, periodId);
+                ), leaf_differences as (
+                    select coalesce(f.account_id, b.account_id) account_id
+                    from facts f full join (
+                        select current.* from account_period_balance current
+                        where current.ledger_id = ? and current.period_id = ?
+                          and current.account_id in (select id from leaves)
+                    ) b on b.account_id = f.account_id
+                    where coalesce(f.debit, 0) <> coalesce(b.period_debit_base, 0)
+                       or coalesce(f.credit, 0) <> coalesce(b.period_credit_base, 0)
+                ), equation_differences as (
+                    select b.account_id from account_period_balance b
+                    where b.ledger_id = ? and b.period_id = ?
+                      and b.closing_debit_base - b.closing_credit_base
+                        <> b.opening_debit_base - b.opening_credit_base
+                           + b.period_debit_base - b.period_credit_base
+                ), parent_differences as (
+                    select parent.id
+                    from ledger_account parent
+                    left join ledger_account child
+                      on child.ledger_id = parent.ledger_id and child.parent_id = parent.id
+                    left join account_period_balance pb
+                      on pb.ledger_id = parent.ledger_id and pb.period_id = ? and pb.account_id = parent.id
+                    left join account_period_balance cb
+                      on cb.ledger_id = child.ledger_id and cb.period_id = ? and cb.account_id = child.id
+                    where parent.ledger_id = ? and child.id is not null
+                    group by parent.id, pb.opening_debit_base, pb.opening_credit_base,
+                        pb.period_debit_base, pb.period_credit_base,
+                        pb.closing_debit_base, pb.closing_credit_base
+                    having coalesce(pb.opening_debit_base - pb.opening_credit_base, 0)
+                            <> coalesce(sum(cb.opening_debit_base - cb.opening_credit_base), 0)
+                        or coalesce(pb.period_debit_base, 0) <> coalesce(sum(cb.period_debit_base), 0)
+                        or coalesce(pb.period_credit_base, 0) <> coalesce(sum(cb.period_credit_base), 0)
+                        or coalesce(pb.closing_debit_base - pb.closing_credit_base, 0)
+                            <> coalesce(sum(cb.closing_debit_base - cb.closing_credit_base), 0)
+                ), expected_opening as (
+                    select leaf.id account_id,
+                        case when s.period_number = 1 then coalesce(first_opening.opening_net, 0)
+                             else coalesce(previous.closing_debit_base - previous.closing_credit_base, 0) end net
+                    from leaves leaf cross join selected s
+                    left join account_period_balance previous
+                      on previous.ledger_id = ? and previous.period_id = s.previous_period_id
+                     and previous.account_id = leaf.id
+                    left join (
+                        select account_id, sum(debit_base - credit_base) opening_net
+                        from opening_balance
+                        where ledger_id = ? and confirmed group by account_id
+                    ) first_opening on first_opening.account_id = leaf.id
+                ), continuity_differences as (
+                    select coalesce(expected.account_id, b.account_id) account_id
+                    from expected_opening expected
+                    full join (
+                        select current.* from account_period_balance current
+                        where current.ledger_id = ? and current.period_id = ?
+                          and current.account_id in (select id from leaves)
+                    ) b on b.account_id = expected.account_id
+                    where coalesce(b.opening_debit_base - b.opening_credit_base, 0) <> coalesce(expected.net, 0)
+                )
+                select (select count(*) from leaf_differences)
+                     + (select count(*) from equation_differences)
+                     + (select count(*) from parent_differences)
+                     + (select count(*) from continuity_differences)
+                """, Long.class,
+                ledgerId, ledgerId, periodId, ledgerId,
+                ledgerId, periodId, ledgerId, periodId,
+                ledgerId, periodId, periodId, periodId, ledgerId,
+                ledgerId, ledgerId, ledgerId, periodId);
         if (differences > 0) {
             throw new BalanceProjectionException("BALANCE_RECONCILIATION_FAILED",
                     "The balance projection does not reconcile to voucher and opening balance facts");
@@ -130,33 +188,37 @@ public class JdbcBalanceProjectionRepository implements BalanceProjectionReposit
 
     @Override
     public BalanceProjectionService.ProjectionStatus status(UUID ledgerId, String periodCode) {
+        if (periodCode == null) {
+            String[] bounds = jdbc.query("""
+                    select min(period_code), max(period_code) from accounting_period where ledger_id = ?
+                    """, rs -> rs.next() ? new String[]{rs.getString(1), rs.getString(2)} : null, ledgerId);
+            if (bounds == null || bounds[0] == null) {
+                return new BalanceProjectionService.ProjectionStatus("READY", 0, 0, null, null);
+            }
+            return status(ledgerId, new PeriodRange(bounds[0], bounds[1]));
+        }
+        return status(ledgerId, PeriodRange.single(periodCode));
+    }
+
+    @Override
+    public BalanceProjectionService.ProjectionStatus status(UUID ledgerId, PeriodRange range) {
         List<ProjectionRow> rows = jdbc.query("""
                 select s.status, coalesce(s.last_enqueued_event_id, 0) enqueued,
                     coalesce(s.last_applied_event_id, 0) applied,
                     s.last_enqueued_at, s.projected_at
                 from balance_projection_state s
                 join accounting_period p on p.ledger_id = s.ledger_id and p.id = s.period_id
-                where s.ledger_id = ? and (?::varchar is null or p.period_code = ?)
+                where s.ledger_id = ? and p.period_code between ? and ?
                 """, (rs, row) -> new ProjectionRow(rs.getString("status"), rs.getLong("enqueued"),
                 rs.getLong("applied"), rs.getObject("last_enqueued_at", OffsetDateTime.class),
-                rs.getObject("projected_at", OffsetDateTime.class)), ledgerId, periodCode, periodCode);
-        if (rows.isEmpty()) {
-            boolean hasFacts = Boolean.TRUE.equals(jdbc.queryForObject("""
-                    select exists (
-                        select 1 from voucher v
-                        where v.ledger_id = ? and v.status = 'POSTED'
-                          and (?::varchar is null or exists (
-                              select 1 from accounting_period p
-                              where p.ledger_id = v.ledger_id and p.id = v.period_id and p.period_code = ?))
-                        union all
-                        select 1 from opening_balance ob
-                        where ob.ledger_id = ? and ob.confirmed
-                          and (?::varchar is null or exists (
-                              select 1 from accounting_period p
-                              where p.ledger_id = ob.ledger_id and p.id = ob.period_id and p.period_code = ?))
-                    )
-                    """, Boolean.class, ledgerId, periodCode, periodCode, ledgerId, periodCode, periodCode));
-            return new BalanceProjectionService.ProjectionStatus(hasFacts ? "UNINITIALIZED" : "READY",
+                rs.getObject("projected_at", OffsetDateTime.class)),
+                ledgerId, range.periodFrom(), range.periodTo());
+        Integer expected = jdbc.queryForObject("""
+                select count(*) from accounting_period
+                where ledger_id = ? and period_code between ? and ?
+                """, Integer.class, ledgerId, range.periodFrom(), range.periodTo());
+        if (rows.size() != expected) {
+            return new BalanceProjectionService.ProjectionStatus("UNINITIALIZED",
                     0, 0, null, null);
         }
         return summarizeStatus(rows);
@@ -180,133 +242,138 @@ public class JdbcBalanceProjectionRepository implements BalanceProjectionReposit
 
     @Override
     public List<ReportResponses.TrialBalanceLine> trialBalance(UUID ledgerId, String periodCode) {
-        return jdbc.query("""
-                select a.id, a.code, a.name, a.category,
-                    coalesce(sum(b.opening_debit_base + b.period_debit_base), 0) debit,
-                    coalesce(sum(b.opening_credit_base + b.period_credit_base), 0) credit
-                from ledger_account a
-                left join account_period_balance b on b.ledger_id = a.ledger_id and b.account_id = a.id
-                left join accounting_period p on p.ledger_id = b.ledger_id and p.id = b.period_id
-                    and (?::varchar is null or p.period_code = ?)
-                where a.ledger_id = ? and (b.account_id is null or p.id is not null)
-                group by a.id, a.code, a.name, a.category
-                having coalesce(sum(b.opening_debit_base + b.period_debit_base), 0) <> 0
-                    or coalesce(sum(b.opening_credit_base + b.period_credit_base), 0) <> 0
-                order by a.code
-                """, (rs, row) -> projectionLine(rs), periodCode, periodCode, ledgerId);
+        return trialBalance(ledgerId, PeriodRange.single(periodCode), false);
     }
 
     @Override
     public List<ReportResponses.TrialBalanceLine> trialBalanceWithParents(UUID ledgerId, String periodCode) {
+        return trialBalance(ledgerId, PeriodRange.single(periodCode), true);
+    }
+
+    @Override
+    public List<ReportResponses.TrialBalanceLine> trialBalance(
+            UUID ledgerId, PeriodRange range, boolean includeParents) {
         return jdbc.query("""
-                with recursive account_path as (
-                    select id source_id, id account_id, parent_id
-                    from ledger_account where ledger_id = ?
-                    union all
-                    select path.source_id, parent.id, parent.parent_id
-                    from account_path path
-                    join ledger_account parent on parent.id = path.parent_id
-                    where parent.ledger_id = ?
-                ), amounts as (
-                    select b.account_id,
-                        sum(b.opening_debit_base + b.period_debit_base) debit,
-                        sum(b.opening_credit_base + b.period_credit_base) credit
+                with opening as (
+                    select b.account_id, b.opening_debit_base, b.opening_credit_base
                     from account_period_balance b
                     join accounting_period p on p.ledger_id = b.ledger_id and p.id = b.period_id
-                    where b.ledger_id = ? and (?::varchar is null or p.period_code = ?)
+                    where b.ledger_id = ? and p.period_code = ?
+                ), movement as (
+                    select b.account_id, sum(b.period_debit_base) period_debit_base,
+                        sum(b.period_credit_base) period_credit_base
+                    from account_period_balance b
+                    join accounting_period p on p.ledger_id = b.ledger_id and p.id = b.period_id
+                    where b.ledger_id = ? and p.period_code between ? and ?
                     group by b.account_id
+                ), closing as (
+                    select b.account_id, b.closing_debit_base, b.closing_credit_base
+                    from account_period_balance b
+                    join accounting_period p on p.ledger_id = b.ledger_id and p.id = b.period_id
+                    where b.ledger_id = ? and p.period_code = ?
                 )
-                select account.id, account.code, account.name, account.category,
-                    coalesce(sum(amounts.debit), 0) debit, coalesce(sum(amounts.credit), 0) credit
-                from ledger_account account
-                join account_path path on path.account_id = account.id
-                left join amounts on amounts.account_id = path.source_id
-                where account.ledger_id = ?
-                group by account.id, account.code, account.name, account.category
-                having coalesce(sum(amounts.debit), 0) <> 0
-                    or coalesce(sum(amounts.credit), 0) <> 0
-                order by account.code
-                """, (rs, row) -> projectionLine(rs), ledgerId, ledgerId, ledgerId,
-                periodCode, periodCode, ledgerId);
+                select a.id, a.code, a.name, a.category,
+                    coalesce(o.opening_debit_base, 0) opening_debit,
+                    coalesce(o.opening_credit_base, 0) opening_credit,
+                    coalesce(m.period_debit_base, 0) period_debit,
+                    coalesce(m.period_credit_base, 0) period_credit,
+                    coalesce(c.closing_debit_base, 0) closing_debit,
+                    coalesce(c.closing_credit_base, 0) closing_credit
+                from ledger_account a
+                left join opening o on o.account_id = a.id
+                left join movement m on m.account_id = a.id
+                left join closing c on c.account_id = a.id
+                where a.ledger_id = ?
+                  and (? or not exists (
+                      select 1 from ledger_account child
+                      where child.ledger_id = a.ledger_id and child.parent_id = a.id))
+                  and (coalesce(o.opening_debit_base, 0) <> 0
+                    or coalesce(o.opening_credit_base, 0) <> 0
+                    or coalesce(m.period_debit_base, 0) <> 0
+                    or coalesce(m.period_credit_base, 0) <> 0
+                    or coalesce(c.closing_debit_base, 0) <> 0
+                    or coalesce(c.closing_credit_base, 0) <> 0)
+                order by a.code
+                """, (rs, row) -> projectionLine(rs),
+                ledgerId, range.periodFrom(), ledgerId, range.periodFrom(), range.periodTo(),
+                ledgerId, range.periodTo(), ledgerId, includeParents);
+    }
+
+    @Override
+    public BigDecimal openingBalance(UUID ledgerId, String periodCode, UUID accountId) {
+        return jdbc.queryForObject("""
+                select coalesce(sum(b.opening_debit_base - b.opening_credit_base), 0)
+                from account_period_balance b
+                join accounting_period p on p.ledger_id = b.ledger_id and p.id = b.period_id
+                where b.ledger_id = ? and p.period_code = ? and b.account_id = ?
+                """, BigDecimal.class, ledgerId, periodCode, accountId);
     }
 
     @Override
     @Transactional
     public boolean applyPendingBatch(int maxEvents, int maxEventLines) {
-        ProjectionBatch batch = jdbc.query("""
-                select ledger_id, period_id, coalesce(last_applied_event_id, 0) applied,
-                    coalesce(last_enqueued_event_id, 0) enqueued
-                from balance_projection_state
-                where status in ('READY', 'FAILED') and attempts < 5
-                  and next_attempt_at <= now()
-                  and coalesce(last_applied_event_id, 0) < coalesce(last_enqueued_event_id, 0)
-                order by last_enqueued_at nulls first
+        UUID ledgerId = jdbc.query("""
+                select l.id
+                from ledger l
+                where exists (
+                    select 1 from balance_projection_state s
+                    where s.ledger_id = l.id and s.status in ('READY', 'FAILED')
+                      and s.attempts < 5 and s.next_attempt_at <= now()
+                      and coalesce(s.last_applied_event_id, 0) < coalesce(s.last_enqueued_event_id, 0))
+                order by (
+                    select min(s.last_enqueued_at) from balance_projection_state s
+                    where s.ledger_id = l.id
+                      and coalesce(s.last_applied_event_id, 0) < coalesce(s.last_enqueued_event_id, 0))
                 for update skip locked limit 1
-                """, rs -> rs.next() ? new ProjectionBatch(rs.getObject("ledger_id", UUID.class),
-                rs.getObject("period_id", UUID.class), rs.getLong("applied"), rs.getLong("enqueued")) : null);
-        if (batch == null) {
+                """, rs -> rs.next() ? rs.getObject(1, UUID.class) : null);
+        if (ledgerId == null) {
             return false;
         }
-        List<Long> eventIds = jdbc.queryForList("""
-                select id from balance_projection_event
-                where ledger_id = ? and period_id = ? and id > ? and id <= ?
-                order by id limit ?
-                """, Long.class, batch.ledgerId(), batch.periodId(), batch.applied(), batch.enqueued(), maxEvents);
-        if (eventIds.isEmpty()) {
-            jdbc.update("""
-                    update balance_projection_state set last_applied_event_id = last_enqueued_event_id,
-                        projected_at = now(), updated_at = now() where ledger_id = ? and period_id = ?
-                    """, batch.ledgerId(), batch.periodId());
-            return true;
+        attemptedLedger.set(ledgerId);
+        UUID sourcePeriodId = jdbc.query("""
+                select p.id
+                from balance_projection_state s
+                join accounting_period p on p.ledger_id = s.ledger_id and p.id = s.period_id
+                where s.ledger_id = ?
+                  and coalesce(s.last_applied_event_id, 0) < coalesce(s.last_enqueued_event_id, 0)
+                order by p.period_code limit 1
+                """, rs -> rs.next() ? rs.getObject(1, UUID.class) : null, ledgerId);
+        if (sourcePeriodId == null) {
+            attemptedLedger.remove();
+            return false;
         }
-        int lineCount = 0;
-        long lastApplied = batch.applied();
-        for (Long eventId : eventIds) {
-            List<BalanceLine> lines = jdbc.query("""
-                    select account_id, opening_debit_delta, opening_credit_delta,
-                        period_debit_delta, period_credit_delta
-                    from balance_projection_event_line where event_id = ? order by account_id
-                    """, (rs, row) -> new BalanceLine(rs.getObject("account_id", UUID.class),
-                    rs.getBigDecimal("opening_debit_delta"), rs.getBigDecimal("opening_credit_delta"),
-                    rs.getBigDecimal("period_debit_delta"), rs.getBigDecimal("period_credit_delta")), eventId);
-            if (lineCount > 0 && lineCount + lines.size() > maxEventLines) {
-                break;
-            }
-            for (BalanceLine line : lines) {
-                applyLine(batch.ledgerId(), batch.periodId(), line);
-            }
-            lineCount += lines.size();
-            lastApplied = eventId;
-        }
-        deleteZeroBalances(batch.ledgerId(), batch.periodId());
+        snapshots.rebuildFrom(ledgerId, sourcePeriodId);
         jdbc.update("""
-                update balance_projection_state set last_applied_event_id = ?, projected_at = now(),
+                update balance_projection_state set last_applied_event_id = last_enqueued_event_id,
+                    projected_at = now(),
                     status = 'READY', attempts = 0, last_error_code = null, last_error_message = null,
-                    updated_at = now() where ledger_id = ? and period_id = ?
-                """, lastApplied, batch.ledgerId(), batch.periodId());
+                    next_attempt_at = now(), updated_at = now()
+                where ledger_id = ?
+                  and coalesce(last_applied_event_id, 0) < coalesce(last_enqueued_event_id, 0)
+                """, ledgerId);
+        attemptedLedger.remove();
         return true;
     }
 
     @Override
     @Transactional
     public void recordFailure() {
+        UUID ledgerId = attemptedLedger.get();
+        attemptedLedger.remove();
+        if (ledgerId == null) {
+            return;
+        }
         jdbc.update("""
-                with candidate as (
-                    select ledger_id, period_id, attempts
-                    from balance_projection_state
-                    where status in ('READY', 'FAILED') and attempts < 5
-                      and coalesce(last_applied_event_id, 0) < coalesce(last_enqueued_event_id, 0)
-                    order by last_enqueued_at nulls first for update skip locked limit 1
-                )
-                update balance_projection_state s set status = 'FAILED', attempts = candidate.attempts + 1,
-                    next_attempt_at = now() + case candidate.attempts
+                update balance_projection_state s set status = 'FAILED', attempts = s.attempts + 1,
+                    next_attempt_at = now() + case s.attempts
                         when 0 then interval '1 second' when 1 then interval '5 seconds'
                         when 2 then interval '30 seconds' when 3 then interval '2 minutes'
                         else interval '10 minutes' end,
                     last_error_code = 'BALANCE_PROJECTION_FAILED',
                     last_error_message = 'Projection worker failed; retry is scheduled', updated_at = now()
-                from candidate where s.ledger_id = candidate.ledger_id and s.period_id = candidate.period_id
-        """);
+                where s.ledger_id = ?
+                  and coalesce(s.last_applied_event_id, 0) < coalesce(s.last_enqueued_event_id, 0)
+        """, ledgerId);
     }
 
     @Override
@@ -324,15 +391,22 @@ public class JdbcBalanceProjectionRepository implements BalanceProjectionReposit
     }
 
     private ReportResponses.TrialBalanceLine projectionLine(java.sql.ResultSet rs) throws java.sql.SQLException {
-        BigDecimal debit = rs.getBigDecimal("debit");
-        BigDecimal credit = rs.getBigDecimal("credit");
+        BigDecimal openingDebit = rs.getBigDecimal("opening_debit");
+        BigDecimal openingCredit = rs.getBigDecimal("opening_credit");
+        BigDecimal debit = rs.getBigDecimal("period_debit");
+        BigDecimal credit = rs.getBigDecimal("period_credit");
+        BigDecimal closingDebit = rs.getBigDecimal("closing_debit");
+        BigDecimal closingCredit = rs.getBigDecimal("closing_credit");
         return new ReportResponses.TrialBalanceLine(rs.getObject("id", UUID.class), rs.getString("code"),
-                rs.getString("name"), rs.getString("category"), debit, credit, debit.subtract(credit));
+                rs.getString("name"), rs.getString("category"), openingDebit, openingCredit,
+                debit, credit, closingDebit, closingCredit, debit, credit,
+                closingDebit.subtract(closingCredit));
     }
 
     private Long append(UUID ledgerId, UUID periodId, String aggregateType, UUID aggregateId,
                         long aggregateVersion, String eventType,
                         java.util.List<BalanceProjectionService.Entry> entries) {
+        jdbc.queryForObject("select id from ledger where id = ? for update", UUID.class, ledgerId);
         Long eventId = jdbc.query("""
                 insert into balance_projection_event (
                     ledger_id, period_id, aggregate_type, aggregate_id, aggregate_version, event_type)
@@ -357,7 +431,10 @@ public class JdbcBalanceProjectionRepository implements BalanceProjectionReposit
         jdbc.update("""
                 insert into balance_projection_state (
                     ledger_id, period_id, last_enqueued_event_id, last_enqueued_at, updated_at)
-                values (?, ?, ?, now(), now())
+                select p.ledger_id, p.id, ?, now(), now()
+                from accounting_period p
+                join accounting_period source on source.ledger_id = p.ledger_id and source.id = ?
+                where p.ledger_id = ? and p.period_code >= source.period_code
                 on conflict (ledger_id, period_id) do update set
                     last_enqueued_event_id = excluded.last_enqueued_event_id,
                     last_enqueued_at = excluded.last_enqueued_at,
@@ -368,94 +445,8 @@ public class JdbcBalanceProjectionRepository implements BalanceProjectionReposit
                     attempts = 0,
                     next_attempt_at = now(),
                     updated_at = now()
-                """, ledgerId, periodId, eventId);
+                """, eventId, periodId, ledgerId);
         return eventId;
-    }
-
-    private void applyThrough(UUID ledgerId, UUID periodId, long targetEventId) {
-        ProjectionBatch state = jdbc.query("""
-                select ledger_id, period_id, coalesce(last_applied_event_id, 0) applied,
-                    coalesce(last_enqueued_event_id, 0) enqueued
-                from balance_projection_state
-                where ledger_id = ? and period_id = ? and status <> 'REBUILDING'
-                for update
-                """, rs -> rs.next() ? new ProjectionBatch(rs.getObject("ledger_id", UUID.class),
-                rs.getObject("period_id", UUID.class), rs.getLong("applied"), rs.getLong("enqueued")) : null,
-                ledgerId, periodId);
-        if (state == null) {
-            throw new BalanceProjectionException("BALANCE_PROJECTION_NOT_READY",
-                    "The balance projection is rebuilding and cannot accept voucher changes");
-        }
-        List<Long> eventIds = jdbc.queryForList("""
-                select id from balance_projection_event
-                where ledger_id = ? and period_id = ? and id > ? and id <= ?
-                order by id
-                """, Long.class, ledgerId, periodId, state.applied(), targetEventId);
-        long lastApplied = state.applied();
-        for (Long eventId : eventIds) {
-            List<BalanceLine> lines = jdbc.query("""
-                    select account_id, opening_debit_delta, opening_credit_delta,
-                        period_debit_delta, period_credit_delta
-                    from balance_projection_event_line where event_id = ? order by account_id
-                    """, (rs, row) -> new BalanceLine(rs.getObject("account_id", UUID.class),
-                    rs.getBigDecimal("opening_debit_delta"), rs.getBigDecimal("opening_credit_delta"),
-                    rs.getBigDecimal("period_debit_delta"), rs.getBigDecimal("period_credit_delta")), eventId);
-            for (BalanceLine line : lines) {
-                applyLine(ledgerId, periodId, line);
-            }
-            lastApplied = eventId;
-        }
-        deleteZeroBalances(ledgerId, periodId);
-        jdbc.update("""
-                update balance_projection_state set last_applied_event_id = ?, projected_at = now(),
-                    status = 'READY', attempts = 0, last_error_code = null, last_error_message = null,
-                    updated_at = now() where ledger_id = ? and period_id = ?
-                """, lastApplied, ledgerId, periodId);
-    }
-
-    private void applyLine(UUID ledgerId, UUID periodId, BalanceLine line) {
-        try {
-            int updated = jdbc.update("""
-                    update account_period_balance set
-                        opening_debit_base = opening_debit_base + ?,
-                        opening_credit_base = opening_credit_base + ?,
-                        period_debit_base = period_debit_base + ?,
-                        period_credit_base = period_credit_base + ?,
-                        version = version + 1, updated_at = now()
-                    where ledger_id = ? and period_id = ? and account_id = ?
-                    """, line.openingDebit(), line.openingCredit(), line.periodDebit(), line.periodCredit(),
-                    ledgerId, periodId, line.accountId());
-            if (updated == 0) {
-                if (negative(line)) {
-                    throw new BalanceProjectionException("BALANCE_PROJECTION_OUT_OF_SYNC",
-                            "A voucher change attempted to remove a balance that is not projected");
-                }
-                jdbc.update("""
-                        insert into account_period_balance (
-                            ledger_id, period_id, account_id, opening_debit_base, opening_credit_base,
-                            period_debit_base, period_credit_base, version, updated_at)
-                        values (?, ?, ?, ?, ?, ?, ?, 1, now())
-                        """, ledgerId, periodId, line.accountId(), line.openingDebit(), line.openingCredit(),
-                        line.periodDebit(), line.periodCredit());
-            }
-        } catch (DataIntegrityViolationException exception) {
-            throw new BalanceProjectionException("BALANCE_PROJECTION_OUT_OF_SYNC",
-                    "The voucher change would make the projected balance inconsistent");
-        }
-    }
-
-    private boolean negative(BalanceLine line) {
-        return line.openingDebit().signum() < 0 || line.openingCredit().signum() < 0
-                || line.periodDebit().signum() < 0 || line.periodCredit().signum() < 0;
-    }
-
-    private void deleteZeroBalances(UUID ledgerId, UUID periodId) {
-        jdbc.update("""
-                delete from account_period_balance
-                where ledger_id = ? and period_id = ?
-                  and opening_debit_base = 0 and opening_credit_base = 0
-                  and period_debit_base = 0 and period_credit_base = 0
-                """, ledgerId, periodId);
     }
 
     private Map<UUID, BalanceProjectionService.Entry> aggregate(
@@ -478,10 +469,4 @@ public class JdbcBalanceProjectionRepository implements BalanceProjectionReposit
                          OffsetDateTime enqueuedAt, OffsetDateTime projectedAt) {
     }
 
-    private record ProjectionBatch(UUID ledgerId, UUID periodId, long applied, long enqueued) {
-    }
-
-    private record BalanceLine(UUID accountId, BigDecimal openingDebit, BigDecimal openingCredit,
-                               BigDecimal periodDebit, BigDecimal periodCredit) {
-    }
 }

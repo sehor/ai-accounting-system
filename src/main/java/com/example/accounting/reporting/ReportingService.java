@@ -10,9 +10,16 @@ public interface ReportingService {
     List<ReportResponses.TrialBalanceLine> trialBalance(
             UUID actorId, UUID ledgerId, String periodCode, boolean includeParents);
 
+    List<ReportResponses.TrialBalanceLine> trialBalance(
+            UUID actorId, UUID ledgerId, PeriodRange range, boolean includeParents);
+
     ReportResponses.Statement balanceSheet(UUID actorId, UUID ledgerId, String periodCode);
 
+    ReportResponses.Statement balanceSheet(UUID actorId, UUID ledgerId, PeriodRange range);
+
     ReportResponses.Statement incomeStatement(UUID actorId, UUID ledgerId, String periodCode);
+
+    ReportResponses.Statement incomeStatement(UUID actorId, UUID ledgerId, PeriodRange range);
 
     List<ReportResponses.LedgerLine> generalLedger(UUID actorId, UUID ledgerId, String periodCode);
 
@@ -21,8 +28,14 @@ public interface ReportingService {
     ReportResponses.GeneralLedgerPage generalLedgerBook(
             UUID actorId, UUID ledgerId, String periodCode, int page, int pageSize);
 
+    ReportResponses.GeneralLedgerPage generalLedgerBook(
+            UUID actorId, UUID ledgerId, PeriodRange range, int page, int pageSize);
+
     ReportResponses.SubLedgerPage subLedgerBook(
             UUID actorId, UUID ledgerId, String periodCode, UUID accountId, int page, int pageSize);
+
+    ReportResponses.SubLedgerPage subLedgerBook(
+            UUID actorId, UUID ledgerId, PeriodRange range, UUID accountId, int page, int pageSize);
 
     List<ReportResponses.FinanceQueryLine> financeQuery(UUID actorId, UUID ledgerId,
                                                         FinanceQueryRequests.Query request);

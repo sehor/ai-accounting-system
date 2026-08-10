@@ -90,15 +90,6 @@ public class DefaultLedgerService implements LedgerService {
         this.balanceProjection = balanceProjection;
     }
 
-    /** Compatibility constructor for focused unit tests that do not load the projection module. */
-    public DefaultLedgerService(LedgerRepository ledgers, AccountManagementRepository accounts,
-                                LedgerAccessService ledgerAccess, IdentityService identityService,
-                                AccountingStandardCatalog standards, ObjectProvider<PeriodCloseGuard> periodCloseGuard,
-                                LocalSuperAgentPolicy localSuperAgent, PlatformAdminPolicy platformAdmin) {
-        this(ledgers, accounts, ledgerAccess, identityService, standards, periodCloseGuard,
-                localSuperAgent, platformAdmin, new NoopBalanceProjectionService());
-    }
-
     @Override
     @Transactional
     public LedgerResponses.Ledger create(CurrentUserResolver.ResolvedUser actor, LedgerRequests.Create request) {
@@ -645,6 +636,12 @@ public class DefaultLedgerService implements LedgerService {
             throw problem(422, "INVALID_OPENING_BALANCE_REFERENCE", "Invalid opening balance reference",
                     "The account and period must belong to this ledger and the period must be open");
         }
+        UUID firstPeriodId = ledgers.listPeriods(ledgerId).stream()
+                .findFirst().map(LedgerResponses.Period::id).orElse(null);
+        if (!line.periodId().equals(firstPeriodId)) {
+            throw problem(422, "OPENING_BALANCE_PERIOD_INVALID", "Invalid opening balance period",
+                    "Opening balances may only be recorded in the ledger's first accounting period");
+        }
     }
 
     private void ensureNotRemovingLastOwner(
@@ -900,17 +897,6 @@ public class DefaultLedgerService implements LedgerService {
 
     private ApiProblemException problem(int status, String code, String title, String detail) {
         return new ApiProblemException(status, code, title, detail, false);
-    }
-
-    private static final class NoopBalanceProjectionService implements BalanceProjectionService {
-        @Override public void publishVoucher(VoucherEvent event) { }
-        @Override public void publishOpeningBalances(OpeningBalanceEvent event) { }
-        @Override public void requireOpenPeriod(UUID ledgerId, UUID periodId) { }
-        @Override public void requireReadyForClose(UUID ledgerId, UUID periodId) { }
-        @Override public void markReopened(UUID ledgerId, UUID periodId) { }
-        @Override public ProjectionStatus status(UUID ledgerId, String periodCode) {
-            return new ProjectionStatus("READY", 0, 0, null, null);
-        }
     }
 
     private record ParentResolution(

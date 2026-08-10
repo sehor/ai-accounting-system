@@ -6,7 +6,7 @@ import { Link, useParams } from 'react-router-dom'
 import { apiFetch } from '../api/client'
 import type { Account, GeneralLedgerAccount, GeneralLedgerPage, SubLedgerPage, TrialBalanceLine } from '../api/types'
 import { useAuth } from '../auth/AuthProvider'
-import { PeriodSelector, usePeriodFilter } from '../components/PeriodSelector'
+import { PeriodRangeSelector, usePeriodRangeFilter } from '../components/PeriodSelector'
 import { useWorkspaceSearchParams } from '../components/workspaceSearch'
 
 const bookNames: Record<string, string> = {
@@ -29,15 +29,16 @@ export function BooksPage() {
 
 function BookToolbar({ title, refreshing, onRefresh }: { title: string; refreshing: boolean; onRefresh: () => void }) {
   const { ledgerId = '' } = useParams()
-  const { periods, periodCode, setPeriodCode } = usePeriodFilter(ledgerId)
+  const { periods, periodFrom, periodTo, setPeriodRange } = usePeriodRangeFilter(ledgerId)
   return <div className="financial-toolbar">
     <Typography.Title level={1}>{title}</Typography.Title>
-    <PeriodSelector
-      periodCode={periodCode}
+    <PeriodRangeSelector
+      periodFrom={periodFrom}
+      periodTo={periodTo}
       periods={periods.data || []}
       loading={periods.isLoading}
       refreshing={refreshing}
-      onChange={setPeriodCode}
+      onChange={setPeriodRange}
       onRefresh={onRefresh}
     />
   </div>
@@ -46,26 +47,29 @@ function BookToolbar({ title, refreshing, onRefresh }: { title: string; refreshi
 function TrialBalancePage() {
   const { ledgerId = '' } = useParams()
   const { session } = useAuth()
-  const { periodCode } = usePeriodFilter(ledgerId)
+  const { periodFrom, periodTo } = usePeriodRangeFilter(ledgerId)
   const query = useQuery({
-    queryKey: ['report', ledgerId, 'trial-balance', periodCode],
+    queryKey: ['report', ledgerId, 'trial-balance', periodFrom, periodTo],
     queryFn: () => apiFetch<TrialBalanceLine[]>(
-      `/ledgers/${ledgerId}/reports/trial-balance?periodCode=${periodCode}`, session!,
+      `/ledgers/${ledgerId}/reports/trial-balance?periodFrom=${periodFrom}&periodTo=${periodTo}`, session!,
     ),
-    enabled: Boolean(session && ledgerId && periodCode),
+    enabled: Boolean(session && ledgerId && periodFrom && periodTo),
   })
   return <section className="financial-page">
     <BookToolbar title={bookNames['trial-balance']} refreshing={query.isFetching} onRefresh={() => void query.refetch()} />
     {query.isError && <Alert type="error" showIcon message="科目余额表读取失败" />}
     <Card className="financial-grid-card"><Table
-      rowKey="accountId" size="small" className="financial-table" loading={query.isLoading || !periodCode}
+      rowKey="accountId" size="small" className="financial-table" loading={query.isLoading || !periodFrom || !periodTo}
       dataSource={query.data || []} locale={{ emptyText: <Empty description="当前期间暂无余额" /> }}
-      pagination={false} scroll={{ x: 820 }} columns={[
+      pagination={false} scroll={{ x: 1320 }} columns={[
         { title: '科目编码', dataIndex: 'code', width: 150 },
         { title: '科目名称', dataIndex: 'name', width: 320 },
-        { title: '借方', dataIndex: 'debit', width: 160, align: 'right' },
-        { title: '贷方', dataIndex: 'credit', width: 160, align: 'right' },
-        { title: '余额', dataIndex: 'balance', width: 160, align: 'right' },
+        { title: '期初借方', dataIndex: 'openingDebit', width: 150, align: 'right', render: money },
+        { title: '期初贷方', dataIndex: 'openingCredit', width: 150, align: 'right', render: money },
+        { title: '发生借方', dataIndex: 'periodDebit', width: 150, align: 'right', render: money },
+        { title: '发生贷方', dataIndex: 'periodCredit', width: 150, align: 'right', render: money },
+        { title: '期末借方', dataIndex: 'closingDebit', width: 150, align: 'right', render: money },
+        { title: '期末贷方', dataIndex: 'closingCredit', width: 150, align: 'right', render: money },
       ]} />
     </Card>
   </section>
@@ -77,14 +81,14 @@ function GeneralLedgerPageView() {
   const { ledgerId = '' } = useParams()
   const { session } = useAuth()
   const [search, setSearch] = useWorkspaceSearchParams()
-  const { periodCode } = usePeriodFilter(ledgerId)
+  const { periodFrom, periodTo } = usePeriodRangeFilter(ledgerId)
   const page = Number(search.get('page') || 1)
   const query = useQuery({
-    queryKey: ['book', ledgerId, 'general-ledger', periodCode, page],
+    queryKey: ['book', ledgerId, 'general-ledger', periodFrom, periodTo, page],
     queryFn: () => apiFetch<GeneralLedgerPage>(
-      `/ledgers/${ledgerId}/books/general-ledger?periodCode=${periodCode}&page=${page}&pageSize=50`, session!,
+      `/ledgers/${ledgerId}/books/general-ledger?periodFrom=${periodFrom}&periodTo=${periodTo}&page=${page}&pageSize=50`, session!,
     ),
-    enabled: Boolean(session && ledgerId && periodCode),
+    enabled: Boolean(session && ledgerId && periodFrom && periodTo),
   })
   const rows = useMemo(() => (query.data?.data || []).flatMap((account) => [
     { ...account, rowType: 'opening' as const, summary: '期初余额' },
@@ -97,7 +101,7 @@ function GeneralLedgerPageView() {
     {query.isError && <Alert type="error" showIcon message="总账读取失败" />}
     <Card className="financial-grid-card"><Table<GeneralLedgerDisplayRow>
       rowKey={(row) => `${row.accountId}-${row.rowType}`} size="small" className="financial-table"
-      loading={query.isLoading || !periodCode} dataSource={rows}
+      loading={query.isLoading || !periodFrom || !periodTo} dataSource={rows}
       locale={{ emptyText: <Empty description="当前期间暂无总账数据" /> }} scroll={{ x: 980 }}
       pagination={false}
       columns={[
@@ -105,7 +109,8 @@ function GeneralLedgerPageView() {
           render: (value, row) => row.rowType === 'opening' ? value : null },
         { title: '科目名称', dataIndex: 'accountName', width: 260, onCell: mergedCell,
           render: (value, row) => row.rowType === 'opening' ? value : null },
-        { title: '期间', width: 100, render: () => periodCode?.replace('-', '') },
+        { title: '期间', width: 130, render: () => periodFrom === periodTo
+          ? periodFrom?.replace('-', '') : `${periodFrom}~${periodTo}` },
         { title: '摘要', dataIndex: 'summary', width: 130 },
         { title: '借方', width: 150, align: 'right', render: (_, row) => row.rowType === 'period' ? money(row.periodDebit) : row.rowType === 'year' ? money(row.yearDebit) : '' },
         { title: '贷方', width: 150, align: 'right', render: (_, row) => row.rowType === 'period' ? money(row.periodCredit) : row.rowType === 'year' ? money(row.yearCredit) : '' },
@@ -152,7 +157,7 @@ function SubLedgerPageView() {
   const { ledgerId = '' } = useParams()
   const { session } = useAuth()
   const [search, setSearch] = useWorkspaceSearchParams()
-  const { periodCode } = usePeriodFilter(ledgerId)
+  const { periodFrom, periodTo } = usePeriodRangeFilter(ledgerId)
   const page = Number(search.get('page') || 1)
   const accountId = search.get('accountId') || undefined
   const keyword = search.get('accountQuery') || ''
@@ -169,11 +174,11 @@ function SubLedgerPageView() {
     setSearch(next, { replace: true })
   }, [accountId, firstLeaf, search, setSearch])
   const query = useQuery({
-    queryKey: ['book', ledgerId, 'sub-ledger', periodCode, accountId, page],
+    queryKey: ['book', ledgerId, 'sub-ledger', periodFrom, periodTo, accountId, page],
     queryFn: () => apiFetch<SubLedgerPage>(
-      `/ledgers/${ledgerId}/books/sub-ledger?periodCode=${periodCode}&accountId=${accountId}&page=${page}&pageSize=50`, session!,
+      `/ledgers/${ledgerId}/books/sub-ledger?periodFrom=${periodFrom}&periodTo=${periodTo}&accountId=${accountId}&page=${page}&pageSize=50`, session!,
     ),
-    enabled: Boolean(session && ledgerId && periodCode && accountId),
+    enabled: Boolean(session && ledgerId && periodFrom && periodTo && accountId),
   })
   const tree = useMemo(() => filterTree(accountTree(accounts.data || []), keyword), [accounts.data, keyword])
   const rows = page === 1 && query.data ? [{
@@ -193,7 +198,7 @@ function SubLedgerPageView() {
     <div className="sub-ledger-layout">
       <Card className="financial-grid-card sub-ledger-table"><Table
         rowKey={(row) => row.voucherId === 'opening' ? 'opening' : `${row.voucherId}-${row.summary}`}
-        size="small" className="financial-table" loading={query.isLoading || !periodCode || !accountId}
+        size="small" className="financial-table" loading={query.isLoading || !periodFrom || !periodTo || !accountId}
         dataSource={rows} locale={{ emptyText: <Empty description="当前科目暂无明细" /> }} scroll={{ x: 900 }}
         pagination={false}
         summary={() => query.data ? <Table.Summary.Row>

@@ -4,13 +4,13 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import type { ReactNode } from 'react'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
-import { apiFetch } from '../api/client'
+import { apiFetch, apiFetchWithHeaders } from '../api/client'
 import { BooksPage } from './BooksPage'
 import { ReportsPage } from './ReportsPage'
 
 vi.mock('../api/client', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../api/client')>()
-  return { ...actual, apiFetch: vi.fn() }
+  return { ...actual, apiFetch: vi.fn(), apiFetchWithHeaders: vi.fn() }
 })
 
 vi.mock('../auth/AuthProvider', () => ({
@@ -32,6 +32,9 @@ beforeAll(() => {
 })
 
 beforeEach(() => {
+  vi.mocked(apiFetchWithHeaders).mockResolvedValue({
+    data: { totalLines: 0, lines: [] }, headers: new Headers(),
+  })
   vi.mocked(apiFetch).mockImplementation((path) => {
     if (path.endsWith('/periods')) return Promise.resolve(periods)
     if (path.endsWith('/accounts')) return Promise.resolve([{
@@ -42,7 +45,8 @@ beforeEach(() => {
       dimensionRequirements: [],
     }])
     if (path.includes('/books/sub-ledger')) return Promise.resolve({
-      periodCode: '2026-06', accountId: 'account-1', accountCode: '1002', accountName: '银行存款',
+      periodFrom: '2026-06', periodTo: '2026-06', periodCode: '2026-06',
+      accountId: 'account-1', accountCode: '1002', accountName: '银行存款',
       openingDirection: 'DEBIT', openingBalance: '100.00', data: [], periodDebit: '0', periodCredit: '0',
       endingDirection: 'DEBIT', endingBalance: '100.00',
       pagination: { page: 1, pageSize: 50, totalItems: 0, totalPages: 0 },
@@ -79,7 +83,7 @@ describe('independent book and report periods', () => {
     )
 
     await waitFor(() => expect(apiFetch).toHaveBeenCalledWith(
-      expect.stringContaining('/books/sub-ledger?periodCode=2026-06&accountId=account-1'),
+      expect.stringContaining('/books/sub-ledger?periodFrom=2026-06&periodTo=2026-06&accountId=account-1'),
       expect.anything(),
     ))
   })
@@ -91,12 +95,12 @@ describe('independent book and report periods', () => {
       <ReportsPage />,
     )
 
-    await waitFor(() => expect(apiFetch).toHaveBeenCalledWith(
-      expect.stringContaining('/reports/income-statement?periodCode=2026-08'),
+    await waitFor(() => expect(apiFetchWithHeaders).toHaveBeenCalledWith(
+      expect.stringContaining('/reports/income-statement?periodFrom=2026-08&periodTo=2026-08'),
       expect.anything(),
     ))
-    expect(apiFetch).not.toHaveBeenCalledWith(
-      expect.stringContaining('/reports/income-statement?periodCode=2026-06'),
+    expect(apiFetchWithHeaders).not.toHaveBeenCalledWith(
+      expect.stringContaining('/reports/income-statement?periodFrom=2026-06&periodTo=2026-06'),
       expect.anything(),
     )
   })

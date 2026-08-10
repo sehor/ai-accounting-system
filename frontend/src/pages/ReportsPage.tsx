@@ -6,7 +6,7 @@ import { useState } from 'react'
 import { apiFetchWithHeaders } from '../api/client'
 import type { Statement, TrialBalanceLine } from '../api/types'
 import { useAuth } from '../auth/AuthProvider'
-import { PeriodSelector, usePeriodFilter } from '../components/PeriodSelector'
+import { PeriodRangeSelector, usePeriodRangeFilter } from '../components/PeriodSelector'
 import { useWorkspaceSearchParams } from '../components/workspaceSearch'
 
 const reportNames: Record<string, string> = {
@@ -24,14 +24,15 @@ export function ReportsPage() {
   const { ledgerId = '', reportType = 'balance-sheet' } = useParams()
   const { session } = useAuth()
   const [search, setSearch] = useWorkspaceSearchParams()
-  const { periods, periodCode, setPeriodCode } = usePeriodFilter(ledgerId)
+  const { periods, periodFrom, periodTo, setPeriodRange } = usePeriodRangeFilter(ledgerId)
   const includeParents = search.get('includeParents') === 'true'
   const [balanceSource, setBalanceSource] = useState<string | null>(null)
   const reportParams = new URLSearchParams()
-  if (periodCode) reportParams.set('periodCode', periodCode)
+  if (periodFrom) reportParams.set('periodFrom', periodFrom)
+  if (periodTo) reportParams.set('periodTo', periodTo)
   if (reportType === 'trial-balance' && includeParents) reportParams.set('includeParents', 'true')
   const query = useQuery({
-    queryKey: ['report', ledgerId, reportType, periodCode, includeParents],
+    queryKey: ['report', ledgerId, reportType, periodFrom, periodTo, includeParents],
     queryFn: async () => {
       const response = await apiFetchWithHeaders<TrialBalanceLine[] | Statement>(
         `/ledgers/${ledgerId}/reports/${reportType}?${reportParams}`, session!,
@@ -39,7 +40,7 @@ export function ReportsPage() {
       setBalanceSource(response.headers.get('X-Balance-Source'))
       return response.data
     },
-    enabled: Boolean(session && ledgerId && periodCode && reportNames[reportType]),
+    enabled: Boolean(session && ledgerId && periodFrom && periodTo && reportNames[reportType]),
   })
   const statement = reportType === 'balance-sheet' || reportType === 'income-statement'
   const rows = statement ? ((query.data as Statement | undefined)?.lines || []) : (query.data || [])
@@ -52,9 +53,12 @@ export function ReportsPage() {
     : [
         { title: '科目编码', dataIndex: 'code', width: 140 },
         { title: '科目名称', dataIndex: 'name', width: 320 },
-        { title: '借方', dataIndex: 'debit', width: 160, align: 'right' as const },
-        { title: '贷方', dataIndex: 'credit', width: 160, align: 'right' as const },
-        { title: '余额', dataIndex: 'balance', width: 160, align: 'right' as const },
+        { title: '期初借', dataIndex: 'openingDebit', width: 140, align: 'right' as const },
+        { title: '期初贷', dataIndex: 'openingCredit', width: 140, align: 'right' as const },
+        { title: '发生借', dataIndex: 'periodDebit', width: 140, align: 'right' as const },
+        { title: '发生贷', dataIndex: 'periodCredit', width: 140, align: 'right' as const },
+        { title: '期末借', dataIndex: 'closingDebit', width: 140, align: 'right' as const },
+        { title: '期末贷', dataIndex: 'closingCredit', width: 140, align: 'right' as const },
       ]) as TableProps<TrialBalanceLine>['columns']
 
   const toggleParents = (checked: boolean) => {
@@ -77,12 +81,13 @@ export function ReportsPage() {
           unCheckedChildren="仅末级"
           onChange={toggleParents}
         />}
-        <PeriodSelector
-          periodCode={periodCode}
+        <PeriodRangeSelector
+          periodFrom={periodFrom}
+          periodTo={periodTo}
           periods={periods.data || []}
           loading={periods.isLoading}
           refreshing={query.isFetching}
-          onChange={setPeriodCode}
+          onChange={setPeriodRange}
           onRefresh={() => void query.refetch()}
         />
       </Space>
@@ -93,12 +98,12 @@ export function ReportsPage() {
         rowKey={reportRowKey}
         size="small"
         className="financial-table"
-        loading={query.isLoading || !periodCode}
+        loading={query.isLoading || !periodFrom || !periodTo}
         dataSource={rows as TrialBalanceLine[]}
         locale={{ emptyText: <Empty description="当前期间暂无报表数据" /> }}
         columns={columns}
         pagination={false}
-        scroll={{ x: 780 }}
+        scroll={{ x: 1260 }}
       />
     </Card>
   </section>

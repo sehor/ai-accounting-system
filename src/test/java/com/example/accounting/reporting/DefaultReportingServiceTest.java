@@ -23,13 +23,13 @@ class DefaultReportingServiceTest {
         UUID ledgerId = UUID.randomUUID();
         UUID accountId = UUID.randomUUID();
         when(access.requireMembership(actorId, ledgerId)).thenReturn(LedgerRole.VIEWER);
-        when(repository.periodExists(ledgerId, "2026-06")).thenReturn(true);
+        when(repository.periodsExist(ledgerId, PeriodRange.single("2026-06"))).thenReturn(true);
         when(repository.accountExists(ledgerId, accountId)).thenReturn(false);
 
         assertThatThrownBy(() -> service.generalLedgerBook(actorId, ledgerId, "bad", 1, 50))
                 .isInstanceOf(ApiProblemException.class)
                 .extracting(error -> ((ApiProblemException) error).code())
-                .isEqualTo("PERIOD_NOT_FOUND");
+                .isEqualTo("PERIOD_RANGE_INVALID");
         assertThatThrownBy(() -> service.subLedgerBook(actorId, ledgerId, "2026-06", accountId, 1, 50))
                 .isInstanceOf(ApiProblemException.class)
                 .extracting(error -> ((ApiProblemException) error).code())

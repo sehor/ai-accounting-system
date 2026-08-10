@@ -22,6 +22,7 @@ import com.example.accounting.documents.JobService;
 import com.example.accounting.shared.web.ApiProblemException;
 import com.example.accounting.reporting.FinanceQueryRequests;
 import com.example.accounting.reporting.ReportingService;
+import com.example.accounting.reporting.PeriodRange;
 import com.example.accounting.shared.audit.AuditContext;
 import com.example.accounting.voucher.VoucherRequests;
 import com.example.accounting.voucher.VoucherResponses;
@@ -676,6 +677,37 @@ public class FinanceMcpTools {
                 });
     }
 
+    @McpTool(name = "export_report_range", description = "Export a finance report for an accounting-period range")
+    @PreAuthorize("isAuthenticated()")
+    public ExportedFile exportReportRange(
+            @McpToolParam UUID ledgerId,
+            @McpToolParam(description = "One of trial_balance, balance_sheet, income_statement") String report,
+            @McpToolParam(description = "Starting accounting period") String periodFrom,
+            @McpToolParam(description = "Ending accounting period") String periodTo,
+            @McpToolParam(description = "Include parent accounts for trial_balance", required = false)
+            boolean includeParents) {
+        UUID actorId = actor();
+        PeriodRange range = new PeriodRange(periodFrom, periodTo);
+        return audited(actorId, "export_report_range", ledgerId,
+                report + ":" + periodFrom + ":" + periodTo + ":" + includeParents, () -> {
+                    Object data = queryReportRange(actorId, ledgerId, report, range, includeParents);
+                    Map<String, Object> payload = new LinkedHashMap<>();
+                    payload.put("ledgerId", ledgerId);
+                    payload.put("report", report);
+                    payload.put("periodFrom", range.periodFrom());
+                    payload.put("periodTo", range.periodTo());
+                    payload.put("includeParents", includeParents);
+                    payload.put("data", data);
+                    try {
+                        return file(report.replace('_', '-') + "-" + periodFrom + "-" + periodTo + ".json",
+                                "application/json; charset=UTF-8", objectMapper.writeValueAsBytes(payload));
+                    } catch (IOException exception) {
+                        throw new ApiProblemException(500, "REPORT_EXPORT_FAILED", "Report export failed",
+                                "The report file could not be generated", false);
+                    }
+                });
+    }
+
     @McpTool(name = "finance_query_advanced", description = "Run advanced finance query")
     @PreAuthorize("isAuthenticated()")
     public List<com.example.accounting.reporting.ReportResponses.FinanceQueryLine> financeQueryAdvanced(
@@ -937,6 +969,17 @@ public class FinanceMcpTools {
             case "sub_ledger" -> reportingService.subLedger(actorId, ledgerId, periodCode);
             default -> throw new ApiProblemException(422, "FINANCE_QUERY_INVALID", "Invalid finance query",
                     "The report is not in the whitelist", false);
+        };
+    }
+
+    private Object queryReportRange(UUID actorId, UUID ledgerId, String report, PeriodRange range,
+                                    boolean includeParents) {
+        return switch (report) {
+            case "trial_balance" -> reportingService.trialBalance(actorId, ledgerId, range, includeParents);
+            case "balance_sheet" -> reportingService.balanceSheet(actorId, ledgerId, range);
+            case "income_statement" -> reportingService.incomeStatement(actorId, ledgerId, range);
+            default -> throw new ApiProblemException(422, "FINANCE_QUERY_INVALID", "Invalid finance query",
+                    "Range export supports trial_balance, balance_sheet, and income_statement", false);
         };
     }
 

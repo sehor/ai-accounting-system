@@ -3,8 +3,6 @@ package com.example.accounting.reporting.internal.persistence;
 import com.example.accounting.reporting.BalanceRebuildResponses;
 import com.example.accounting.reporting.internal.port.BalanceRebuildRepository;
 import java.time.OffsetDateTime;
-import java.math.BigDecimal;
-import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -15,9 +13,12 @@ import org.springframework.transaction.annotation.Transactional;
 public class JdbcBalanceRebuildRepository implements BalanceRebuildRepository {
 
     private final JdbcTemplate jdbc;
+    private final BalanceSnapshotRebuilder snapshots;
+    private final ThreadLocal<UUID> attemptedJob = new ThreadLocal<>();
 
-    public JdbcBalanceRebuildRepository(JdbcTemplate jdbc) {
+    public JdbcBalanceRebuildRepository(JdbcTemplate jdbc, BalanceSnapshotRebuilder snapshots) {
         this.jdbc = jdbc;
+        this.snapshots = snapshots;
     }
 
     @Override
@@ -75,104 +76,78 @@ public class JdbcBalanceRebuildRepository implements BalanceRebuildRepository {
         if (job == null) {
             return false;
         }
-        if (job.totalPeriods() == 0) {
-            int total = jdbc.queryForObject("""
-                    select count(*) from accounting_period
-                    where ledger_id = ? and (?::varchar is null or period_code between ? and ?)
-                    """, Integer.class, job.ledgerId(), job.periodFrom(), job.periodFrom(), job.periodTo());
+        attemptedJob.set(job.id());
+        jdbc.queryForObject("select id from ledger where id = ? for update", UUID.class, job.ledgerId());
+        PeriodState source = jdbc.query("""
+                select id, period_code from accounting_period
+                where ledger_id = ? and (?::varchar is null or period_code >= ?)
+                order by period_code limit 1
+                """, rs -> rs.next() ? new PeriodState(
+                rs.getObject("id", UUID.class), rs.getString("period_code")) : null,
+                job.ledgerId(), job.periodFrom(), job.periodFrom());
+        if (source == null) {
             jdbc.update("""
-                    update balance_rebuild_job set status = 'RUNNING', started_at = coalesce(started_at, now()),
-                        total_periods = ? where id = ?
-                    """, total, job.id());
-            job = new JobState(job.id(), job.ledgerId(), job.periodFrom(), job.periodTo(), 0, total);
-        }
-        if (job.processedPeriods() >= job.totalPeriods()) {
-            jdbc.update("update balance_rebuild_job set status = 'SUCCEEDED', completed_at = now() where id = ?",
-                    job.id());
+                    update balance_rebuild_job set status = 'SUCCEEDED', total_periods = 0,
+                        processed_periods = 0, completed_at = now() where id = ?
+                    """, job.id());
+            attemptedJob.remove();
             return true;
         }
+        int total = jdbc.queryForObject("""
+                select count(*) from accounting_period where ledger_id = ? and period_code >= ?
+                """, Integer.class, job.ledgerId(), source.periodCode());
         jdbc.update("""
-                update balance_rebuild_job set status = 'RUNNING', started_at = coalesce(started_at, now())
+                update balance_rebuild_job set status = 'RUNNING', started_at = coalesce(started_at, now()),
+                    period_from = ?, period_to = (
+                        select max(period_code) from accounting_period where ledger_id = ?),
+                    total_periods = ?
                 where id = ?
-                """, job.id());
-        PeriodState period = jdbc.query("""
-                select id, status from accounting_period
-                where ledger_id = ? and (?::varchar is null or period_code between ? and ?)
-                order by period_code offset ? limit 1 for update
-                """, rs -> rs.next() ? new PeriodState(rs.getObject("id", UUID.class), rs.getString("status")) : null,
-                job.ledgerId(), job.periodFrom(), job.periodFrom(), job.periodTo(), job.processedPeriods());
-        if (period == null) {
-            jdbc.update("update balance_rebuild_job set status = 'SUCCEEDED', completed_at = now() where id = ?",
-                    job.id());
-            return true;
-        }
+                """, source.periodCode(), job.ledgerId(), total, job.id());
         jdbc.update("""
                 insert into balance_projection_state (ledger_id, period_id, status, updated_at)
-                values (?, ?, 'REBUILDING', now())
-                on conflict (ledger_id, period_id) do update set status = 'REBUILDING', updated_at = now()
-                """, job.ledgerId(), period.id());
-        jdbc.update("delete from account_period_balance where ledger_id = ? and period_id = ?",
-                job.ledgerId(), period.id());
-        List<BalanceAmount> amounts = jdbc.query("""
-                with facts as (
-                    select vl.account_id, 0::numeric opening_debit, 0::numeric opening_credit,
-                        case when vl.side = 'DEBIT' then vl.base_amount else 0 end period_debit,
-                        case when vl.side = 'CREDIT' then vl.base_amount else 0 end period_credit
-                    from voucher_line vl join voucher v on v.ledger_id = vl.ledger_id and v.id = vl.voucher_id
-                    where v.ledger_id = ? and v.period_id = ? and v.status = 'POSTED'
-                    union all
-                    select ob.account_id, ob.debit_base, ob.credit_base, 0::numeric, 0::numeric
-                    from opening_balance ob where ob.ledger_id = ? and ob.period_id = ? and ob.confirmed
-                )
-                select account_id, sum(opening_debit) opening_debit, sum(opening_credit) opening_credit,
-                    sum(period_debit) period_debit, sum(period_credit) period_credit
-                from facts group by account_id
-                """, (rs, row) -> new BalanceAmount(rs.getObject("account_id", UUID.class),
-                rs.getBigDecimal("opening_debit"), rs.getBigDecimal("opening_credit"),
-                rs.getBigDecimal("period_debit"), rs.getBigDecimal("period_credit")),
-                job.ledgerId(), period.id(), job.ledgerId(), period.id());
-        for (BalanceAmount amount : amounts) {
-            jdbc.update("""
-                    insert into account_period_balance (ledger_id, period_id, account_id,
-                        opening_debit_base, opening_credit_base, period_debit_base, period_credit_base,
-                        finalized_at, version, updated_at)
-                    values (?, ?, ?, ?, ?, ?, ?, case when ? = 'CLOSED' then now() else null end, 1, now())
-                    """, job.ledgerId(), period.id(), amount.accountId(), amount.openingDebit(), amount.openingCredit(),
-                    amount.periodDebit(), amount.periodCredit(), period.status());
-        }
+                select p.ledger_id, p.id, 'REBUILDING', now()
+                from accounting_period p where p.ledger_id = ? and p.period_code >= ?
+                on conflict (ledger_id, period_id) do update set
+                    status = 'REBUILDING', updated_at = now()
+                """, job.ledgerId(), source.periodCode());
+        snapshots.rebuildFrom(job.ledgerId(), source.id());
         Long watermark = jdbc.queryForObject("""
                 select coalesce(max(id), 0) from balance_projection_event
-                where ledger_id = ? and period_id = ?
-                """, Long.class, job.ledgerId(), period.id());
+                where ledger_id = ?
+                """, Long.class, job.ledgerId());
         jdbc.update("""
                 update balance_projection_state set last_enqueued_event_id = ?, last_applied_event_id = ?,
                     projected_at = now(), status = 'READY', attempts = 0, last_error_code = null,
-                    last_error_message = null, updated_at = now() where ledger_id = ? and period_id = ?
-                """, watermark, watermark, job.ledgerId(), period.id());
-        int processed = job.processedPeriods() + 1;
+                    last_error_message = null, next_attempt_at = now(), updated_at = now()
+                where ledger_id = ? and period_id in (
+                    select id from accounting_period where ledger_id = ? and period_code >= ?)
+                """, watermark, watermark, job.ledgerId(), job.ledgerId(), source.periodCode());
         jdbc.update("""
-                update balance_rebuild_job set processed_periods = ?, status = case when ? >= total_periods
-                    then 'SUCCEEDED' else 'RUNNING' end,
-                    completed_at = case when ? >= total_periods then now() else null end where id = ?
-                """, processed, processed, processed, job.id());
+                update balance_rebuild_job set processed_periods = ?, status = 'SUCCEEDED',
+                    completed_at = now() where id = ?
+                """, total, job.id());
+        attemptedJob.remove();
         return true;
     }
 
     @Override
     @Transactional
     public void failRunningJob() {
+        UUID jobId = attemptedJob.get();
+        attemptedJob.remove();
+        if (jobId == null) {
+            return;
+        }
         jdbc.update("""
                 update balance_rebuild_job set status = 'FAILED', completed_at = now(),
                     last_error_code = 'BALANCE_REBUILD_FAILED',
-                    last_error_message = 'Balance rebuild worker failed' where status = 'RUNNING'
-                """);
+                    last_error_message = 'Balance rebuild worker failed'
+                where id = ? and status in ('RUNNING', 'QUEUED')
+                """, jobId);
     }
 
     private record JobState(UUID id, UUID ledgerId, String periodFrom, String periodTo,
                             int processedPeriods, int totalPeriods) { }
 
-    private record PeriodState(UUID id, String status) { }
-
-    private record BalanceAmount(UUID accountId, BigDecimal openingDebit, BigDecimal openingCredit,
-                                 BigDecimal periodDebit, BigDecimal periodCredit) { }
+    private record PeriodState(UUID id, String periodCode) { }
 }

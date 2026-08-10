@@ -1896,6 +1896,12 @@ export interface components {
             code?: string;
             name?: string;
             category?: string;
+            openingDebit?: number;
+            openingCredit?: number;
+            periodDebit?: number;
+            periodCredit?: number;
+            closingDebit?: number;
+            closingCredit?: number;
             debit?: number;
             credit?: number;
             balance?: number;
@@ -1990,6 +1996,8 @@ export interface components {
             balance?: number;
         };
         SubLedgerPage: {
+            periodFrom?: string;
+            periodTo?: string;
             periodCode?: string;
             /** Format: uuid */
             accountId?: string;
@@ -2020,6 +2028,8 @@ export interface components {
             endingBalance?: number;
         };
         GeneralLedgerPage: {
+            periodFrom?: string;
+            periodTo?: string;
             periodCode?: string;
             data?: components["schemas"]["GeneralLedgerAccount"][];
             pagination?: components["schemas"]["Pagination"];
@@ -3679,6 +3689,8 @@ export interface operations {
         parameters: {
             query?: {
                 periodCode?: string;
+                periodFrom?: string;
+                periodTo?: string;
                 includeParents?: boolean;
             };
             header?: never;
@@ -3728,6 +3740,8 @@ export interface operations {
         parameters: {
             query?: {
                 periodCode?: string;
+                periodFrom?: string;
+                periodTo?: string;
             };
             header?: never;
             path: {
@@ -3776,6 +3790,8 @@ export interface operations {
         parameters: {
             query?: {
                 periodCode?: string;
+                periodFrom?: string;
+                periodTo?: string;
             };
             header?: never;
             path: {
@@ -4053,7 +4069,9 @@ export interface operations {
     subLedger_1: {
         parameters: {
             query: {
-                periodCode: string;
+                periodCode?: string;
+                periodFrom?: string;
+                periodTo?: string;
                 accountId: string;
                 page?: number;
                 pageSize?: number;
@@ -4079,8 +4097,10 @@ export interface operations {
     };
     generalLedger_1: {
         parameters: {
-            query: {
-                periodCode: string;
+            query?: {
+                periodCode?: string;
+                periodFrom?: string;
+                periodTo?: string;
                 page?: number;
                 pageSize?: number;
             };

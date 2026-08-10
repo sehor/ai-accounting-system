@@ -5,10 +5,12 @@ import java.util.UUID;
 import java.util.List;
 import java.time.OffsetDateTime;
 import com.example.accounting.reporting.ReportResponses;
+import com.example.accounting.reporting.PeriodRange;
+import java.math.BigDecimal;
 
 public interface BalanceProjectionRepository {
 
-    void appendAndApplyVoucherEvent(BalanceProjectionService.VoucherEvent event);
+    void appendVoucherEvent(BalanceProjectionService.VoucherEvent event);
 
     void appendOpeningBalanceEvent(BalanceProjectionService.OpeningBalanceEvent event);
 
@@ -20,9 +22,15 @@ public interface BalanceProjectionRepository {
 
     BalanceProjectionService.ProjectionStatus status(UUID ledgerId, String periodCode);
 
+    BalanceProjectionService.ProjectionStatus status(UUID ledgerId, PeriodRange range);
+
     List<ReportResponses.TrialBalanceLine> trialBalance(UUID ledgerId, String periodCode);
 
     List<ReportResponses.TrialBalanceLine> trialBalanceWithParents(UUID ledgerId, String periodCode);
+
+    List<ReportResponses.TrialBalanceLine> trialBalance(UUID ledgerId, PeriodRange range, boolean includeParents);
+
+    BigDecimal openingBalance(UUID ledgerId, String periodCode, UUID accountId);
 
     boolean applyPendingBatch(int maxEvents, int maxEventLines);
 

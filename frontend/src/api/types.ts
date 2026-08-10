@@ -307,6 +307,12 @@ export interface TrialBalanceLine {
   code: string
   name: string
   category: string
+  openingDebit: string
+  openingCredit: string
+  periodDebit: string
+  periodCredit: string
+  closingDebit: string
+  closingCredit: string
   debit: string
   credit: string
   balance: string
@@ -357,7 +363,9 @@ export interface GeneralLedgerAccount {
 }
 
 export interface GeneralLedgerPage {
-  periodCode: string
+  periodFrom: string
+  periodTo: string
+  periodCode: string | null
   data: GeneralLedgerAccount[]
   pagination: Pagination
 }
@@ -374,7 +382,9 @@ export interface SubLedgerEntry {
 }
 
 export interface SubLedgerPage {
-  periodCode: string
+  periodFrom: string
+  periodTo: string
+  periodCode: string | null
   accountId: string
   accountCode: string
   accountName: string

@@ -60,10 +60,39 @@ public class JdbcLedgerRepository implements LedgerRepository {
 
     @Override
     public void createPeriod(UUID ledgerId, String periodCode, LocalDate startDate, LocalDate endDate) {
+        UUID periodId = UUID.randomUUID();
         jdbc.update("""
                 insert into accounting_period (id, ledger_id, period_code, start_date, end_date)
                 values (?, ?, ?, ?, ?)
-                """, UUID.randomUUID(), ledgerId, periodCode, startDate, endDate);
+                """, periodId, ledgerId, periodCode, startDate, endDate);
+        Long watermark = jdbc.queryForObject("""
+                select coalesce(max(id), 0) from balance_projection_event where ledger_id = ?
+                """, Long.class, ledgerId);
+        jdbc.update("""
+                insert into balance_projection_state (
+                    ledger_id, period_id, last_enqueued_event_id, last_applied_event_id,
+                    status, projected_at, updated_at)
+                values (?, ?, ?, ?, 'READY', now(), now())
+                on conflict (ledger_id, period_id) do nothing
+                """, ledgerId, periodId, watermark, watermark);
+        jdbc.update("""
+                insert into account_period_balance (
+                    ledger_id, period_id, account_id,
+                    opening_debit_base, opening_credit_base,
+                    period_debit_base, period_credit_base,
+                    closing_debit_base, closing_credit_base, updated_at)
+                select previous.ledger_id, ?, previous.account_id,
+                    previous.closing_debit_base, previous.closing_credit_base,
+                    0, 0, previous.closing_debit_base, previous.closing_credit_base, now()
+                from account_period_balance previous
+                join accounting_period prior
+                  on prior.ledger_id = previous.ledger_id and prior.id = previous.period_id
+                where previous.ledger_id = ? and prior.period_code = (
+                    select max(period_code) from accounting_period
+                    where ledger_id = ? and period_code < ?)
+                  and (previous.closing_debit_base <> 0 or previous.closing_credit_base <> 0)
+                on conflict (ledger_id, period_id, account_id) do nothing
+                """, periodId, ledgerId, ledgerId, periodCode);
     }
 
     @Override

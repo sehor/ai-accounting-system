@@ -12,6 +12,9 @@ import com.example.accounting.ledger.LedgerService;
 import com.example.accounting.reporting.ReportingService;
 import com.example.accounting.voucher.VoucherService;
 import java.util.List;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.io.IOException;
 import org.junit.jupiter.api.Test;
 import org.springframework.context.annotation.ClassPathScanningCandidateComponentProvider;
 import org.springframework.core.type.filter.AnnotationTypeFilter;
@@ -47,6 +50,28 @@ class AccountingArchitectureTest {
                     .as("%s must use a repository port instead of JDBC", type.getName())
                     .noneSatisfy(field -> assertThat(JdbcOperations.class)
                             .isAssignableFrom(field.getType()));
+        }
+    }
+
+    @Test
+    void voucherFactsHaveOneWriteBoundaryAndProjectionCannotBeNoop() throws IOException {
+        Path root = Path.of("src/main/java");
+        try (var files = Files.walk(root)) {
+            List<Path> javaFiles = files.filter(path -> path.toString().endsWith(".java")).toList();
+            for (Path file : javaFiles) {
+                String source = Files.readString(file).toLowerCase(java.util.Locale.ROOT);
+                boolean writesVoucherFacts = java.util.regex.Pattern.compile(
+                        "(insert\\s+into\\s+voucher(_line)?\\s*\\(|"
+                                + "update\\s+voucher(_line)?\\s+set|"
+                                + "delete\\s+from\\s+voucher(_line)?\\s+where)",
+                        java.util.regex.Pattern.DOTALL).matcher(source).find();
+                if (writesVoucherFacts) {
+                    assertThat(file.getFileName().toString())
+                            .as("voucher facts must only be written by the voucher repository")
+                            .isEqualTo("JdbcVoucherRepository.java");
+                }
+                assertThat(source).doesNotContain("noopbalanceprojection");
+            }
         }
     }
 }

@@ -19,6 +19,14 @@
 
 报表响应头 `X-Balance-Source=live-fallback` 表示投影未初始化、超过最大延迟、失败或重建中。先查看 job 状态和应用指标 `accounting.balance.projection.failures`；修复后可提交覆盖期间的重建。
 
+## 逐期快照排障
+
+- `accounting.balance.propagation.duration` 持续升高：检查最早 pending 期间以及该账套后续期间数量；历史变更会有意传播到最后期间。
+- `accounting.balance.projection.failures` 增长：读取 `balance_projection_state.last_error_code`、`last_error_message` 和 `attempts`，确认失败账套；同一账套始终顺序处理，不应手工跳过水位。
+- `accounting.balance.rebuild.duration` 持续升高：确认是否存在重复重建请求。指定起期的重建会自动延伸到最后期间。
+- 回退期间先验证事实报表正确，再恢复 worker；不要把 FAILED 状态直接改成 READY。修复根因后提交重建或等待幂等重试。
+- 对账至少检查三项：叶级发生额等于已过账事实、每行“期末=期初+借方发生-贷方发生”、父科目等于直接子科目汇总。
+
 关账返回 `BALANCE_PROJECTION_NOT_READY` 时不要等待接口；检查 worker 是否启用及失败重试。返回 `BALANCE_RECONCILIATION_FAILED` 时保留事实源，先重建并核对后再关账。
 
 ## 回滚

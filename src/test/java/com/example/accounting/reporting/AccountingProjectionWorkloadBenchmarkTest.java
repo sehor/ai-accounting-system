@@ -7,6 +7,7 @@ import com.example.accounting.identity.CurrentUserResolver;
 import com.example.accounting.ledger.LedgerRequests;
 import com.example.accounting.ledger.LedgerService;
 import com.example.accounting.shared.web.ApiProblemException;
+import com.example.accounting.reporting.internal.port.BalanceProjectionRepository;
 import com.example.accounting.voucher.VoucherRequests;
 import com.example.accounting.voucher.VoucherResponses;
 import com.example.accounting.voucher.VoucherService;
@@ -48,6 +49,9 @@ class AccountingProjectionWorkloadBenchmarkTest {
     private ReportingService reports;
 
     @Autowired
+    private BalanceProjectionRepository projection;
+
+    @Autowired
     private JdbcTemplate jdbc;
 
     @Test
@@ -65,6 +69,7 @@ class AccountingProjectionWorkloadBenchmarkTest {
         UUID cashAccountId = accountId(ledgerId, "1001");
         UUID capitalAccountId = accountId(ledgerId, "3001");
         seedPostedVouchers(actorId, ledgerId, periods, cashAccountId, capitalAccountId, config.vouchersPerPeriod());
+        drainProjection();
 
         Period targetPeriod = periods.get(TARGET_PERIOD_INDEX);
         FutureProjection futureBefore = futureProjection(ledgerId, targetPeriod.code());
@@ -72,10 +77,11 @@ class AccountingProjectionWorkloadBenchmarkTest {
                 actorId, ledgerId, targetPeriod, cashAccountId, capitalAccountId, config);
         Metric create = metric("posted-create-and-project", created);
         Metric update = measureUpdates(actorId, ledgerId, targetPeriod, cashAccountId, capitalAccountId, created);
+        drainProjection();
         assertProjectionReady(ledgerId, targetPeriod.id());
 
         FutureProjection futureAfter = futureProjection(ledgerId, targetPeriod.code());
-        assertThat(futureAfter).isEqualTo(futureBefore);
+        assertThat(futureAfter).isNotEqualTo(futureBefore);
         assertThatThrownBy(() -> vouchers.delete(actorId, ledgerId, created.getFirst().value().id()))
                 .isInstanceOf(ApiProblemException.class);
 
@@ -89,9 +95,9 @@ class AccountingProjectionWorkloadBenchmarkTest {
                 () -> reports.trialBalance(actorId, ledgerId, targetPeriod.code()));
         Metric trialBalanceWithParents = measure("trial-balance-with-parents-projection", config,
                 () -> reports.trialBalance(actorId, ledgerId, targetPeriod.code(), true));
-        Metric generalLedger = measure("general-ledger-book-fact-query", config,
+        Metric generalLedger = measure("general-ledger-book-projection", config,
                 () -> reports.generalLedgerBook(actorId, ledgerId, finalPeriod.code(), 1, 500));
-        Metric subLedger = measure("sub-ledger-book-fact-query", config,
+        Metric subLedger = measure("sub-ledger-book-projection", config,
                 () -> reports.subLedgerBook(actorId, ledgerId, finalPeriod.code(), cashAccountId, 1, 500));
 
         System.out.println("{" +
@@ -99,7 +105,7 @@ class AccountingProjectionWorkloadBenchmarkTest {
                 "\"periods\":" + config.periods() + "," +
                 "\"vouchersPerPeriod\":" + config.vouchersPerPeriod() + "," +
                 "\"targetPeriod\":\"" + targetPeriod.code() + "\"," +
-                "\"futurePeriodProjectionChanged\":false," +
+                "\"futurePeriodProjectionChanged\":true," +
                 "\"postedDelete\":\"UNSUPPORTED\"," +
                 "\"metrics\":[" + String.join(",", create.toJson(), update.toJson(),
                 trialBalance.toJson(), trialBalanceWithParents.toJson(), generalLedger.toJson(), subLedger.toJson()) +
@@ -210,11 +216,19 @@ class AccountingProjectionWorkloadBenchmarkTest {
 
     private FutureProjection futureProjection(UUID ledgerId, String targetPeriodCode) {
         return jdbc.queryForObject("""
-                select count(*), coalesce(sum(b.period_debit_base - b.period_credit_base), 0)
+                select count(*), coalesce(sum(
+                    abs(b.opening_debit_base - b.opening_credit_base)
+                    + abs(b.closing_debit_base - b.closing_credit_base)), 0)
                 from account_period_balance b
                 join accounting_period p on p.ledger_id = b.ledger_id and p.id = b.period_id
                 where b.ledger_id = ? and p.period_code > ?
                 """, (rs, row) -> new FutureProjection(rs.getLong(1), rs.getBigDecimal(2)), ledgerId, targetPeriodCode);
+    }
+
+    private void drainProjection() {
+        while (projection.applyPendingBatch(200, 5000)) {
+            // Each pass locks and fully catches up one ledger.
+        }
     }
 
     private UUID accountId(UUID ledgerId, String code) {

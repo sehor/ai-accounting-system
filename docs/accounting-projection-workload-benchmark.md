@@ -1,6 +1,6 @@
 # 分录投影与账簿查询基准测试
 
-该基准使用 `ai-accounting-test`，并由 Spring 测试上下文为每次运行创建、迁移和清理独立 schema。测试在 20 个会计期间中生成已过账分录，在第 10 期采样分录创建和修改的端到端耗时；每次调用返回前，余额投影已同步完成。
+该基准使用 `ai-accounting-test`，并由 Spring 测试上下文为每次运行创建、迁移和清理独立 schema。测试在 20 个会计期间中生成已过账分录，在第 10 期采样已记账凭证创建和修改耗时；凭证事务只写事实与 outbox，随后显式排空 worker 以分别验证异步传播结果。
 
 ```powershell
 .\tools\run-accounting-projection-workload-benchmark.ps1
@@ -10,8 +10,11 @@
 
 基准输出的路径含义：
 
-- `posted-create-and-project`、`posted-update-and-project`：真实 `VoucherService` 调用及其同步投影更新。
+- `posted-create-and-project`、`posted-update-and-project`：真实 `VoucherService` 调用；计时范围是事实与 outbox 的同事务提交，投影传播由随后排空的 worker 完成。
 - `trial-balance-projection`、`trial-balance-with-parents-projection`：余额投影读取。
-- `general-ledger-book-fact-query`、`sub-ledger-book-fact-query`：当前实现直接读取 `voucher_line` 事实表，不读取余额投影。
+- `general-ledger-book-projection`：期初、范围发生额和期末从余额快照读取。
+- `sub-ledger-book-projection`：期初从余额快照读取，只扫描所选期间范围内的 `voucher_line`。
 
-当前数据模型的 `account_period_balance` 按“账套、期间、科目”保存当期发生额。修改第 10 期分录只更新第 10 期投影行，后续期间不会被物化改写；如果产品需要累计期末余额随前期修改逐期传播，需要另行实现该投影模型。已过账分录也不支持直接删除，必须先提供冲销或更正工作流后才能测量等价的删除操作。
+当前 `account_period_balance` 按“账套、期间、科目”保存期初借/贷、当期发生借/贷、期末借/贷六字段，并物化所有父科目。修改第 10 期已记账凭证后，worker 会从第 10 期重建到最后期间，基准以未来期间投影校验确认传播已经发生。已过账凭证仍禁止直接删除，等价变更应通过冲销或更正流程产生反向事件。
+
+完整性能验收应使用长历史数据，并对总账、明细账、试算平衡表的快路径执行 `EXPLAIN (ANALYZE, BUFFERS)`：总账和试算平衡表不得访问 `voucher_line`，明细账只允许访问 `periodFrom..periodTo`。同时记录查询及 worker 传播的 p50/p95；本脚本输出查询与凭证事务的 p50/p95，数据库执行计划需随目标环境的数据规模单独归档。

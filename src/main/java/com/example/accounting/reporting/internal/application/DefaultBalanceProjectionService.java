@@ -20,7 +20,7 @@ public class DefaultBalanceProjectionService implements BalanceProjectionService
     @Override
     @Transactional
     public void publishVoucher(VoucherEvent event) {
-        call(() -> repository.appendAndApplyVoucherEvent(event));
+        call(() -> repository.appendVoucherEvent(event));
     }
 
     @Override
