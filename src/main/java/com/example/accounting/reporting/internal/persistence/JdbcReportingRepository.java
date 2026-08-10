@@ -306,58 +306,7 @@ public class JdbcReportingRepository implements ReportingRepository {
     @Override
     public ReportResponses.SubLedgerPage subLedgerBook(
             UUID ledgerId, String periodCode, UUID accountId, int page, int pageSize) {
-        String[] account = jdbc.queryForObject("""
-                select code, name from ledger_account where ledger_id = ? and id = ?
-                """, (rs, rowNum) -> new String[]{rs.getString("code"), rs.getString("name")},
-                ledgerId, accountId);
-        BigDecimal opening = openingBalance(ledgerId, periodCode, accountId);
-        long[] totalItems = {0};
-        long offset = (long) (page - 1) * pageSize;
-        List<ReportResponses.SubLedgerEntry> data = jdbc.query("""
-                with entries as (
-                    select v.id voucher_id, v.voucher_number, v.voucher_date,
-                        coalesce(vl.summary, v.summary, '') summary, vl.line_no, vl.id line_id,
-                        case when vl.side = 'DEBIT' then vl.base_amount else 0 end debit,
-                        case when vl.side = 'CREDIT' then vl.base_amount else 0 end credit,
-                        case when vl.side = 'DEBIT' then vl.base_amount else -vl.base_amount end signed_amount
-                    from voucher_line vl
-                    join voucher v on v.ledger_id = vl.ledger_id and v.id = vl.voucher_id
-                    join accounting_period p on p.ledger_id = v.ledger_id and p.id = v.period_id
-                    where v.ledger_id = ? and p.period_code = ? and vl.account_id = ?
-                      and v.status = 'POSTED' and v.deleted_at is null
-                ),
-                running as (
-                    select *, count(*) over() total_items,
-                        sum(signed_amount) over (
-                            order by voucher_date, voucher_number, line_no, line_id) running_delta
-                    from entries
-                )
-                select * from running
-                order by voucher_date, voucher_number, line_no, line_id limit ? offset ?
-                """, (rs, rowNum) -> {
-            totalItems[0] = rs.getLong("total_items");
-            BigDecimal balance = opening.add(rs.getBigDecimal("running_delta"));
-            return new ReportResponses.SubLedgerEntry(
-                    rs.getObject("voucher_id", UUID.class), rs.getString("voucher_number"),
-                    rs.getObject("voucher_date", LocalDate.class), rs.getString("summary"),
-                    rs.getBigDecimal("debit"), rs.getBigDecimal("credit"),
-                    direction(balance), balance.abs());
-        }, ledgerId, periodCode, accountId, pageSize, offset);
-        BigDecimal[] totals = jdbc.queryForObject("""
-                select coalesce(sum(case when vl.side = 'DEBIT' then vl.base_amount else 0 end), 0) debit,
-                    coalesce(sum(case when vl.side = 'CREDIT' then vl.base_amount else 0 end), 0) credit
-                from voucher_line vl
-                join voucher v on v.ledger_id = vl.ledger_id and v.id = vl.voucher_id
-                join accounting_period p on p.ledger_id = v.ledger_id and p.id = v.period_id
-                where v.ledger_id = ? and p.period_code = ? and vl.account_id = ?
-                  and v.status = 'POSTED' and v.deleted_at is null
-                """, (rs, rowNum) -> new BigDecimal[]{rs.getBigDecimal("debit"), rs.getBigDecimal("credit")},
-                ledgerId, periodCode, accountId);
-        BigDecimal ending = opening.add(totals[0]).subtract(totals[1]);
-        return new ReportResponses.SubLedgerPage(
-                periodCode, accountId, account[0], account[1], direction(opening), opening.abs(), data,
-                totals[0], totals[1], direction(ending), ending.abs(),
-                pagination(page, pageSize, totalItems[0]));
+        return subLedgerBook(ledgerId, PeriodRange.single(periodCode), accountId, page, pageSize);
     }
 
     @Override
@@ -379,8 +328,16 @@ public class JdbcReportingRepository implements ReportingRepository {
         long offset = (long) (page - 1) * pageSize;
         BigDecimal openingAmount = opening;
         List<ReportResponses.SubLedgerEntry> data = jdbc.query("""
-                with entries as (
+                with recursive account_scope as (
+                    select id from ledger_account where ledger_id = ? and id = ?
+                    union all
+                    select child.id from ledger_account child
+                    join account_scope parent on parent.id = child.parent_id
+                    where child.ledger_id = ?
+                ), entries as (
                     select v.id voucher_id, v.voucher_number, v.voucher_date,
+                        vl.account_id posting_account_id, account.code posting_account_code,
+                        account.name posting_account_name,
                         coalesce(vl.summary, v.summary, '') summary, vl.line_no, vl.id line_id,
                         case when vl.side = 'DEBIT' then vl.base_amount else 0 end debit,
                         case when vl.side = 'CREDIT' then vl.base_amount else 0 end credit,
@@ -388,7 +345,9 @@ public class JdbcReportingRepository implements ReportingRepository {
                     from voucher_line vl
                     join voucher v on v.ledger_id = vl.ledger_id and v.id = vl.voucher_id
                     join accounting_period p on p.ledger_id = v.ledger_id and p.id = v.period_id
-                    where v.ledger_id = ? and p.period_code between ? and ? and vl.account_id = ?
+                    join ledger_account account on account.ledger_id = vl.ledger_id and account.id = vl.account_id
+                    where v.ledger_id = ? and p.period_code between ? and ?
+                      and vl.account_id in (select id from account_scope)
                       and v.status = 'POSTED' and v.deleted_at is null
                 ), running as (
                     select *, count(*) over() total_items,
@@ -403,20 +362,30 @@ public class JdbcReportingRepository implements ReportingRepository {
             BigDecimal balance = openingAmount.add(rs.getBigDecimal("running_delta"));
             return new ReportResponses.SubLedgerEntry(
                     rs.getObject("voucher_id", UUID.class), rs.getString("voucher_number"),
-                    rs.getObject("voucher_date", LocalDate.class), rs.getString("summary"),
+                    rs.getObject("voucher_date", LocalDate.class),
+                    rs.getObject("posting_account_id", UUID.class), rs.getString("posting_account_code"),
+                    rs.getString("posting_account_name"), rs.getString("summary"),
                     rs.getBigDecimal("debit"), rs.getBigDecimal("credit"),
                     direction(balance), balance.abs());
-        }, ledgerId, range.periodFrom(), range.periodTo(), accountId, pageSize, offset);
+        }, ledgerId, accountId, ledgerId, ledgerId, range.periodFrom(), range.periodTo(), pageSize, offset);
         BigDecimal[] totals = jdbc.queryForObject("""
+                with recursive account_scope as (
+                    select id from ledger_account where ledger_id = ? and id = ?
+                    union all
+                    select child.id from ledger_account child
+                    join account_scope parent on parent.id = child.parent_id
+                    where child.ledger_id = ?
+                )
                 select coalesce(sum(case when vl.side = 'DEBIT' then vl.base_amount else 0 end), 0) debit,
                     coalesce(sum(case when vl.side = 'CREDIT' then vl.base_amount else 0 end), 0) credit
                 from voucher_line vl
                 join voucher v on v.ledger_id = vl.ledger_id and v.id = vl.voucher_id
                 join accounting_period p on p.ledger_id = v.ledger_id and p.id = v.period_id
-                where v.ledger_id = ? and p.period_code between ? and ? and vl.account_id = ?
+                where v.ledger_id = ? and p.period_code between ? and ?
+                  and vl.account_id in (select id from account_scope)
                   and v.status = 'POSTED' and v.deleted_at is null
                 """, (rs, rowNum) -> new BigDecimal[]{rs.getBigDecimal("debit"), rs.getBigDecimal("credit")},
-                ledgerId, range.periodFrom(), range.periodTo(), accountId);
+                ledgerId, accountId, ledgerId, ledgerId, range.periodFrom(), range.periodTo());
         BigDecimal ending = opening.add(totals[0]).subtract(totals[1]);
         return new ReportResponses.SubLedgerPage(
                 range.periodFrom(), range.periodTo(), range.periodCode(),
@@ -427,34 +396,41 @@ public class JdbcReportingRepository implements ReportingRepository {
 
     private BigDecimal openingBalance(UUID ledgerId, String periodCode, UUID accountId) {
         BigDecimal result = jdbc.queryForObject("""
-                with selected as (
+                with recursive account_scope as (
+                    select id from ledger_account where ledger_id = ? and id = ?
+                    union all
+                    select child.id from ledger_account child
+                    join account_scope parent on parent.id = child.parent_id
+                    where child.ledger_id = ?
+                ), selected as (
                     select period_code from accounting_period where ledger_id = ? and period_code = ?
                 ),
                 baseline as (
-                    select max(p.period_code) period_code
-                    from opening_balance ob
-                    join accounting_period p on p.ledger_id = ob.ledger_id and p.id = ob.period_id
-                    where ob.ledger_id = ? and ob.account_id = ? and ob.confirmed
-                      and p.period_code <= (select period_code from selected)
+                    select scope.id account_id, max(p.period_code) period_code
+                    from account_scope scope
+                    left join opening_balance ob on ob.ledger_id = ? and ob.account_id = scope.id and ob.confirmed
+                    left join accounting_period p on p.ledger_id = ob.ledger_id and p.id = ob.period_id
+                        and p.period_code <= (select period_code from selected)
+                    group by scope.id
                 )
                 select
                     coalesce((select sum(ob.debit_base - ob.credit_base)
                         from opening_balance ob
                         join accounting_period p on p.ledger_id = ob.ledger_id and p.id = ob.period_id
-                        where ob.ledger_id = ? and ob.account_id = ? and ob.confirmed
-                          and p.period_code = (select period_code from baseline)), 0)
+                        join baseline on baseline.account_id = ob.account_id and baseline.period_code = p.period_code
+                        where ob.ledger_id = ? and ob.confirmed), 0)
                     + coalesce((select sum(case when vl.side = 'DEBIT'
                             then vl.base_amount else -vl.base_amount end)
                         from voucher_line vl
                         join voucher v on v.ledger_id = vl.ledger_id and v.id = vl.voucher_id
                         join accounting_period p on p.ledger_id = v.ledger_id and p.id = v.period_id
-                          where v.ledger_id = ? and vl.account_id = ?
+                        join baseline on baseline.account_id = vl.account_id
+                          where v.ledger_id = ?
                           and v.status = 'POSTED' and v.deleted_at is null
                           and p.period_code < (select period_code from selected)
-                          and ((select period_code from baseline) is null
-                            or p.period_code > (select period_code from baseline))), 0)
-                """, BigDecimal.class, ledgerId, periodCode, ledgerId, accountId,
-                ledgerId, accountId, ledgerId, accountId);
+                          and (baseline.period_code is null or p.period_code > baseline.period_code)), 0)
+                """, BigDecimal.class, ledgerId, accountId, ledgerId, ledgerId, periodCode,
+                ledgerId, ledgerId, ledgerId);
         return result == null ? BigDecimal.ZERO : result;
     }
 

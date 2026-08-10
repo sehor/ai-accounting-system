@@ -119,6 +119,47 @@ class RollingBalanceProjectionIntegrationTest {
     }
 
     @Test
+    void aggregatesDescendantEntriesWhenReadingAPrimaryAccountSubLedger() {
+        UUID actorId = UUID.randomUUID();
+        UUID ledgerId = ledgers.create(new CurrentUserResolver.ResolvedUser(
+                        actorId, "parent-subledger", actorId.toString()),
+                new LedgerRequests.Create("parent sub-ledger", "SME", "v1", "CNY",
+                        LocalDate.of(2021, 1, 1), false)).id();
+        UUID january = period(ledgerId, "2021-01");
+        UUID february = period(ledgerId, "2021-02");
+        UUID cashParent = account(ledgerId, "1001");
+        UUID firstChild = ledgers.createAccount(actorId, ledgerId,
+                new LedgerRequests.AccountCreate("100101", "cash one", "ASSET", "DEBIT")).id();
+        UUID secondChild = ledgers.createAccount(actorId, ledgerId,
+                new LedgerRequests.AccountCreate("100102", "cash two", "ASSET", "DEBIT")).id();
+        UUID capital = account(ledgerId, "3001");
+
+        ledgers.replaceOpeningBalances(actorId, ledgerId, List.of(
+                opening(firstChild, january, "20", "0"),
+                opening(secondChild, january, "30", "0"),
+                opening(capital, january, "0", "50")));
+        ledgers.confirmOpeningBalances(actorId, ledgerId);
+        vouchers.create(actorId, ledgerId, new VoucherRequests.Create(
+                february, LocalDate.of(2021, 2, 10), "GENERAL", "1", "first child",
+                List.of(line(firstChild, "DEBIT", "5"), line(capital, "CREDIT", "5"))));
+        vouchers.create(actorId, ledgerId, new VoucherRequests.Create(
+                february, LocalDate.of(2021, 2, 11), "GENERAL", "2", "second child",
+                List.of(line(capital, "DEBIT", "7"), line(secondChild, "CREDIT", "7"))));
+        drainProjection();
+
+        ReportResponses.SubLedgerPage detail = reports.subLedgerBook(
+                actorId, ledgerId, new PeriodRange("2021-02", "2021-02"), cashParent, 1, 50);
+
+        assertThat(detail.openingBalance()).isEqualByComparingTo("50.00");
+        assertThat(detail.data()).hasSize(2);
+        assertThat(detail.data()).extracting(ReportResponses.SubLedgerEntry::postingAccountId)
+                .containsExactly(firstChild, secondChild);
+        assertThat(detail.periodDebit()).isEqualByComparingTo("5.00");
+        assertThat(detail.periodCredit()).isEqualByComparingTo("7.00");
+        assertThat(detail.endingBalance()).isEqualByComparingTo("48.00");
+    }
+
+    @Test
     void rollsBackPostedVoucherWhenOutboxWriteFails() {
         UUID actorId = UUID.randomUUID();
         UUID ledgerId = ledgers.create(new CurrentUserResolver.ResolvedUser(

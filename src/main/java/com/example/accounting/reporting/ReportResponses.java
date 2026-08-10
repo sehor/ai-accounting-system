@@ -58,7 +58,8 @@ public final class ReportResponses {
     }
 
     public record SubLedgerEntry(
-            UUID voucherId, String voucherNumber, LocalDate voucherDate, String summary,
+            UUID voucherId, String voucherNumber, LocalDate voucherDate,
+            UUID postingAccountId, String postingAccountCode, String postingAccountName, String summary,
             BigDecimal debit, BigDecimal credit, String direction, BigDecimal balance) {
     }
 
