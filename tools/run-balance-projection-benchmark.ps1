@@ -3,9 +3,11 @@ param(
     [int]$Warmups = 5,
     [int]$Iterations = 30,
     [int]$Accounts = 100,
+    [string]$TestDbUrl = 'jdbc:postgresql://localhost:5432/ai-accounting-test',
     [switch]$CleanupStale
 )
 
+$env:TEST_DB_URL = $TestDbUrl
 $env:BENCHMARK_VOUCHER_LINES = $VoucherLines
 $env:BENCHMARK_WARMUPS = $Warmups
 $env:BENCHMARK_ITERATIONS = $Iterations

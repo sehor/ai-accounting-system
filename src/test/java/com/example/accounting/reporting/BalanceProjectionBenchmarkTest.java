@@ -104,6 +104,10 @@ class BalanceProjectionBenchmarkTest {
                 BenchmarkResult projection = benchmark(connection, config, fixture, Mode.PROJECTION);
                 BenchmarkResult fallback = benchmark(connection, config, fixture, Mode.FALLBACK);
                 System.out.println(toJson(config, fixture, legacy, projection, fallback));
+                if (Boolean.parseBoolean(System.getenv().getOrDefault("BENCHMARK_EXPLAIN", "false"))) {
+                    printQueryPlan(connection, fixture, Mode.LEGACY);
+                    printQueryPlan(connection, fixture, Mode.PROJECTION);
+                }
                 assertThat(legacy.rows()).isEqualTo(projection.rows());
                 assertThat(legacy.checksum()).isEqualByComparingTo(projection.checksum());
                 assertThat(fallback.rows()).isEqualTo(legacy.rows());
@@ -308,20 +312,7 @@ class BalanceProjectionBenchmarkTest {
 
     private QueryResult runQuery(Connection connection, String sql, Fixture fixture,
                                  boolean legacy) throws SQLException {
-        try (PreparedStatement statement = connection.prepareStatement(sql)) {
-            if (legacy) {
-                statement.setObject(1, fixture.ledgerId());
-                statement.setString(2, "2026-01");
-                statement.setString(3, "2026-01");
-                statement.setObject(4, fixture.ledgerId());
-                statement.setString(5, "2026-01");
-                statement.setString(6, "2026-01");
-                statement.setObject(7, fixture.ledgerId());
-            } else {
-                statement.setString(1, "2026-01");
-                statement.setString(2, "2026-01");
-                statement.setObject(3, fixture.ledgerId());
-            }
+        try (PreparedStatement statement = prepareQuery(connection, sql, fixture, legacy)) {
             try (ResultSet resultSet = statement.executeQuery()) {
                 int rows = 0;
                 BigDecimal checksum = BigDecimal.ZERO;
@@ -333,6 +324,40 @@ class BalanceProjectionBenchmarkTest {
                 return new QueryResult(rows, checksum);
             }
         }
+    }
+
+    private void printQueryPlan(Connection connection, Fixture fixture, Mode mode) throws SQLException {
+        boolean legacy = mode != Mode.PROJECTION;
+        String sql = legacy ? LEGACY_SQL : PROJECTION_SQL;
+        try (PreparedStatement statement = prepareQuery(
+                connection, "explain (analyze, buffers) " + sql, fixture, legacy);
+                ResultSet resultSet = statement.executeQuery()) {
+            StringBuilder plan = new StringBuilder();
+            while (resultSet.next()) {
+                plan.append(resultSet.getString(1)).append(System.lineSeparator());
+            }
+            System.out.println("balance-benchmark explain mode=" + mode.name().toLowerCase(Locale.ROOT));
+            System.out.print(plan);
+        }
+    }
+
+    private PreparedStatement prepareQuery(Connection connection, String sql, Fixture fixture,
+                                           boolean legacy) throws SQLException {
+        PreparedStatement statement = connection.prepareStatement(sql);
+        if (legacy) {
+            statement.setObject(1, fixture.ledgerId());
+            statement.setString(2, "2026-01");
+            statement.setString(3, "2026-01");
+            statement.setObject(4, fixture.ledgerId());
+            statement.setString(5, "2026-01");
+            statement.setString(6, "2026-01");
+            statement.setObject(7, fixture.ledgerId());
+        } else {
+            statement.setString(1, "2026-01");
+            statement.setString(2, "2026-01");
+            statement.setObject(3, fixture.ledgerId());
+        }
+        return statement;
     }
 
     private void analyze(Connection connection) throws SQLException {
@@ -422,7 +447,7 @@ class BalanceProjectionBenchmarkTest {
                                    int voucherLines, int warmups, int iterations) {
         static BenchmarkConfig fromEnvironment() {
             return new BenchmarkConfig(
-                    env("DB_URL", "jdbc:postgresql://localhost:5432/ai-accounting"),
+                    env("TEST_DB_URL", "jdbc:postgresql://localhost:5432/ai-accounting-test"),
                     env("DB_USERNAME", "postgres"), env("DB_PASSWORD", "pzr123"),
                     positiveInt("BENCHMARK_VOUCHER_LINES", 1_000_000),
                     positiveInt("BENCHMARK_WARMUPS", 5), positiveInt("BENCHMARK_ITERATIONS", 30));

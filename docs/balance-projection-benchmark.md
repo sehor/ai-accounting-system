@@ -23,7 +23,9 @@ rtk powershell -NoProfile -Command ".\tools\run-balance-projection-benchmark.ps1
 rtk powershell -NoProfile -Command ".\tools\run-balance-projection-benchmark.ps1 -VoucherLines 10000 -Warmups 2 -Iterations 10"
 ```
 
-输出为 JSON，包含每一路的 `p50Ms`、`p95Ms`、`p99Ms`、最小/最大耗时、平均耗时、结果行数和 checksum。数据库连接通过 `DB_URL`、`DB_USERNAME`、`DB_PASSWORD` 环境变量配置；默认连接本机 `ai-accounting`。
+输出为 JSON，包含每一路的 `p50Ms`、`p95Ms`、`p99Ms`、最小/最大耗时、平均耗时、结果行数和 checksum。数据库连接通过 `TEST_DB_URL`、`DB_USERNAME`、`DB_PASSWORD` 环境变量配置；默认连接本机 `ai-accounting-test`。
+
+设置 `BENCHMARK_EXPLAIN=true` 可在采样后输出 legacy 与 projection 查询的 `EXPLAIN (ANALYZE, BUFFERS)`，用于定位扫描和临时文件 I/O。
 
 正常完成时只删除本次 schema。如果上一次进程被强制终止，可在确认没有其他基准运行时增加 `-CleanupStale`，清理此前遗留的 `bench_balance_*` schema；该操作会删除这些专用基准 schema。
 

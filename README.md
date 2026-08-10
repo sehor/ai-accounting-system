@@ -17,7 +17,8 @@
 真实票据提取需设置 `APP_DOCUMENTS_EXTRACTOR_URL`（HTTPS）和可选的
 `APP_DOCUMENTS_EXTRACTOR_API_KEY`。未配置时提取接口返回明确错误，不生成模拟数据。
 
-默认连接：`jdbc:postgresql://127.0.0.1:5432/ai-accounting`，用户名和密码均为 `postgres`。
+默认运行连接：`jdbc:postgresql://127.0.0.1:5432/ai-accounting`，用户名和密码均为 `postgres`。
+Spring 集成测试和余额基准测试默认使用 `jdbc:postgresql://127.0.0.1:5432/ai-accounting-test`；如需覆盖测试库连接，设置 `TEST_DB_URL`。
 
 ## 常用命令
 

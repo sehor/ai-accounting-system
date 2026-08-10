@@ -1,7 +1,7 @@
 interface:
   display_name: "AI Accounting System"
-  short_description: "Operate local accounting MCP through super-agent."
-  default_prompt: "Use $operate-ai-accounting through the local super-agent to inspect or update accounting data."
+  short_description: "Operate the local accounting MCP safely."
+  default_prompt: "Use $operate-ai-accounting to query or update a ledger through the local accounting MCP service."
 
 dependencies:
   tools:

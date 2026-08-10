@@ -44,6 +44,9 @@ public final class IsolatedDatabaseContextCustomizerFactory implements ContextCu
         @Override
         public void customizeContext(
                 ConfigurableApplicationContext context, MergedContextConfiguration mergedConfig) {
+            TestPropertyValues.of(
+                    "spring.datasource.url=" + testDatabaseUrl(context.getEnvironment()))
+                    .applyTo(context.getEnvironment());
             DatabaseSchema schema = ensureSchema(context.getEnvironment());
             TestPropertyValues.of(
                     "spring.datasource.hikari.schema=" + schema.name(),
@@ -51,6 +54,11 @@ public final class IsolatedDatabaseContextCustomizerFactory implements ContextCu
                     "spring.flyway.default-schema=" + schema.name(),
                     "spring.flyway.create-schemas=false")
                     .applyTo(context.getEnvironment());
+        }
+
+        private static String testDatabaseUrl(ConfigurableEnvironment environment) {
+            return environment.getProperty(
+                    "TEST_DB_URL", "jdbc:postgresql://localhost:5432/ai-accounting-test");
         }
 
         private static DatabaseSchema ensureSchema(ConfigurableEnvironment environment) {
