@@ -30,4 +30,12 @@ describe('workspace tabs', () => {
     clearWorkspaceTabDirty('voucher-new')
     expect(isWorkspaceTabDirty('voucher-new')).toBe(false)
   })
+
+  it('gives the independent account page its own restorable workspace tab', () => {
+    expect(describeTab('/ledgers/ledger-1/accounts', '?category=ASSET')).toMatchObject({
+      id: 'accounts',
+      title: '科目',
+      location: '/ledgers/ledger-1/accounts?category=ASSET',
+    })
+  })
 })

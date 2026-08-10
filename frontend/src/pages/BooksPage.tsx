@@ -1,10 +1,10 @@
 import { Alert, Card, Empty, Input, Pagination, Table, Tree, Typography } from 'antd'
 import type { DataNode } from 'antd/es/tree'
 import { useQuery } from '@tanstack/react-query'
-import { useEffect, useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { apiFetch } from '../api/client'
-import type { Account, GeneralLedgerAccount, GeneralLedgerPage, SubLedgerPage, TrialBalanceLine } from '../api/types'
+import type { Account, GeneralLedgerAccount, GeneralLedgerPage, SubLedgerEntry, SubLedgerPage, TrialBalanceLine } from '../api/types'
 import { useAuth } from '../auth/AuthProvider'
 import { PeriodRangeSelector, usePeriodRangeFilter } from '../components/PeriodSelector'
 import { useWorkspaceSearchParams } from '../components/workspaceSearch'
@@ -128,15 +128,15 @@ function GeneralLedgerPageView() {
 
 function accountTree(accounts: Account[]): DataNode[] {
   const children = new Map<string | null, Account[]>()
-  accounts.filter((account) => account.status === 'ACTIVE').forEach((account) => {
+  accounts.forEach((account) => {
     children.set(account.parentId, [...(children.get(account.parentId) || []), account])
   })
   const build = (parentId: string | null): DataNode[] => (children.get(parentId) || [])
     .sort((left, right) => left.code.localeCompare(right.code))
     .map((account) => ({
       key: account.id,
-      title: `${account.code} ${account.name}`,
-      selectable: account.isLeaf,
+      title: `${account.code} ${account.name}${account.status === 'INACTIVE' ? '（停用）' : ''}`,
+      selectable: true,
       children: build(account.id),
     }))
   return build(null)
@@ -153,6 +153,12 @@ function filterTree(nodes: DataNode[], keyword: string): DataNode[] {
   })
 }
 
+function expandedKeysFor(nodes: DataNode[]): string[] {
+  return nodes.flatMap((node) => node.children?.length
+    ? [String(node.key), ...expandedKeysFor(node.children)]
+    : [])
+}
+
 function SubLedgerPageView() {
   const { ledgerId = '' } = useParams()
   const { session } = useAuth()
@@ -161,18 +167,22 @@ function SubLedgerPageView() {
   const page = Number(search.get('page') || 1)
   const accountId = search.get('accountId') || undefined
   const keyword = search.get('accountQuery') || ''
+  const [expandedKeys, setExpandedKeys] = useState<string[]>([])
   const accounts = useQuery({
     queryKey: ['accounts', ledgerId],
     queryFn: () => apiFetch<Account[]>(`/ledgers/${ledgerId}/accounts`, session!),
     enabled: Boolean(session && ledgerId),
   })
-  const firstLeaf = accounts.data?.find((account) => account.status === 'ACTIVE' && account.isLeaf)?.id
+  const firstAsset = accounts.data?.find((account) =>
+    account.status === 'ACTIVE' && account.category === 'ASSET' && account.parentId === null,
+  )?.id
   useEffect(() => {
-    if (accountId || !firstLeaf) return
+    if (accountId || !firstAsset) return
     const next = new URLSearchParams(search)
-    next.set('accountId', firstLeaf)
+    next.set('accountId', firstAsset)
     setSearch(next, { replace: true })
-  }, [accountId, firstLeaf, search, setSearch])
+  }, [accountId, firstAsset, search, setSearch])
+  useEffect(() => setExpandedKeys([]), [ledgerId])
   const query = useQuery({
     queryKey: ['book', ledgerId, 'sub-ledger', periodFrom, periodTo, accountId, page],
     queryFn: () => apiFetch<SubLedgerPage>(
@@ -181,15 +191,18 @@ function SubLedgerPageView() {
     enabled: Boolean(session && ledgerId && periodFrom && periodTo && accountId),
   })
   const tree = useMemo(() => filterTree(accountTree(accounts.data || []), keyword), [accounts.data, keyword])
+  const selectedAccount = accounts.data?.find((account) => account.id === accountId)
+  const isParentSelection = Boolean(selectedAccount && !selectedAccount.isLeaf)
+  const visibleExpandedKeys = keyword.trim() ? expandedKeysFor(tree) : expandedKeys
   const rows = page === 1 && query.data ? [{
-    voucherId: 'opening', voucherNumber: '', voucherDate: '', summary: '期初余额', debit: '', credit: '',
+    voucherId: 'opening', voucherNumber: '', voucherDate: '', postingAccountId: '', postingAccountCode: '', postingAccountName: '', summary: '期初余额', debit: '', credit: '',
     direction: query.data.openingDirection, balance: query.data.openingBalance,
   }, ...query.data.data] : (query.data?.data || [])
   const updateSearch = (name: string, value?: string) => {
     const next = new URLSearchParams(search)
     if (value) next.set(name, value)
     else next.delete(name)
-    next.delete('page')
+    if (name !== 'page') next.delete('page')
     setSearch(next)
   }
   return <section className="financial-page">
@@ -197,21 +210,22 @@ function SubLedgerPageView() {
     {query.isError && <Alert type="error" showIcon message="明细账读取失败" />}
     <div className="sub-ledger-layout">
       <Card className="financial-grid-card sub-ledger-table"><Table
-        rowKey={(row) => row.voucherId === 'opening' ? 'opening' : `${row.voucherId}-${row.summary}`}
+        rowKey={(row) => row.voucherId === 'opening' ? 'opening' : `${row.voucherId}-${row.postingAccountId}-${row.summary}`}
         size="small" className="financial-table" loading={query.isLoading || !periodFrom || !periodTo || !accountId}
         dataSource={rows} locale={{ emptyText: <Empty description="当前科目暂无明细" /> }} scroll={{ x: 900 }}
         pagination={false}
         summary={() => query.data ? <Table.Summary.Row>
-          <Table.Summary.Cell index={0} colSpan={3}>本期合计</Table.Summary.Cell>
-          <Table.Summary.Cell index={3} align="right">{money(query.data.periodDebit) || '0.00'}</Table.Summary.Cell>
-          <Table.Summary.Cell index={4} align="right">{money(query.data.periodCredit) || '0.00'}</Table.Summary.Cell>
-          <Table.Summary.Cell index={5} align="center">{direction(query.data.endingDirection)}</Table.Summary.Cell>
-          <Table.Summary.Cell index={6} align="right">{money(query.data.endingBalance) || '0.00'}</Table.Summary.Cell>
+          <Table.Summary.Cell index={0} colSpan={isParentSelection ? 4 : 3}>本期合计</Table.Summary.Cell>
+          <Table.Summary.Cell index={isParentSelection ? 4 : 3} align="right">{money(query.data.periodDebit) || '0.00'}</Table.Summary.Cell>
+          <Table.Summary.Cell index={isParentSelection ? 5 : 4} align="right">{money(query.data.periodCredit) || '0.00'}</Table.Summary.Cell>
+          <Table.Summary.Cell index={isParentSelection ? 6 : 5} align="center">{direction(query.data.endingDirection)}</Table.Summary.Cell>
+          <Table.Summary.Cell index={isParentSelection ? 7 : 6} align="right">{money(query.data.endingBalance) || '0.00'}</Table.Summary.Cell>
         </Table.Summary.Row> : null}
         columns={[
           { title: '日期', dataIndex: 'voucherDate', width: 120 },
           { title: '凭证字号', width: 120, render: (_, row) => row.voucherId === 'opening' ? '' : <Link to={`/ledgers/${ledgerId}/vouchers/${row.voucherId}`}>{row.voucherNumber}</Link> },
           { title: '摘要', dataIndex: 'summary', width: 300 },
+          ...(isParentSelection ? [{ title: '明细科目', width: 180, render: (_: unknown, row: SubLedgerEntry) => row.voucherId === 'opening' ? '' : `${row.postingAccountCode} ${row.postingAccountName}` }] : []),
           { title: '借方', dataIndex: 'debit', width: 150, align: 'right', render: money },
           { title: '贷方', dataIndex: 'credit', width: 150, align: 'right', render: money },
           { title: '方向', dataIndex: 'direction', width: 80, align: 'center', render: direction },
@@ -226,7 +240,8 @@ function SubLedgerPageView() {
         <div className="account-switcher-title">快速切换</div>
         <Input.Search aria-label="搜索科目" allowClear placeholder="科目编码或名称" value={keyword}
           onChange={(event) => updateSearch('accountQuery', event.target.value)} />
-        <Tree treeData={tree} selectedKeys={accountId ? [accountId] : []} defaultExpandAll
+        <Tree treeData={tree} selectedKeys={accountId ? [accountId] : []} expandedKeys={visibleExpandedKeys}
+          onExpand={(keys) => setExpandedKeys(keys.map(String))}
           onSelect={(keys) => keys[0] && updateSearch('accountId', String(keys[0]))} />
       </aside>
     </div>

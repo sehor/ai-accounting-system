@@ -1,11 +1,12 @@
 import { Alert, App, Button, Card, Checkbox, Form, Input, Modal, Select, Space, Table, Tag, Tooltip, Upload } from 'antd'
 import { DownloadOutlined, PlusOutlined, UploadOutlined } from '@ant-design/icons'
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { apiFetch, ApiError, jsonBody, type ApiAuth } from '../api/client'
 import type { Account, AccountImportPreview, CashFlowItem, DimensionType } from '../api/types'
 
 type AccountTree = Account & { children?: AccountTree[] }
+export type AccountCategoryTab = 'ASSET' | 'LIABILITY' | 'EQUITY' | 'COST' | 'PROFIT_LOSS'
 type AccountForm = {
   code: string
   name: string
@@ -19,7 +20,7 @@ type AccountForm = {
   requiredDimensionTypeIds?: string[]
 }
 
-export function AccountsTab({ ledgerId, session, accounts, dimensionTypes, loading, writable, onChanged }: {
+export function AccountsTab({ ledgerId, session, accounts, dimensionTypes, loading, writable, onChanged, category }: {
   ledgerId: string
   session: ApiAuth
   accounts: Account[]
@@ -27,6 +28,7 @@ export function AccountsTab({ ledgerId, session, accounts, dimensionTypes, loadi
   loading: boolean
   writable: boolean
   onChanged: () => void
+  category: AccountCategoryTab
 }) {
   const { message, modal } = App.useApp()
   const [form] = Form.useForm<AccountForm>()
@@ -38,13 +40,6 @@ export function AccountsTab({ ledgerId, session, accounts, dimensionTypes, loadi
   const [format, setFormat] = useState<'STANDARD' | 'KINGDEE'>('STANDARD')
   const [preview, setPreview] = useState<AccountImportPreview | null>(null)
   const [expandedRowKeys, setExpandedRowKeys] = useState<string[]>([])
-  const initializedLedger = useRef('')
-  useEffect(() => {
-    if (accounts.length && initializedLedger.current !== ledgerId) {
-      setExpandedRowKeys(accounts.filter((account) => !account.isLeaf).map((account) => account.id))
-      initializedLedger.current = ledgerId
-    }
-  }, [accounts, ledgerId])
   useEffect(() => {
     if (!formOpen) return
     if (editing) {
@@ -68,10 +63,13 @@ export function AccountsTab({ ledgerId, session, accounts, dimensionTypes, loadi
     queryKey: ['cash-flow-items', ledgerId],
     queryFn: () => apiFetch<CashFlowItem[]>(`/ledgers/${ledgerId}/cash-flow-items`, session),
   })
-  const tree = useMemo(() => buildTree(accounts.filter((account) =>
-    (!status || account.status === status) &&
-    (!search.trim() || `${account.code} ${account.name}`.toLowerCase().includes(search.trim().toLowerCase()))
-  )), [accounts, search, status])
+  const tree = useMemo(() => filterTree(
+    buildTree(accounts.filter((account) => matchesCategory(account, category))),
+    (account) => (!status || account.status === status) &&
+      (!search.trim() || `${account.code} ${account.name}`.toLowerCase().includes(search.trim().toLowerCase())),
+  ), [accounts, category, search, status])
+  const filtering = Boolean(status || search.trim())
+  const visibleExpandedKeys = filtering ? expandedKeysFor(tree) : expandedRowKeys
 
   const save = useMutation({
     mutationFn: (value: AccountForm) => {
@@ -185,7 +183,7 @@ export function AccountsTab({ ledgerId, session, accounts, dimensionTypes, loadi
   return <Space direction="vertical" size={12} style={{ width: '100%' }}>
     <Card>
       <Space wrap>
-        <Input.Search allowClear placeholder="搜索编码或名称" onSearch={setSearch} style={{ width: 240 }} />
+        <Input.Search allowClear placeholder="搜索编码或名称" value={search} onChange={(event) => setSearch(event.target.value)} style={{ width: 240 }} />
         <Select allowClear placeholder="状态" onChange={setStatus} style={{ width: 120 }}
           options={[{ value: 'ACTIVE', label: '启用' }, { value: 'INACTIVE', label: '停用' }]} />
         {writable && <Button type="primary" icon={<PlusOutlined />} onClick={() => openCreate(null)}>新增一级科目</Button>}
@@ -214,7 +212,7 @@ export function AccountsTab({ ledgerId, session, accounts, dimensionTypes, loadi
       dataSource={tree}
       pagination={false}
       expandable={{
-        expandedRowKeys,
+        expandedRowKeys: visibleExpandedKeys,
         onExpandedRowsChange: (keys) => setExpandedRowKeys(keys.map(String)),
       }}
       columns={[
@@ -333,6 +331,23 @@ function buildTree(accounts: Account[]): AccountTree[] {
     .forEach((row) => row.children && sort(row.children))
   sort(roots)
   return roots
+}
+
+function matchesCategory(account: Account, category: AccountCategoryTab) {
+  return category === 'PROFIT_LOSS'
+    ? account.category === 'REVENUE' || account.category === 'EXPENSE'
+    : account.category === category
+}
+
+function filterTree(nodes: AccountTree[], matches: (account: Account) => boolean): AccountTree[] {
+  return nodes.flatMap((node) => {
+    const children = filterTree(node.children || [], matches)
+    return matches(node) || children.length ? [{ ...node, children: children.length ? children : undefined }] : []
+  })
+}
+
+function expandedKeysFor(nodes: AccountTree[]): string[] {
+  return nodes.flatMap((node) => node.children?.length ? [node.id, ...expandedKeysFor(node.children)] : [])
 }
 
 function errorText(error: unknown): string {

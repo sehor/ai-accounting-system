@@ -56,6 +56,7 @@ export function describeTab(pathname: string, search: string): WorkspaceTab | un
   }
   if (pathname.includes('/fixed-assets')) return { id: 'fixed-assets', title: '固定资产', location, closable: true }
   if (pathname.includes('/documents')) return { id: 'documents', title: '附件与提取', location, closable: true }
+  if (pathname.includes('/accounts')) return { id: 'accounts', title: '科目', location, closable: true }
   if (pathname.includes('/settings')) return { id: 'settings', title: '账套设置', location, closable: true }
   if (pathname.includes('/audit')) return { id: 'audit', title: '审计日志', location, closable: true }
   return { id: pathname, title: '工作页', location, closable: true }
@@ -159,6 +160,7 @@ export function AppShell() {
     if (path.includes('/reports/income-statement')) return 'income-statement'
     if (path.includes('/fixed-assets')) return 'fixed-assets'
     if (path.includes('/documents')) return 'documents'
+    if (path.includes('/accounts')) return 'accounts'
     if (path.includes('/settings')) return 'settings'
     if (path.includes('/audit')) return 'audit'
     if (path.startsWith('/admin')) return 'admin'
@@ -226,6 +228,7 @@ export function AppShell() {
           ] },
           { key: 'fixed-assets', icon: <HddOutlined />, label: '固定资产', onClick: () => go('fixed-assets') },
           { key: 'documents', icon: <FileSearchOutlined />, label: '附件', onClick: () => go('documents') },
+          { key: 'accounts', icon: <BankOutlined />, label: '科目', onClick: () => go('accounts') },
           { key: 'settings', icon: <SettingOutlined />, label: '设置', onClick: () => go('settings/periods') },
           { key: 'audit', icon: <FileSearchOutlined />, label: '审计', onClick: () => go('audit') },
           ...(me.data?.displayName?.toLowerCase() === 'admin'

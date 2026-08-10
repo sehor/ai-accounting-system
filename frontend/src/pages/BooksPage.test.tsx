@@ -39,7 +39,13 @@ beforeEach(() => {
     if (path.endsWith('/periods')) return Promise.resolve(periods)
     if (path.endsWith('/accounts')) return Promise.resolve([{
       id: 'account-1', ledgerId: 'ledger-1', code: '1002', name: '银行存款', category: 'ASSET',
-      normalBalance: 'DEBIT', status: 'ACTIVE', parentId: null, level: 1, isLeaf: true,
+      normalBalance: 'DEBIT', status: 'ACTIVE', parentId: null, level: 1, isLeaf: false,
+      isTemplate: false, hasBusinessUsage: true, coreLocked: false, legacyCode: false, version: 0,
+      cashFlowRequired: false, defaultCashFlowItemId: null, quantityEnabled: false, unitName: null,
+      dimensionRequirements: [],
+    }, {
+      id: 'account-2', ledgerId: 'ledger-1', code: '100201', name: '基本户', category: 'ASSET',
+      normalBalance: 'DEBIT', status: 'ACTIVE', parentId: 'account-1', level: 2, isLeaf: true,
       isTemplate: false, hasBusinessUsage: true, coreLocked: false, legacyCode: false, version: 0,
       cashFlowRequired: false, defaultCashFlowItemId: null, quantityEnabled: false, unitName: null,
       dimensionRequirements: [],
@@ -103,5 +109,18 @@ describe('independent book and report periods', () => {
       expect.stringContaining('/reports/income-statement?periodFrom=2026-06&periodTo=2026-06'),
       expect.anything(),
     )
+  })
+
+  it('defaults a sub-ledger without an account to the first active asset root', async () => {
+    renderRoute(
+      '/ledgers/ledger-1/books/sub-ledger?periodCode=2026-06',
+      '/ledgers/:ledgerId/books/:bookType',
+      <BooksPage />,
+    )
+
+    await waitFor(() => expect(apiFetch).toHaveBeenCalledWith(
+      expect.stringContaining('/books/sub-ledger?periodFrom=2026-06&periodTo=2026-06&accountId=account-1'),
+      expect.anything(),
+    ))
   })
 })

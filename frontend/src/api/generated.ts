@@ -612,6 +612,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/ledgers/{ledgerId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["get_1"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch: operations["update_1"];
+        trace?: never;
+    };
     "/v1/ledgers/{ledgerId}/members/{userId}": {
         parameters: {
             query?: never;
@@ -684,22 +700,6 @@ export interface paths {
             cookie?: never;
         };
         get: operations["me"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/ledgers/{ledgerId}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["get_1"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1386,6 +1386,7 @@ export interface components {
         };
         Create: {
             name: string;
+            description?: string;
             accountingStandardCode: string;
             accountingStandardVersion: string;
             baseCurrency: string;
@@ -1398,6 +1399,7 @@ export interface components {
             /** Format: uuid */
             id?: string;
             name?: string;
+            description?: string;
             accountingStandardCode?: string;
             accountingStandardVersion?: string;
             baseCurrency?: string;
@@ -1783,6 +1785,10 @@ export interface components {
             deleted?: boolean;
             protectedUser?: boolean;
         };
+        Rename: {
+            name: string;
+            description?: string;
+        };
         UpdateMember: {
             /** @enum {string} */
             role: "OWNER" | "EDITOR" | "REVIEWER" | "VIEWER" | "AGENT";
@@ -1989,6 +1995,10 @@ export interface components {
             voucherNumber?: string;
             /** Format: date */
             voucherDate?: string;
+            /** Format: uuid */
+            postingAccountId?: string;
+            postingAccountCode?: string;
+            postingAccountName?: string;
             summary?: string;
             debit?: number;
             credit?: number;
@@ -2309,6 +2319,9 @@ export interface operations {
         parameters: {
             query?: {
                 periodCode?: string;
+                startDate?: string;
+                endDate?: string;
+                keyword?: string;
                 limit?: number;
                 offset?: number;
             };
@@ -2323,7 +2336,7 @@ export interface operations {
             /** @description OK */
             200: {
                 headers: {
-                    /** @description Total number of vouchers matching the period filter */
+                    /** @description Total number of vouchers matching the supplied filters */
                     "X-Total-Count"?: unknown[];
                     [name: string]: unknown;
                 };
@@ -3352,6 +3365,54 @@ export interface operations {
             };
         };
     };
+    get_1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ledgerId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["Ledger"];
+                };
+            };
+        };
+    };
+    update_1: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ledgerId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Rename"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["Ledger"];
+                };
+            };
+        };
+    };
     removeMember: {
         parameters: {
             query?: never;
@@ -3612,28 +3673,6 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["UserResponse"];
-                };
-            };
-        };
-    };
-    get_1: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                ledgerId: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "*/*": components["schemas"]["Ledger"];
                 };
             };
         };

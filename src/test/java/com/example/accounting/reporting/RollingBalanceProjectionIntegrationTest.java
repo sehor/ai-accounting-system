@@ -128,20 +128,28 @@ class RollingBalanceProjectionIntegrationTest {
         UUID january = period(ledgerId, "2021-01");
         UUID february = period(ledgerId, "2021-02");
         UUID cashParent = account(ledgerId, "1001");
-        UUID firstChild = ledgers.createAccount(actorId, ledgerId,
-                new LedgerRequests.AccountCreate("100101", "cash one", "ASSET", "DEBIT")).id();
+        UUID firstBranch = ledgers.createAccount(actorId, ledgerId,
+                new LedgerRequests.AccountCreate("100101", "cash branch", "ASSET", "DEBIT",
+                        cashParent, false, null, false, null, List.of())).id();
+        UUID thirdLevel = ledgers.createAccount(actorId, ledgerId,
+                new LedgerRequests.AccountCreate("10010101", "cash third level", "ASSET", "DEBIT",
+                        firstBranch, false, null, false, null, List.of())).id();
+        UUID fourthLevelLeaf = ledgers.createAccount(actorId, ledgerId,
+                new LedgerRequests.AccountCreate("1001010101", "cash fourth level", "ASSET", "DEBIT",
+                        thirdLevel, false, null, false, null, List.of())).id();
         UUID secondChild = ledgers.createAccount(actorId, ledgerId,
-                new LedgerRequests.AccountCreate("100102", "cash two", "ASSET", "DEBIT")).id();
+                new LedgerRequests.AccountCreate("100102", "cash two", "ASSET", "DEBIT",
+                        cashParent, false, null, false, null, List.of())).id();
         UUID capital = account(ledgerId, "3001");
 
         ledgers.replaceOpeningBalances(actorId, ledgerId, List.of(
-                opening(firstChild, january, "20", "0"),
+                opening(fourthLevelLeaf, january, "50", "0"),
                 opening(secondChild, january, "30", "0"),
-                opening(capital, january, "0", "50")));
+                opening(capital, january, "0", "80")));
         ledgers.confirmOpeningBalances(actorId, ledgerId);
         vouchers.create(actorId, ledgerId, new VoucherRequests.Create(
-                february, LocalDate.of(2021, 2, 10), "GENERAL", "1", "first child",
-                List.of(line(firstChild, "DEBIT", "5"), line(capital, "CREDIT", "5"))));
+                february, LocalDate.of(2021, 2, 10), "GENERAL", "1", "fourth-level child",
+                List.of(line(fourthLevelLeaf, "DEBIT", "5"), line(capital, "CREDIT", "5"))));
         vouchers.create(actorId, ledgerId, new VoucherRequests.Create(
                 february, LocalDate.of(2021, 2, 11), "GENERAL", "2", "second child",
                 List.of(line(capital, "DEBIT", "7"), line(secondChild, "CREDIT", "7"))));
@@ -150,13 +158,13 @@ class RollingBalanceProjectionIntegrationTest {
         ReportResponses.SubLedgerPage detail = reports.subLedgerBook(
                 actorId, ledgerId, new PeriodRange("2021-02", "2021-02"), cashParent, 1, 50);
 
-        assertThat(detail.openingBalance()).isEqualByComparingTo("50.00");
+        assertThat(detail.openingBalance()).isEqualByComparingTo("80.00");
         assertThat(detail.data()).hasSize(2);
         assertThat(detail.data()).extracting(ReportResponses.SubLedgerEntry::postingAccountId)
-                .containsExactly(firstChild, secondChild);
+                .containsExactly(fourthLevelLeaf, secondChild);
         assertThat(detail.periodDebit()).isEqualByComparingTo("5.00");
         assertThat(detail.periodCredit()).isEqualByComparingTo("7.00");
-        assertThat(detail.endingBalance()).isEqualByComparingTo("48.00");
+        assertThat(detail.endingBalance()).isEqualByComparingTo("78.00");
     }
 
     @Test

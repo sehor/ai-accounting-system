@@ -167,6 +167,17 @@ a { color: #1677a7; }
 }
 .account-switcher .ant-tree { margin-top: 8px; max-height: 570px; overflow: auto; }
 
+.accounts-page { width: 100%; }
+.accounts-page > h1 { margin: 0 0 10px; font-size: 20px; }
+.account-category-tabs { margin-bottom: 8px; }
+.account-category-tabs .ant-tabs-nav { margin-bottom: 0; }
+.account-category-tabs .ant-tabs-tab { padding: 7px 16px; border-radius: 0; }
+.accounts-page .ant-card { border-radius: 0; box-shadow: none; }
+.accounts-page .ant-card-body { padding: 10px; }
+.accounts-page .ant-table-container { border-inline-start: 1px solid #d5dbe2; border-top: 1px solid #d5dbe2; }
+.accounts-page .ant-table-thead > tr > th { background: #eef0f2; border-color: #d5dbe2; font-weight: 600; }
+.accounts-page .ant-table-tbody > tr > td { border-color: #d9dee4; }
+
 @media (max-width: 991px) {
   .mobile-menu-trigger { display: inline-flex; }
 }

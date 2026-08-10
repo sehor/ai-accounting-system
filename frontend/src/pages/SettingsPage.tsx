@@ -8,7 +8,6 @@ import { apiFetch, ApiError, jsonBody } from '../api/client'
 import type { Account, DimensionType, DimensionValue, FixedAssetPreview, Ledger, LedgerRole, Member, OpeningBalance, Period, User } from '../api/types'
 import { useAuth } from '../auth/AuthProvider'
 import { decimalOrZero } from '../features/vouchers/money'
-import { AccountsTab } from './AccountsTab'
 import { LedgerBackupTab } from './LedgerBackupTab'
 
 type OpeningFormLine = { accountId: string; periodId: string; currency: string; dimensionKey?: string; debitOriginal: string; creditOriginal: string; exchangeRate: string }
@@ -25,6 +24,9 @@ export function SettingsPage() {
   const dimensionTypes = useQuery({ queryKey: ['dimension-types', ledgerId], queryFn: () => apiFetch<DimensionType[]>(`/ledgers/${ledgerId}/dimension-types`, session!), enabled: Boolean(session && ledgerId) })
   const [selectedTypeId, setSelectedTypeId] = useState<string>()
   const [ledgerForm] = Form.useForm<{ name: string; description: string }>()
+  useEffect(() => {
+    if (tab === 'accounts') navigate(`/ledgers/${ledgerId}/accounts`, { replace: true })
+  }, [ledgerId, navigate, tab])
   useEffect(() => { if (ledger.data) ledgerForm.setFieldsValue({ name: ledger.data.name, description: ledger.data.description || '' }) }, [ledger.data, ledgerForm])
   const ledgerUpdate = useMutation({
     mutationFn: (value: { name: string; description: string }) => apiFetch<Ledger>(`/ledgers/${ledgerId}`, session!, { method: 'PATCH', body: jsonBody(value) }),
@@ -50,7 +52,6 @@ export function SettingsPage() {
   const changeTab = (key: string) => navigate(`/ledgers/${ledgerId}/settings/${key}`)
   return <>{contextHolder}<Space direction="vertical" size={16} style={{ width: '100%' }}><Typography.Title level={1}>账套设置</Typography.Title><Card title="账套基本信息"><Form form={ledgerForm} layout="vertical" onFinish={(value) => ledgerUpdate.mutate(value)}><Form.Item name="name" label="账套名称" rules={[{ required: true, message: '请输入账套名称' }]}><Input disabled={!['OWNER', 'EDITOR'].includes(ledgerRole.data?.role || '')} /></Form.Item><Form.Item name="description" label="公司主营业务" rules={[{ max: 2000, message: '主营业务描述不能超过 2000 个字符' }]}><Input.TextArea rows={4} maxLength={2000} showCount disabled={!['OWNER', 'EDITOR'].includes(ledgerRole.data?.role || '')} placeholder="例如：研发、生产和销售智能硬件及配套软件" /></Form.Item><Button type="primary" htmlType="submit" loading={ledgerUpdate.isPending} disabled={!['OWNER', 'EDITOR'].includes(ledgerRole.data?.role || '')}>保存</Button></Form></Card><Tabs activeKey={tab} onChange={changeTab} items={[
     { key: 'periods', label: '会计期间', children: <PeriodsTab periods={periods.data || []} onAction={(period, operation) => operation === 'close' ? void openClosePanel(period) : openReasonModal('反结账', (reason) => periodAction.mutate({ period, operation, reason }))} /> },
-    { key: 'accounts', label: '科目', children: <AccountsTab ledgerId={ledgerId} session={session!} accounts={accounts.data || []} dimensionTypes={dimensionTypes.data || []} loading={accounts.isLoading} writable={['OWNER', 'EDITOR'].includes(ledgerRole.data?.role || '')} onChanged={() => void client.invalidateQueries({ queryKey: ['accounts', ledgerId] })} /> },
     { key: 'openings', label: '期初余额', children: <OpeningsTab rows={openings.data || []} accounts={accounts.data || []} periods={periods.data || []} onSave={(lines) => openingSave.mutate(lines)} saving={openingSave.isPending} onImport={(file) => openingImport.mutate(file)} importing={openingImport.isPending} onConfirm={requestConfirmOpening} confirming={confirmOpening.isPending} /> },
     { key: 'dimensions', label: '辅助核算', children: <DimensionsTab ledgerId={ledgerId} session={session!} types={dimensionTypes.data || []} values={dimensionValues.data || []} selectedTypeId={selectedTypeId} onSelect={setSelectedTypeId} onChanged={() => { void client.invalidateQueries({ queryKey: ['dimension-types', ledgerId] }); void client.invalidateQueries({ queryKey: ['dimension-values', ledgerId, selectedTypeId] }) }} /> },
     { key: 'members', label: '成员', children: <MembersTab rows={members.data || []} form={emailForm} candidate={candidate} onFind={findCandidate} onAdd={addMember} /> },

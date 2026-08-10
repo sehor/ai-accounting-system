@@ -40,6 +40,7 @@ describe('AccountsTab account form', () => {
             dimensionTypes={[]}
             loading={false}
             writable
+            category="ASSET"
             onChanged={() => {}}
           />
         </App>

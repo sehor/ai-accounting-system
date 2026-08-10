@@ -374,6 +374,9 @@ export interface SubLedgerEntry {
   voucherId: string
   voucherNumber: string
   voucherDate: string
+  postingAccountId: string
+  postingAccountCode: string
+  postingAccountName: string
   summary: string
   debit: string
   credit: string
