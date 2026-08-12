@@ -52,7 +52,7 @@
         {"key":"bs-23","lineNo":23,"name":"固定资产清理","operation":{"kind":"ACCOUNT_BALANCE","side":"DEBIT","accounts":[{"code":"1606"}]}},
         {"key":"bs-24","lineNo":24,"name":"生产性生物资产","operation":{"kind":"ACCOUNT_BALANCE","side":"DEBIT","accounts":[{"code":"1621"}]}},
         {"key":"bs-25","lineNo":25,"name":"无形资产","operation":{"kind":"ACCOUNT_BALANCE","side":"DEBIT","accounts":[{"code":"1701"},{"code":"1702"}]}},
-        {"key":"bs-26","lineNo":26,"name":"开发支出","operation":{"kind":"ACCOUNT_BALANCE","side":"DEBIT","accounts":[{"code":"1801"}]}},
+        {"key":"bs-26","lineNo":26,"name":"开发支出","operation":{"kind":"ACCOUNT_BALANCE","side":"DEBIT","accounts":[{"code":"4301","name":"研发支出"}]}},
         {"key":"bs-27","lineNo":27,"name":"长期待摊费用","operation":{"kind":"ACCOUNT_BALANCE","side":"DEBIT","accounts":[{"code":"1901"}]}},
         {"key":"bs-28","lineNo":28,"name":"其他非流动资产","operation":{"kind":"ACCOUNT_BALANCE","side":"DEBIT","accounts":[{"code":"1902"}]}},
         {"key":"bs-29","lineNo":29,"name":"非流动资产合计","rowType":"TOTAL","operation":{"kind":"LINEAR_COMBINATION","components":[{"key":"bs-16"},{"key":"bs-17"},{"key":"bs-20"},{"key":"bs-21"},{"key":"bs-22"},{"key":"bs-23"},{"key":"bs-24"},{"key":"bs-25"},{"key":"bs-26"},{"key":"bs-27"},{"key":"bs-28"}]}},
