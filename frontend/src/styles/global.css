@@ -146,13 +146,15 @@ a { color: #1677a7; }
 .voucher-table .ant-tag { margin-inline-end: 0; }
 
 .statutory-income-layout { width: 100%; }
+.statutory-balance-scroll { width: 100%; overflow-x: auto; }
 .statutory-balance-layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  min-width: 1360px;
   gap: 10px;
   align-items: start;
 }
-.statutory-balance-warning { grid-column: 1 / -1; }
+.statutory-balance-warning { margin-bottom: 10px; }
 .statutory-card { min-width: 0; }
 .statutory-card > .ant-card-head { min-height: 34px; padding: 0 10px; background: #f7f8fa; border-bottom-color: #d5dbe2; }
 .statutory-card > .ant-card-head .ant-card-head-title { padding: 7px 0; font-size: 14px; font-weight: 600; }
@@ -337,8 +339,6 @@ a { color: #1677a7; }
   .app-content { padding: 8px; }
   .financial-toolbar { align-items: flex-start; flex-wrap: wrap; }
   .financial-toolbar-actions { width: 100%; margin-left: 0; }
-  .statutory-balance-layout { grid-template-columns: minmax(0, 1fr); }
-  .statutory-balance-warning { grid-column: auto; }
   .sub-ledger-layout { display: flex; flex-direction: column-reverse; }
   .account-switcher { width: 100%; min-height: auto; }
   .account-switcher .ant-tree { max-height: 240px; }

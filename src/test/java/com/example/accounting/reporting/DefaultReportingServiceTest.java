@@ -2,6 +2,8 @@ package com.example.accounting.reporting;
 
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.example.accounting.ledger.LedgerAccessService;
@@ -47,6 +49,8 @@ class DefaultReportingServiceTest {
         when(repository.periodsExist(ledgerId, PeriodRange.single("2026-06"))).thenReturn(true);
         when(repository.ledgerProfile(ledgerId)).thenReturn(new ReportResponses.LedgerProfile("SME", "v1", "CNY"));
         when(repository.firstPeriodOfYear(ledgerId, "2026-06")).thenReturn("2026-01");
+        when(repository.statutoryProjectionReady(ledgerId, new PeriodRange("2026-01", "2026-06"))).thenReturn(true);
+        when(repository.statutoryProjectionReady(ledgerId, PeriodRange.single("2026-06"))).thenReturn(true);
         List<ReportResponses.TrialBalanceLine> ytd = List.of(
                 line("5001", "主营业务收入", "CREDIT", "100", "100"),
                 line("5401", "主营业务成本", "DEBIT", "40", "40"),
@@ -57,8 +61,8 @@ class DefaultReportingServiceTest {
                 line("5401", "主营业务成本", "DEBIT", "8", "8"),
                 line("5601", "销售费用", "DEBIT", "1", "1"),
                 line("5801", "所得税费用", "DEBIT", "1", "1"));
-        when(repository.trialBalance(ledgerId, new PeriodRange("2026-01", "2026-06"), true)).thenReturn(ytd);
-        when(repository.trialBalance(ledgerId, PeriodRange.single("2026-06"), true)).thenReturn(month);
+        when(repository.statutoryTrialBalance(ledgerId, new PeriodRange("2026-01", "2026-06"), true)).thenReturn(ytd);
+        when(repository.statutoryTrialBalance(ledgerId, PeriodRange.single("2026-06"), true)).thenReturn(month);
 
         StatutoryReportResponses.Statement result = service.statutoryStatement(
                 actorId, ledgerId, "income-statement", "2026-06");
@@ -102,10 +106,12 @@ class DefaultReportingServiceTest {
         when(repository.periodsExist(ledgerId, PeriodRange.single("2026-06"))).thenReturn(true);
         when(repository.ledgerProfile(ledgerId)).thenReturn(new ReportResponses.LedgerProfile("SME", "v1", "CNY"));
         when(repository.firstPeriodOfYear(ledgerId, "2026-06")).thenReturn("2026-01");
-        when(repository.trialBalance(ledgerId, PeriodRange.single("2026-06"), true)).thenReturn(List.of(
+        when(repository.statutoryProjectionReady(ledgerId, PeriodRange.single("2026-06"))).thenReturn(true);
+        when(repository.statutoryProjectionReady(ledgerId, PeriodRange.single("2026-01"))).thenReturn(true);
+        when(repository.statutoryTrialBalance(ledgerId, PeriodRange.single("2026-06"), true)).thenReturn(List.of(
                 line("1001", "库存现金", "DEBIT", "100", "100"),
                 line("3001", "实收资本", "CREDIT", "100", "100")));
-        when(repository.trialBalance(ledgerId, PeriodRange.single("2026-01"), true)).thenReturn(List.of(
+        when(repository.statutoryTrialBalance(ledgerId, PeriodRange.single("2026-01"), true)).thenReturn(List.of(
                 openingLine("1001", "库存现金", "DEBIT", "30", "70", "100"),
                 openingLine("3001", "实收资本", "CREDIT", "0", "70", "70")));
 
@@ -118,6 +124,24 @@ class DefaultReportingServiceTest {
                 .filter(line -> line.lineNo() == 52).findFirst().orElseThrow();
         assertThat(assets.comparativeAmount()).isEqualByComparingTo("30.00");
         assertThat(equity.comparativeAmount()).isEqualByComparingTo("0.00");
+    }
+
+    @Test
+    void doesNotFallBackToLiveFactsWhenStatutoryProjectionIsPending() {
+        UUID actorId = UUID.randomUUID();
+        UUID ledgerId = UUID.randomUUID();
+        when(access.requireMembership(actorId, ledgerId)).thenReturn(LedgerRole.VIEWER);
+        when(repository.periodsExist(ledgerId, PeriodRange.single("2026-06"))).thenReturn(true);
+        when(repository.ledgerProfile(ledgerId)).thenReturn(new ReportResponses.LedgerProfile("SME", "v1", "CNY"));
+        when(repository.firstPeriodOfYear(ledgerId, "2026-06")).thenReturn("2026-01");
+        when(repository.statutoryProjectionReady(ledgerId, new PeriodRange("2026-01", "2026-06"))).thenReturn(false);
+
+        assertThatThrownBy(() -> service.statutoryStatement(actorId, ledgerId, "income-statement", "2026-06"))
+                .isInstanceOf(ApiProblemException.class)
+                .extracting(error -> ((ApiProblemException) error).code())
+                .isEqualTo("STATUTORY_REPORT_PROJECTION_PENDING");
+        verify(repository, never()).trialBalance(ledgerId, new PeriodRange("2026-01", "2026-06"), true);
+        verify(repository, never()).statutoryTrialBalance(ledgerId, new PeriodRange("2026-01", "2026-06"), true);
     }
 
     private ReportResponses.TrialBalanceLine line(String code, String name, String side,

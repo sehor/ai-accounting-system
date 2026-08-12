@@ -151,14 +151,27 @@ public class DefaultReportingService implements ReportingService {
         List<ReportResponses.TrialBalanceLine> primary;
         List<ReportResponses.TrialBalanceLine> comparative;
         if ("income-statement".equals(reportType)) {
-            primary = reports.trialBalance(ledgerId, new PeriodRange(firstPeriod, periodCode), true);
-            comparative = reports.trialBalance(ledgerId, selected, true);
+            PeriodRange yearToDate = new PeriodRange(firstPeriod, periodCode);
+            requireStatutoryProjection(ledgerId, yearToDate);
+            requireStatutoryProjection(ledgerId, selected);
+            primary = reports.statutoryTrialBalance(ledgerId, yearToDate, true);
+            comparative = reports.statutoryTrialBalance(ledgerId, selected, true);
         } else {
-            primary = reports.trialBalance(ledgerId, selected, true);
-            comparative = openingBalances(reports.trialBalance(ledgerId, PeriodRange.single(firstPeriod), true));
+            PeriodRange openingPeriod = PeriodRange.single(firstPeriod);
+            requireStatutoryProjection(ledgerId, selected);
+            requireStatutoryProjection(ledgerId, openingPeriod);
+            primary = reports.statutoryTrialBalance(ledgerId, selected, true);
+            comparative = openingBalances(reports.statutoryTrialBalance(ledgerId, openingPeriod, true));
         }
         return new StatutoryReportCalculator().calculate(reportType, periodCode, standardVersion, formula,
                 primary, comparative);
+    }
+
+    private void requireStatutoryProjection(UUID ledgerId, PeriodRange range) {
+        if (!reports.statutoryProjectionReady(ledgerId, range)) {
+            throw problem(409, "STATUTORY_REPORT_PROJECTION_PENDING", "法定报表暂不可用",
+                    "余额投影正在更新，请稍后刷新报表");
+        }
     }
 
     private List<ReportResponses.TrialBalanceLine> openingBalances(

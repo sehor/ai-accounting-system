@@ -14,6 +14,15 @@ public interface ReportingRepository {
 
     List<ReportResponses.TrialBalanceLine> trialBalance(UUID ledgerId, PeriodRange range, boolean includeParents);
 
+    /**
+     * Reads a statutory report source from the rolling balance projection only.  Unlike the
+     * regular reporting path, this must never fall back to aggregating vouchers live.
+     */
+    boolean statutoryProjectionReady(UUID ledgerId, PeriodRange range);
+
+    List<ReportResponses.TrialBalanceLine> statutoryTrialBalance(
+            UUID ledgerId, PeriodRange range, boolean includeParents);
+
     List<ReportResponses.LedgerLine> ledgerLines(UUID ledgerId, String periodCode);
 
     boolean periodExists(UUID ledgerId, String periodCode);

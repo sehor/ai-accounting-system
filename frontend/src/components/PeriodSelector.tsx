@@ -15,13 +15,13 @@ export function selectDefaultPeriod(periods: Period[], currentMonth = dayjs().fo
     || periods.at(-1)?.periodCode
 }
 
-export function usePeriodFilter(ledgerId: string) {
+export function usePeriodFilter(ledgerId: string, active = true) {
   const { session } = useAuth()
   const [search, setSearch] = useWorkspaceSearchParams()
   const periods = useQuery({
     queryKey: ['periods', ledgerId],
     queryFn: () => apiFetch<Period[]>(`/ledgers/${ledgerId}/periods`, session!),
-    enabled: Boolean(session && ledgerId),
+    enabled: Boolean(active && session && ledgerId),
   })
   const requested = search.get('periodCode') || undefined
   const hasDateRange = Boolean(search.get('startDate') || search.get('endDate'))
@@ -32,13 +32,13 @@ export function usePeriodFilter(ledgerId: string) {
   }, [hasDateRange, periods.data, requested])
 
   useEffect(() => {
-    if (!periodCode || requested === periodCode) return
+    if (!active || !periodCode || requested === periodCode) return
     const next = new URLSearchParams(search)
     next.set('periodCode', periodCode)
     next.delete('offset')
     next.delete('page')
     setSearch(next, { replace: true })
-  }, [periodCode, requested, search, setSearch])
+  }, [active, periodCode, requested, search, setSearch])
 
   const setPeriodCode = (value: string) => {
     const next = new URLSearchParams(search)
@@ -53,13 +53,13 @@ export function usePeriodFilter(ledgerId: string) {
   return { periods, periodCode, setPeriodCode }
 }
 
-export function usePeriodRangeFilter(ledgerId: string) {
+export function usePeriodRangeFilter(ledgerId: string, active = true) {
   const { session } = useAuth()
   const [search, setSearch] = useWorkspaceSearchParams()
   const periods = useQuery({
     queryKey: ['periods', ledgerId],
     queryFn: () => apiFetch<Period[]>(`/ledgers/${ledgerId}/periods`, session!),
-    enabled: Boolean(session && ledgerId),
+    enabled: Boolean(active && session && ledgerId),
   })
   const codes = useMemo(() => (periods.data || []).map((period) => period.periodCode), [periods.data])
   const legacy = search.get('periodCode') || undefined
@@ -71,7 +71,7 @@ export function usePeriodRangeFilter(ledgerId: string) {
   const periodTo = periodFrom && validTo && validTo >= periodFrom ? validTo : periodFrom
 
   useEffect(() => {
-    if (!periodFrom || !periodTo
+    if (!active || !periodFrom || !periodTo
       || (!legacy && search.get('periodFrom') === periodFrom && search.get('periodTo') === periodTo)) return
     const next = new URLSearchParams(search)
     next.delete('periodCode')
@@ -79,7 +79,7 @@ export function usePeriodRangeFilter(ledgerId: string) {
     next.set('periodTo', periodTo)
     next.delete('page')
     setSearch(next, { replace: true })
-  }, [legacy, periodFrom, periodTo, search, setSearch])
+  }, [active, legacy, periodFrom, periodTo, search, setSearch])
 
   const setPeriodRange = (from: string, to: string) => {
     const next = new URLSearchParams(search)

@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.example.accounting.reporting.ReportResponses;
 import com.example.accounting.reporting.StatutoryReportResponses;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.math.BigDecimal;
 import java.util.List;
@@ -33,7 +34,7 @@ class StatutoryReportCalculatorTest {
                 line("5801", "所得税费用", "EXPENSE", "3", "0"));
 
         StatutoryReportResponses.Statement result = calculator.calculate("income-statement", "2026-06",
-                "2011-17", mapper.readTree("{\"statutory\":{\"template\":\"SME-2011-17\"}}"), ytd, month);
+                "2011-17", formula("INCOME_STATEMENT"), ytd, month);
 
         assertThat(result.groups()).singleElement()
                 .satisfies(group -> assertThat(group.lines()).hasSize(32));
@@ -48,23 +49,48 @@ class StatutoryReportCalculatorTest {
     }
 
     @Test
-    void reclassifiesAbnormalReceivableAndKeepsBalanceEquationCheck() throws Exception {
+    void keepsReceivableBalanceWithoutReclassificationAndChecksBalanceEquation() throws Exception {
         List<ReportResponses.TrialBalanceLine> current = List.of(
                 line("1001", "库存现金", "ASSET", "100", "0"),
                 line("1122", "应收账款", "ASSET", "0", "20"),
                 line("3001", "实收资本", "EQUITY", "0", "80"),
                 line("3103", "本年利润", "EQUITY", "0", "0"));
         StatutoryReportResponses.Statement result = calculator.calculate("balance-sheet", "2026-06",
-                "2011-17", mapper.readTree("{\"statutory\":{\"template\":\"SME-2011-17\"}}"), current, current);
+                "2011-17", formula("BALANCE_SHEET"), current, current);
 
         StatutoryReportResponses.Line receivable = result.groups().get(0).lines().stream()
                 .filter(line -> line.lineNo() == 4).findFirst().orElseThrow();
-        assertThat(receivable.primaryAmount()).isZero();
+        assertThat(receivable.primaryAmount()).isEqualByComparingTo("-20.00");
         StatutoryReportResponses.Line prepayment = result.groups().get(0).lines().stream()
                 .filter(line -> line.lineNo() == 5).findFirst().orElseThrow();
         assertThat(prepayment.primaryAmount()).isZero();
         assertThat(result.groups().get(1).lines().stream().filter(line -> line.lineNo() > 0)).hasSize(23);
         assertThat(result.checks()).allSatisfy(check -> assertThat(check.passed()).isTrue());
+    }
+
+    @Test
+    void mapsLegacy5601ManagementExpenseByItsExactAccountName() throws Exception {
+        List<ReportResponses.TrialBalanceLine> source = List.of(
+                line("5601", "管理费用", "EXPENSE", "10", "0"));
+
+        StatutoryReportResponses.Statement result = calculator.calculate("income-statement", "2026-06",
+                "2011-17", formula("INCOME_STATEMENT"), source, source);
+
+        List<StatutoryReportResponses.Line> lines = result.groups().get(0).lines();
+        assertThat(lines.stream().filter(line -> line.lineNo() == 11).findFirst().orElseThrow().primaryAmount())
+                .isZero();
+        assertThat(lines.stream().filter(line -> line.lineNo() == 14).findFirst().orElseThrow().primaryAmount())
+                .isEqualByComparingTo("10.00");
+    }
+
+    private JsonNode formula(String code) throws Exception {
+        try (var input = getClass().getResourceAsStream("/accounting-standards/SME/2011-17.json")) {
+            JsonNode standard = mapper.readTree(input);
+            for (JsonNode formula : standard.path("formulas")) {
+                if (code.equals(formula.path("code").asText())) return formula.path("definition");
+            }
+        }
+        throw new IllegalArgumentException("formula not found: " + code);
     }
 
     private ReportResponses.TrialBalanceLine line(String code, String name, String category,

@@ -128,6 +128,27 @@ public class JdbcReportingRepository implements ReportingRepository {
     }
 
     @Override
+    public boolean statutoryProjectionReady(UUID ledgerId, PeriodRange range) {
+        return projection != null && projection.status(ledgerId, range).fresh();
+    }
+
+    @Override
+    public List<ReportResponses.TrialBalanceLine> statutoryTrialBalance(
+            UUID ledgerId, PeriodRange range, boolean includeParents) {
+        if (projection == null) {
+            throw new IllegalStateException("Balance projection is not configured");
+        }
+        BalanceProjectionService.ProjectionStatus status = projection.status(ledgerId, range);
+        if (!status.fresh()) {
+            throw new IllegalStateException("Balance projection is not ready");
+        }
+        BalanceReadMetadata.set("projection", status.projectedAt() == null
+                ? (status.lastEnqueuedAt() == null ? OffsetDateTime.now() : status.lastEnqueuedAt())
+                : status.projectedAt(), lagMs(status));
+        return projection.trialBalance(ledgerId, range, includeParents);
+    }
+
+    @Override
     public List<ReportResponses.LedgerLine> ledgerLines(UUID ledgerId, String periodCode) {
         return jdbc.query("""
                 select v.id voucher_id, v.voucher_number, v.voucher_date, a.code account_code, a.name account_name,

@@ -55,26 +55,26 @@ function StatutoryTable({ statement, group }: {
 function StatutoryStatementView({ statement }: { statement: StatutoryStatement }) {
   const balance = statement.reportType === 'balance-sheet'
   const failedChecks = statement.checks.filter((check) => !check.passed)
-  return <div className={balance ? 'statutory-balance-layout' : 'statutory-income-layout'}>
-    {balance && failedChecks.length > 0 && <Alert
+  const tables = <>{statement.groups.map((group) => <Card key={group.key} className="financial-grid-card statutory-card" title={group.title}>
+    <div className="statutory-table-scroll"><StatutoryTable statement={statement} group={group} /></div>
+  </Card>)}</>
+  if (balance) return <>
+    {failedChecks.length > 0 && <Alert
       className="statutory-balance-warning"
       type="warning"
       showIcon
       message="资产负债表勾稽不平"
       description={failedChecks.map((check) => `${check.name}，差额 ${formatReportAmount(check.difference) || '0.00'}`).join('；')}
     />}
-    {statement.groups.map((group) => <Card key={group.key} className="financial-grid-card statutory-card" title={group.title}>
-      <div className="statutory-table-scroll"><StatutoryTable statement={statement} group={group} /></div>
-    </Card>)}
-  </div>
+    <div className="statutory-balance-scroll"><div className="statutory-balance-layout">{tables}</div></div>
+  </>
+  return <div className="statutory-income-layout">{tables}</div>
 }
 
 export function ReportsPage() {
   const { ledgerId = '', reportType = 'balance-sheet' } = useParams()
   const { session } = useAuth()
   const [search, setSearch] = useWorkspaceSearchParams()
-  const { periods: rangePeriods, periodFrom, periodTo, setPeriodRange } = usePeriodRangeFilter(ledgerId)
-  const { periods: singlePeriods, periodCode, setPeriodCode } = usePeriodFilter(ledgerId)
   const includeParents = search.get('includeParents') === 'true'
   const [balanceSource, setBalanceSource] = useState<string | null>(null)
   const statement = reportType === 'balance-sheet' || reportType === 'income-statement'
@@ -83,7 +83,10 @@ export function ReportsPage() {
     queryFn: () => apiFetch<Ledger>(`/ledgers/${ledgerId}`, session!),
     enabled: Boolean(session && ledgerId),
   })
-  const statutory = statement && ledger.data?.accountingStandardCode?.toUpperCase() === 'SME'
+  const statutory = ledger.isSuccess && statement && ledger.data?.accountingStandardCode?.toUpperCase() === 'SME'
+  const legacyReport = ledger.isSuccess && !statutory
+  const { periods: rangePeriods, periodFrom, periodTo, setPeriodRange } = usePeriodRangeFilter(ledgerId, legacyReport)
+  const { periods: singlePeriods, periodCode, setPeriodCode } = usePeriodFilter(ledgerId, statutory)
   const reportParams = new URLSearchParams()
   if (statutory && periodCode) reportParams.set('periodCode', periodCode)
   if (!statutory && periodFrom) reportParams.set('periodFrom', periodFrom)
