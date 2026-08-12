@@ -260,8 +260,6 @@ UUID 由应用生成。所有时间存 UTC，接口使用 ISO 8601。
 - `source_type`
 - `source_id`
 - `approval_required`
-- `reversal_of_id`
-- `reversed_by_id`
 - `posted_at` / `posted_by`
 - `version`
 - 唯一约束：`(ledger_id, period_id, voucher_type, voucher_number)`
@@ -505,8 +503,6 @@ POST           /v1/ledgers/{ledgerId}/vouchers/{voucherId}:submit
 POST           /v1/ledgers/{ledgerId}/vouchers/{voucherId}:approve
 POST           /v1/ledgers/{ledgerId}/vouchers/{voucherId}:reject
 POST           /v1/ledgers/{ledgerId}/vouchers/{voucherId}:post
-POST           /v1/ledgers/{ledgerId}/vouchers/{voucherId}:unpost
-POST           /v1/ledgers/{ledgerId}/vouchers/{voucherId}:reverse
 GET            /v1/ledgers/{ledgerId}/vouchers/{voucherId}/revisions
 POST           /v1/ledgers/{ledgerId}/vouchers/{voucherId}/revisions/{revision}:restore
 ```

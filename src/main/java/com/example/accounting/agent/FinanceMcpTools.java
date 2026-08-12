@@ -779,7 +779,7 @@ public class FinanceMcpTools {
                 () -> voucherService.create(actorId, ledgerId, request, key));
     }
 
-    @McpTool(name = "update_voucher", description = "Update a voucher in an open accounting period")
+    @McpTool(name = "update_voucher", description = "Update any manual, generated, imported, or posted voucher; only a CLOSED accounting period blocks the update")
     @PreAuthorize("isAuthenticated()")
     public VoucherResponses.Voucher updateVoucher(
             @McpToolParam UUID ledgerId,
@@ -842,7 +842,7 @@ public class FinanceMcpTools {
                 () -> voucherService.post(actorId, ledgerId, voucherId));
     }
 
-    @McpTool(name = "delete_voucher", description = "Delete a voucher in an open accounting period")
+    @McpTool(name = "delete_voucher", description = "Permanently delete any manual, generated, imported, or posted voucher and update balances; only a CLOSED accounting period blocks deletion")
     @PreAuthorize("isAuthenticated()")
     public boolean deleteVoucher(
             @McpToolParam UUID ledgerId,

@@ -194,7 +194,7 @@ identity ---> ledger ---> voucher ---> reporting
 
 **Acceptance criteria:**
 
-- Voucher, lines, approval, revision, idempotency, and reversal SQL is implemented
+- Voucher, lines, approval, revision, idempotency, hard-delete, and reference-cleanup SQL is implemented
   behind voucher-owned repository contracts.
 - Repository contracts expose typed records rather than SQL/JDBC types.
 - The PostgreSQL uniqueness and optimistic-update semantics remain unchanged.
@@ -211,7 +211,7 @@ identity ---> ledger ---> voucher ---> reporting
 
 - `VoucherService` is a public interface.
 - `DefaultVoucherService` has no JDBC dependency.
-- State transitions, snapshots, restore, reversal, pagination, and authorization
+- State transitions, snapshots, restore, direct posted-voucher mutation, pagination, and authorization
   behavior remain unchanged.
 
 **Verification:**
