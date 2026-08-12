@@ -37,4 +37,8 @@ public interface ReportingRepository {
     Set<String> formulaCategories(UUID ledgerId, String formulaCode, String field);
 
     String baseCurrency(UUID ledgerId);
+
+    ReportResponses.LedgerProfile ledgerProfile(UUID ledgerId);
+
+    String firstPeriodOfYear(UUID ledgerId, String periodCode);
 }

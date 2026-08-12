@@ -19,11 +19,13 @@
     {"code":"4001","name":"生产成本","category":"COST","normalBalance":"DEBIT","cashFlowRequired":false,"quantityEnabled":false},
     {"code":"5001","name":"主营业务收入","category":"REVENUE","normalBalance":"CREDIT","cashFlowRequired":false,"quantityEnabled":false},
     {"code":"5401","name":"主营业务成本","category":"EXPENSE","normalBalance":"DEBIT","cashFlowRequired":false,"quantityEnabled":false},
-    {"code":"5601","name":"管理费用","category":"EXPENSE","normalBalance":"DEBIT","cashFlowRequired":false,"quantityEnabled":false}
+    {"code":"5601","name":"销售费用","category":"EXPENSE","normalBalance":"DEBIT","cashFlowRequired":false,"quantityEnabled":false},
+    {"code":"5602","name":"管理费用","category":"EXPENSE","normalBalance":"DEBIT","cashFlowRequired":false,"quantityEnabled":false},
+    {"code":"5603","name":"财务费用","category":"EXPENSE","normalBalance":"DEBIT","cashFlowRequired":false,"quantityEnabled":false}
   ],
   "formulas": [
-    {"code":"BALANCE_SHEET","name":"资产负债表","definition":{"type":"balance-sheet","debitCategories":["ASSET"],"creditCategories":["LIABILITY","EQUITY"]}},
-    {"code":"INCOME_STATEMENT","name":"利润表","definition":{"type":"income-statement","revenueCategories":["REVENUE"],"expenseCategories":["COST","EXPENSE"]}}
+    {"code":"BALANCE_SHEET","name":"资产负债表","definition":{"type":"balance-sheet","debitCategories":["ASSET"],"creditCategories":["LIABILITY","EQUITY"],"statutory":{"template":"SME-2011-17","lineCount":53,"periodMode":"CLOSING_AND_OPENING","allowedOperations":["ACCOUNT_BALANCE","RECLASSIFIED_BALANCE","LINEAR_COMBINATION"]}}},
+    {"code":"INCOME_STATEMENT","name":"利润表","definition":{"type":"income-statement","revenueCategories":["REVENUE"],"expenseCategories":["COST","EXPENSE"],"statutory":{"template":"SME-2011-17","lineCount":32,"periodMode":"YEAR_TO_DATE_AND_MONTH","allowedOperations":["ACCOUNT_ACTIVITY","LINEAR_COMBINATION"]}}}
   ],
   "cashFlowItems": [
     {"code":"OPERATING","name":"经营活动产生的现金流量"},

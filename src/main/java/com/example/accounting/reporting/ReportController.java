@@ -57,6 +57,16 @@ public class ReportController {
         return respond(response, () -> reportingService.incomeStatement(user(request), ledgerId, range));
     }
 
+    @GetMapping("/statutory/{reportType}")
+    public StatutoryReportResponses.Statement statutory(HttpServletRequest request,
+                                                        HttpServletResponse response,
+                                                        @PathVariable UUID ledgerId,
+                                                        @PathVariable String reportType,
+                                                        @RequestParam String periodCode) {
+        return respond(response, () -> reportingService.statutoryStatement(
+                user(request), ledgerId, reportType, periodCode));
+    }
+
     @GetMapping("/general-ledger")
     public List<ReportResponses.LedgerLine> generalLedger(HttpServletRequest request, HttpServletResponse response,
                                                           @PathVariable UUID ledgerId,

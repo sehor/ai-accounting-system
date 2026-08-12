@@ -788,6 +788,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/ledgers/{ledgerId}/reports/statutory/{reportType}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["statutoryReport"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/ledgers/{ledgerId}/reports/general-ledger": {
         parameters: {
             query?: never;
@@ -1933,6 +1949,37 @@ export interface components {
             code?: string;
             name?: string;
             amount?: number;
+        };
+        StatutoryStatement: {
+            reportType?: string;
+            templateCode?: string;
+            standardCode?: string;
+            standardVersion?: string;
+            periodCode?: string;
+            primaryColumn?: string;
+            comparativeColumn?: string;
+            groups?: components["schemas"]["StatutoryGroup"][];
+            checks?: components["schemas"]["StatutoryCheck"][];
+        };
+        StatutoryGroup: {
+            key?: string;
+            title?: string;
+            lines?: components["schemas"]["StatutoryLine"][];
+        };
+        StatutoryLine: {
+            key?: string;
+            lineNo?: number;
+            name?: string;
+            indent?: number;
+            rowType?: string;
+            primaryAmount?: number;
+            comparativeAmount?: number;
+        };
+        StatutoryCheck: {
+            key?: string;
+            name?: string;
+            passed?: boolean;
+            difference?: number;
         };
         Page: {
             data?: components["schemas"]["Asset"][];
@@ -3797,6 +3844,31 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["Statement"];
+                };
+            };
+        };
+    };
+    statutoryReport: {
+        parameters: {
+            query?: {
+                periodCode: string;
+            };
+            header?: never;
+            path: {
+                ledgerId: string;
+                reportType: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["StatutoryStatement"];
                 };
             };
         };

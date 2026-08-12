@@ -329,6 +329,41 @@ export interface Statement {
   lines: StatementLine[]
 }
 
+export interface StatutoryLine {
+  key: string
+  lineNo: number
+  name: string
+  indent: number
+  rowType: string
+  primaryAmount: string | number
+  comparativeAmount: string | number
+}
+
+export interface StatutoryGroup {
+  key: string
+  title: string
+  lines: StatutoryLine[]
+}
+
+export interface StatutoryCheck {
+  key: string
+  name: string
+  passed: boolean
+  difference: string | number
+}
+
+export interface StatutoryStatement {
+  reportType: string
+  templateCode: string
+  standardCode: string
+  standardVersion: string
+  periodCode: string
+  primaryColumn: string
+  comparativeColumn: string
+  groups: StatutoryGroup[]
+  checks: StatutoryCheck[]
+}
+
 export interface LedgerLine {
   voucherId: string
   voucherNumber: string

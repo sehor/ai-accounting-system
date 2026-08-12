@@ -48,6 +48,11 @@ public class AccountingStandardCatalog {
         return Optional.ofNullable(packages.get(code + "/" + version));
     }
 
+    public Optional<AccountingStandard.Formula> formula(String code, String version, String formulaCode) {
+        return find(code, version).flatMap(standard -> standard.formulas().stream()
+                .filter(formula -> formulaCode.equals(formula.code())).findFirst());
+    }
+
     private AccountingStandard.Package read(ObjectMapper objectMapper, String resource) {
         try (InputStream input = new ClassPathResource(resource).getInputStream()) {
             return objectMapper.readValue(input, AccountingStandard.Package.class);

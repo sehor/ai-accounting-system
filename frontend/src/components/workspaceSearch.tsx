@@ -41,7 +41,7 @@ export function WorkspaceTabSearchProvider({
     const next = typeof nextInit === 'function'
       ? nextInit(new URLSearchParams(searchRef.current))
       : nextInit
-    const nextSearch = new URLSearchParams(next)
+    const nextSearch = new URLSearchParams(next as string | string[][] | Record<string, string> | URLSearchParams)
     searchRef.current = nextSearch
     setSearchState(nextSearch)
     if (activeTabRef.current === tabId) {

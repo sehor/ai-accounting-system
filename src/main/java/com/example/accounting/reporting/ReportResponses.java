@@ -82,4 +82,8 @@ public final class ReportResponses {
 
     public record FinanceQueryLine(String groupKey, BigDecimal amount) {
     }
+
+    public record LedgerProfile(String accountingStandardCode, String accountingStandardVersion,
+                                String baseCurrency) {
+    }
 }

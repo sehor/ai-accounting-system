@@ -145,6 +145,43 @@ a { color: #1677a7; }
 .voucher-table .ant-table-tbody > tr:nth-child(even) > td { background: #fbfbfc; }
 .voucher-table .ant-tag { margin-inline-end: 0; }
 
+.statutory-income-layout { width: 100%; }
+.statutory-balance-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+}
+.statutory-balance-warning { grid-column: 1 / -1; }
+.statutory-card { min-width: 0; }
+.statutory-card > .ant-card-head { min-height: 34px; padding: 0 10px; background: #f7f8fa; border-bottom-color: #d5dbe2; }
+.statutory-card > .ant-card-head .ant-card-head-title { padding: 7px 0; font-size: 14px; font-weight: 600; }
+.statutory-card > .ant-card-body { padding: 0; }
+.statutory-table-scroll { overflow-x: auto; }
+.statutory-statement-table {
+  width: 100%;
+  min-width: 680px;
+  border-collapse: collapse;
+  table-layout: fixed;
+  background: #fff;
+  color: #17202a;
+  font-size: 13px;
+}
+.statutory-statement-table th,
+.statutory-statement-table td { height: 32px; padding: 5px 8px; border: 1px solid #d5dbe2; }
+.statutory-statement-table thead th { background: #eef0f2; text-align: center; font-weight: 600; white-space: nowrap; }
+.statutory-statement-table th:first-child,
+.statutory-statement-table td:first-child { width: 52%; }
+.statutory-statement-table .statutory-line-no { width: 72px; text-align: center; }
+.statutory-statement-table .statutory-amount { width: 24%; text-align: right; font-variant-numeric: tabular-nums; }
+.statutory-statement-table .statutory-name { white-space: nowrap; }
+.statutory-statement-table tbody tr:nth-child(even) td { background: #fbfbfc; }
+.statutory-statement-table tbody tr:hover td { background: #f7fbfd; }
+.statutory-statement-table .statutory-row-section td { font-weight: 600; background: #f5f6f7; }
+.statutory-statement-table .statutory-row-total td,
+.statutory-statement-table .statutory-row-calculation td { font-weight: 600; border-top: 2px solid #aeb6bf; }
+.statutory-loading { display: flex; justify-content: center; padding: 28px; }
+
 .voucher-editor-card {
   border-color: #c7cdd4;
   border-radius: 0;
@@ -300,6 +337,8 @@ a { color: #1677a7; }
   .app-content { padding: 8px; }
   .financial-toolbar { align-items: flex-start; flex-wrap: wrap; }
   .financial-toolbar-actions { width: 100%; margin-left: 0; }
+  .statutory-balance-layout { grid-template-columns: minmax(0, 1fr); }
+  .statutory-balance-warning { grid-column: auto; }
   .sub-ledger-layout { display: flex; flex-direction: column-reverse; }
   .account-switcher { width: 100%; min-height: auto; }
   .account-switcher .ant-tree { max-height: 240px; }

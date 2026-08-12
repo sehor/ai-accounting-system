@@ -2,12 +2,15 @@ package com.example.accounting.reporting.internal.application;
 
 import com.example.accounting.ledger.LedgerAccessService;
 import com.example.accounting.ledger.LedgerRole;
+import com.example.accounting.ledger.AccountingStandardCatalog;
 import com.example.accounting.reporting.FinanceQueryRequests;
 import com.example.accounting.reporting.ReportResponses;
+import com.example.accounting.reporting.StatutoryReportResponses;
 import com.example.accounting.reporting.ReportingService;
 import com.example.accounting.reporting.PeriodRange;
 import com.example.accounting.reporting.internal.port.ReportingRepository;
 import com.example.accounting.shared.web.ApiProblemException;
+import com.fasterxml.jackson.databind.JsonNode;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.ArrayList;
@@ -17,6 +20,7 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.beans.factory.annotation.Autowired;
 
 @Service
 public class DefaultReportingService implements ReportingService {
@@ -26,10 +30,19 @@ public class DefaultReportingService implements ReportingService {
 
     private final LedgerAccessService ledgerAccess;
     private final ReportingRepository reports;
+    private final AccountingStandardCatalog standards;
 
-    public DefaultReportingService(LedgerAccessService ledgerAccess, ReportingRepository reports) {
+    @Autowired
+    public DefaultReportingService(LedgerAccessService ledgerAccess, ReportingRepository reports,
+                                   AccountingStandardCatalog standards) {
         this.ledgerAccess = ledgerAccess;
         this.reports = reports;
+        this.standards = standards;
+    }
+
+    /** Compatibility constructor retained for focused service unit tests. */
+    public DefaultReportingService(LedgerAccessService ledgerAccess, ReportingRepository reports) {
+        this(ledgerAccess, reports, new AccountingStandardCatalog());
     }
 
     @Override
@@ -101,6 +114,60 @@ public class DefaultReportingService implements ReportingService {
                                 : line.periodDebit().subtract(line.periodCredit())))
                 .toList();
         return new ReportResponses.Statement(result.size(), result);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public StatutoryReportResponses.Statement statutoryStatement(
+            UUID actorId, UUID ledgerId, String reportType, String periodCode) {
+        requireView(actorId, ledgerId);
+        if (!"balance-sheet".equals(reportType) && !"income-statement".equals(reportType)) {
+            throw problem(404, "STATUTORY_REPORT_NOT_FOUND", "Statutory report not found",
+                    "Only balance-sheet and income-statement are supported");
+        }
+        PeriodRange selected = PeriodRange.single(periodCode);
+        validateRange(ledgerId, selected);
+        ReportResponses.LedgerProfile profile = reports.ledgerProfile(ledgerId);
+        if (!"SME".equalsIgnoreCase(profile.accountingStandardCode())) {
+            throw problem(422, "STATUTORY_REPORT_UNSUPPORTED_STANDARD", "法定报表不可用",
+                    "当前账套不是小企业会计准则，暂不提供法定报表");
+        }
+        if (!"CNY".equalsIgnoreCase(profile.baseCurrency())) {
+            throw problem(422, "STATUTORY_REPORT_CURRENCY_UNSUPPORTED", "法定报表不可用",
+                    "小企业会计准则法定报表首版仅支持人民币账套");
+        }
+        String standardVersion = "v1".equals(profile.accountingStandardVersion())
+                ? "2011-17" : profile.accountingStandardVersion();
+        String formulaCode = "balance-sheet".equals(reportType) ? "BALANCE_SHEET" : "INCOME_STATEMENT";
+        JsonNode formula = standards.formula("SME", standardVersion, formulaCode)
+                .map(com.example.accounting.ledger.AccountingStandard.Formula::definition)
+                .orElseThrow(() -> problem(500, "STATUTORY_FORMULA_NOT_FOUND", "法定报表公式缺失",
+                        "当前小企业会计准则标准包缺少法定报表公式"));
+        String firstPeriod = reports.firstPeriodOfYear(ledgerId, periodCode);
+        if (firstPeriod == null) {
+            throw problem(404, "PERIOD_NOT_FOUND", "Period not found",
+                    "No accounting period is available in the selected year");
+        }
+        List<ReportResponses.TrialBalanceLine> primary;
+        List<ReportResponses.TrialBalanceLine> comparative;
+        if ("income-statement".equals(reportType)) {
+            primary = reports.trialBalance(ledgerId, new PeriodRange(firstPeriod, periodCode), true);
+            comparative = reports.trialBalance(ledgerId, selected, true);
+        } else {
+            primary = reports.trialBalance(ledgerId, selected, true);
+            comparative = openingBalances(reports.trialBalance(ledgerId, PeriodRange.single(firstPeriod), true));
+        }
+        return new StatutoryReportCalculator().calculate(reportType, periodCode, standardVersion, formula,
+                primary, comparative);
+    }
+
+    private List<ReportResponses.TrialBalanceLine> openingBalances(
+            List<ReportResponses.TrialBalanceLine> lines) {
+        return lines.stream().map(line -> new ReportResponses.TrialBalanceLine(
+                line.accountId(), line.code(), line.name(), line.category(),
+                line.openingDebit(), line.openingCredit(), BigDecimal.ZERO, BigDecimal.ZERO,
+                line.openingDebit(), line.openingCredit(), line.openingDebit(), line.openingCredit(),
+                line.openingDebit().subtract(line.openingCredit()))).toList();
     }
 
     @Override

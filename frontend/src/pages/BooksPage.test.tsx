@@ -36,6 +36,11 @@ beforeEach(() => {
     data: { totalLines: 0, lines: [] }, headers: new Headers(),
   })
   vi.mocked(apiFetch).mockImplementation((path) => {
+    if (path === '/ledgers/ledger-1') return Promise.resolve({
+      id: 'ledger-1', name: '测试账套', description: '', accountingStandardCode: 'CAS',
+      accountingStandardVersion: '2006', baseCurrency: 'CNY', startDate: '2026-01-01',
+      approvalEnabled: false, status: 'ACTIVE',
+    })
     if (path.endsWith('/periods')) return Promise.resolve(periods)
     if (path.endsWith('/accounts')) return Promise.resolve([{
       id: 'account-1', ledgerId: 'ledger-1', code: '1002', name: '银行存款', category: 'ASSET',
@@ -109,6 +114,36 @@ describe('independent book and report periods', () => {
       expect.stringContaining('/reports/income-statement?periodFrom=2026-06&periodTo=2026-06'),
       expect.anything(),
     )
+  })
+
+  it('uses the statutory single-period endpoint for SME statements', async () => {
+    vi.mocked(apiFetch).mockImplementation((path) => {
+      if (path === '/ledgers/ledger-1') return Promise.resolve({
+        id: 'ledger-1', name: '小企业账套', description: '', accountingStandardCode: 'SME',
+        accountingStandardVersion: 'v1', baseCurrency: 'CNY', startDate: '2026-01-01',
+        approvalEnabled: false, status: 'ACTIVE',
+      })
+      if (path.endsWith('/periods')) return Promise.resolve(periods)
+      return Promise.resolve([])
+    })
+    vi.mocked(apiFetchWithHeaders).mockResolvedValue({
+      data: {
+        reportType: 'income-statement', templateCode: 'SME-2011-17', standardCode: 'SME',
+        standardVersion: '2011-17', periodCode: '2026-08', primaryColumn: '本年累计金额', comparativeColumn: '本月金额',
+        groups: [], checks: [],
+      }, headers: new Headers(),
+    })
+
+    renderRoute(
+      '/ledgers/ledger-1/reports/income-statement?periodCode=2026-08',
+      '/ledgers/:ledgerId/reports/:reportType',
+      <ReportsPage />,
+    )
+
+    await waitFor(() => expect(apiFetchWithHeaders).toHaveBeenCalledWith(
+      expect.stringContaining('/reports/statutory/income-statement?periodCode=2026-08'),
+      expect.anything(),
+    ))
   })
 
   it('defaults a sub-ledger without an account to the first active asset root', async () => {

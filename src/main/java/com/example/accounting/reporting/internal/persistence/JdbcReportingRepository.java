@@ -395,6 +395,27 @@ public class JdbcReportingRepository implements ReportingRepository {
         return jdbc.queryForObject("select base_currency from ledger where id = ?", String.class, ledgerId);
     }
 
+    @Override
+    public ReportResponses.LedgerProfile ledgerProfile(UUID ledgerId) {
+        return jdbc.queryForObject("""
+                select accounting_standard_code, accounting_standard_version, base_currency
+                from ledger where id = ?
+                """, (rs, rowNum) -> new ReportResponses.LedgerProfile(
+                rs.getString("accounting_standard_code"),
+                rs.getString("accounting_standard_version"),
+                rs.getString("base_currency")), ledgerId);
+    }
+
+    @Override
+    public String firstPeriodOfYear(UUID ledgerId, String periodCode) {
+        String year = periodCode.substring(0, 4);
+        return jdbc.query("""
+                select min(period_code) from accounting_period
+                where ledger_id = ? and period_code like ? and period_code <= ?
+                """, rs -> rs.next() ? rs.getString(1) : null,
+                ledgerId, year + "-%", periodCode);
+    }
+
     private boolean useProjection(UUID ledgerId, String periodCode) {
         if (projection == null || "legacy".equalsIgnoreCase(readMode)) {
             return false;
