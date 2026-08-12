@@ -77,24 +77,25 @@ class RollingBalanceProjectionIntegrationTest {
 
         assertBalance(ledgerId, "2021-02", cashLeaf, "100.00", "0.00", "100.00", "0.00");
         drainProjection();
-        assertBalance(ledgerId, "2021-02", cashLeaf, "100.00", "0.00", "70.00", "0.00");
-        assertBalance(ledgerId, "2021-03", cashLeaf, "70.00", "0.00", "70.00", "0.00");
-        assertBalance(ledgerId, "2021-03", cashParent, "70.00", "0.00", "70.00", "0.00");
+        assertBalance(ledgerId, "2021-02", cashLeaf, "100.00", "0.00", "100.00", "30.00");
+        assertBalance(ledgerId, "2021-03", cashLeaf, "100.00", "30.00", "100.00", "30.00");
+        assertBalance(ledgerId, "2021-03", cashParent, "100.00", "30.00", "100.00", "30.00");
 
         vouchers.update(actorId, ledgerId, voucher.id(), new VoucherRequests.Update(
                 voucher.version(), february, voucher.voucherDate(), voucher.voucherType(), voucher.voucherNumber(),
                 "cash overdraft", List.of(line(capital, "DEBIT", "120"), line(cashLeaf, "CREDIT", "120"))));
         drainProjection();
-        assertBalance(ledgerId, "2021-02", cashLeaf, "100.00", "0.00", "0.00", "20.00");
-        assertBalance(ledgerId, "2021-03", cashLeaf, "0.00", "20.00", "0.00", "20.00");
-        assertBalance(ledgerId, "2021-03", cashParent, "0.00", "20.00", "0.00", "20.00");
+        assertBalance(ledgerId, "2021-02", cashLeaf, "100.00", "0.00", "100.00", "120.00");
+        assertBalance(ledgerId, "2021-03", cashLeaf, "100.00", "120.00", "100.00", "120.00");
+        assertBalance(ledgerId, "2021-03", cashParent, "100.00", "120.00", "100.00", "120.00");
 
         PeriodRange range = new PeriodRange("2021-02", "2021-03");
         ReportResponses.TrialBalanceLine cash = reports.trialBalance(actorId, ledgerId, range, false).stream()
                 .filter(line -> line.accountId().equals(cashLeaf)).findFirst().orElseThrow();
         assertThat(cash.openingDebit()).isEqualByComparingTo("100.00");
         assertThat(cash.periodCredit()).isEqualByComparingTo("120.00");
-        assertThat(cash.closingCredit()).isEqualByComparingTo("20.00");
+        assertThat(cash.closingDebit()).isEqualByComparingTo("100.00");
+        assertThat(cash.closingCredit()).isEqualByComparingTo("120.00");
         assertThat(cash.balance()).isEqualByComparingTo("-20.00");
 
         ReportResponses.SubLedgerPage detail = reports.subLedgerBook(
@@ -104,8 +105,8 @@ class RollingBalanceProjectionIntegrationTest {
         assertThat(detail.periodCode()).isNull();
         assertThat(detail.openingBalance()).isEqualByComparingTo("100.00");
         assertThat(detail.data()).hasSize(1);
-        assertThat(detail.endingDirection()).isEqualTo("CREDIT");
-        assertThat(detail.endingBalance()).isEqualByComparingTo("20.00");
+        assertThat(detail.endingDirection()).isEqualTo("DEBIT");
+        assertThat(detail.endingBalance()).isEqualByComparingTo("-20.00");
 
         BalanceRebuildResponses.Job requested = rebuilds.request(actorId, ledgerId,
                 new BalanceRebuildRequests.Create("2021-02", "2021-02", "verify downstream rebuild"));
@@ -116,6 +117,79 @@ class RollingBalanceProjectionIntegrationTest {
         assertThat(rebuilt.periodTo()).isEqualTo(jdbc.queryForObject(
                 "select max(period_code) from accounting_period where ledger_id = ?", String.class, ledgerId));
         assertThat(rebuilt.processedPeriods()).isEqualTo(rebuilt.totalPeriods());
+    }
+
+    @Test
+    void preservesNegativeOpeningBalanceSidesAcrossProjectionAndReports() {
+        UUID actorId = UUID.randomUUID();
+        UUID ledgerId = ledgers.create(new CurrentUserResolver.ResolvedUser(
+                        actorId, "negative-opening", actorId.toString()),
+                new LedgerRequests.Create("negative opening", "SME", "v1", "CNY",
+                        LocalDate.of(2024, 1, 1), false)).id();
+        UUID january = period(ledgerId, "2024-01");
+        UUID cashParent = account(ledgerId, "1001");
+        UUID cashLeaf = ledgers.createAccount(actorId, ledgerId,
+                new LedgerRequests.AccountCreate("100101", "negative cash", "ASSET", "DEBIT")).id();
+        UUID capital = account(ledgerId, "3001");
+
+        ledgers.replaceOpeningBalances(actorId, ledgerId, List.of(
+                opening(cashLeaf, january, "-25", "0"),
+                opening(capital, january, "0", "-25")));
+        ledgers.confirmOpeningBalances(actorId, ledgerId);
+        drainProjection();
+
+        assertBalance(ledgerId, "2024-01", cashLeaf, "-25.00", "0.00", "-25.00", "0.00");
+        assertBalance(ledgerId, "2024-01", capital, "0.00", "-25.00", "0.00", "-25.00");
+        assertBalance(ledgerId, "2024-01", cashParent, "-25.00", "0.00", "-25.00", "0.00");
+        assertBalance(ledgerId, "2024-02", cashLeaf, "-25.00", "0.00", "-25.00", "0.00");
+
+        PeriodRange range = PeriodRange.single("2024-01");
+        ReportResponses.TrialBalanceLine trial = reports.trialBalance(actorId, ledgerId, range, false).stream()
+                .filter(line -> line.accountId().equals(cashLeaf)).findFirst().orElseThrow();
+        assertThat(trial.openingDebit()).isEqualByComparingTo("-25.00");
+        assertThat(trial.openingCredit()).isZero();
+
+        ReportResponses.GeneralLedgerAccount general = reports.generalLedgerBook(
+                        actorId, ledgerId, range, 1, 50).data().stream()
+                .filter(line -> line.accountId().equals(cashLeaf)).findFirst().orElseThrow();
+        assertThat(general.openingDirection()).isEqualTo("DEBIT");
+        assertThat(general.openingBalance()).isEqualByComparingTo("-25.00");
+
+        ReportResponses.SubLedgerPage detail = reports.subLedgerBook(
+                actorId, ledgerId, range, cashLeaf, 1, 50);
+        assertThat(detail.openingDirection()).isEqualTo("DEBIT");
+        assertThat(detail.openingBalance()).isEqualByComparingTo("-25.00");
+    }
+
+    @Test
+    void reportsAnOpeningBalanceOnItsSelectedNonNormalSide() {
+        UUID actorId = UUID.randomUUID();
+        UUID ledgerId = ledgers.create(new CurrentUserResolver.ResolvedUser(
+                        actorId, "non-normal-opening", actorId.toString()),
+                new LedgerRequests.Create("non-normal opening", "SME", "v1", "CNY",
+                        LocalDate.of(2025, 1, 1), false)).id();
+        UUID january = period(ledgerId, "2025-01");
+        UUID cash = account(ledgerId, "1001");
+        UUID capital = account(ledgerId, "3001");
+
+        ledgers.replaceOpeningBalances(actorId, ledgerId, List.of(
+                opening(cash, january, "0", "10"),
+                opening(capital, january, "10", "0")));
+        ledgers.confirmOpeningBalances(actorId, ledgerId);
+        drainProjection();
+
+        PeriodRange range = PeriodRange.single("2025-01");
+        ReportResponses.GeneralLedgerAccount general = reports.generalLedgerBook(
+                        actorId, ledgerId, range, 1, 50).data().stream()
+                .filter(line -> line.accountId().equals(cash)).findFirst().orElseThrow();
+        assertThat(general.normalBalance()).isEqualTo("DEBIT");
+        assertThat(general.openingDirection()).isEqualTo("CREDIT");
+        assertThat(general.openingBalance()).isEqualByComparingTo("10.00");
+
+        ReportResponses.SubLedgerPage detail = reports.subLedgerBook(
+                actorId, ledgerId, range, cash, 1, 50);
+        assertThat(detail.openingDirection()).isEqualTo("CREDIT");
+        assertThat(detail.openingBalance()).isEqualByComparingTo("10.00");
     }
 
     @Test

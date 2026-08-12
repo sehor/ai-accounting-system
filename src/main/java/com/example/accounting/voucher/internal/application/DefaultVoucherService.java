@@ -134,11 +134,6 @@ public class DefaultVoucherService implements VoucherService {
                                            VoucherRequests.Update request) {
         requireRole(actorId, ledgerId, Set.of(LedgerRole.OWNER, LedgerRole.EDITOR));
         VoucherState state = stateWithVersion(ledgerId, voucherId);
-        ensureManual(state);
-        if (!Set.of("DRAFT", "VALIDATED", "SUBMITTED", "APPROVED", "POSTED").contains(state.status())) {
-            throw problem(409, "VOUCHER_STATE_INVALID", "Invalid voucher state",
-                    "Only active vouchers can be updated");
-        }
         VoucherSnapshot before = snapshot(ledgerId, voucherId);
         requireOpenPeriods(ledgerId, before.periodId(), request.periodId());
         LedgerContext context = ledgerContext(ledgerId, request.periodId(), request.voucherDate());
@@ -198,9 +193,9 @@ public class DefaultVoucherService implements VoucherService {
         for (VoucherRequests.Line line : lines) {
             BigDecimal original = amount(line.originalAmount());
             BigDecimal rate = rate(line.exchangeRate());
-            if (original.signum() <= 0 || rate.signum() <= 0) {
+            if (original.signum() == 0 || rate.signum() <= 0) {
                 throw problem(422, "INVALID_VOUCHER_AMOUNT", "Invalid voucher amount",
-                        "Original amount and exchange rate must be positive");
+                        "Original amount must be non-zero and exchange rate must be positive");
             }
             if (line.currency().equals(context.baseCurrency()) && rate.compareTo(BigDecimal.ONE) != 0) {
                 throw problem(422, "INVALID_BASE_CURRENCY_RATE", "Invalid base currency rate",
@@ -503,12 +498,14 @@ public class DefaultVoucherService implements VoucherService {
     public void delete(UUID actorId, UUID ledgerId, UUID voucherId) {
         requireRole(actorId, ledgerId, Set.of(LedgerRole.OWNER, LedgerRole.EDITOR));
         VoucherState state = state(ledgerId, voucherId);
-        ensureManual(state);
-        if (!Set.of("DRAFT", "VALIDATED").contains(state.status())) {
-            throw problem(409, "VOUCHER_STATE_INVALID", "Invalid voucher state",
-                    "Only draft or validated vouchers can be deleted");
+        VoucherSnapshot before = snapshot(ledgerId, voucherId);
+        balanceProjection.requireOpenPeriod(ledgerId, before.periodId());
+        if ("POSTED".equals(state.status())) {
+            balanceProjection.publishVoucher(new BalanceProjectionService.VoucherEvent(
+                    ledgerId, before.periodId(), voucherId, state.version() + 1,
+                    BalanceProjectionService.EventType.UPDATE, balanceEntries(before.lines(), BigDecimal.ONE.negate())));
         }
-        if (!vouchers.deleteVoucher(ledgerId, voucherId)) {
+        if (!vouchers.deleteVoucher(ledgerId, voucherId, state.version())) {
             throw problem(409, "VOUCHER_STATE_INVALID", "Invalid voucher state", "The voucher state has changed");
         }
         LOGGER.info("Voucher deleted: ledgerId={}, voucherId={}, actorId={}", ledgerId, voucherId, actorId);
@@ -528,7 +525,6 @@ public class DefaultVoucherService implements VoucherService {
     public VoucherResponses.Voucher restoreRevision(UUID actorId, UUID ledgerId, UUID voucherId, int revision) {
         requireRole(actorId, ledgerId, Set.of(LedgerRole.OWNER, LedgerRole.EDITOR));
         VoucherState state = state(ledgerId, voucherId);
-        ensureManual(state);
         String targetData = vouchers.findRevisionData(ledgerId, voucherId, revision).orElseThrow(() ->
                 problem(404, "REVISION_NOT_FOUND", "Revision not found",
                         "The requested voucher revision does not exist"));

@@ -56,6 +56,11 @@ export function LedgerListPage() {
         { title: '本位币', dataIndex: 'baseCurrency' },
         { title: '启用审批', dataIndex: 'approvalEnabled', render: (enabled: boolean) => <Tag color={enabled ? 'blue' : 'default'}>{enabled ? '是' : '否'}</Tag> },
         { title: '状态', dataIndex: 'status', render: (status: string) => <Tag color={status === 'ACTIVE' ? 'green' : 'default'}>{status === 'ACTIVE' ? '正常' : status}</Tag> },
+        { title: '数据导入', render: (_: unknown, record: Ledger) => <Space size={4} wrap>
+          <Button type="link" onClick={() => navigate(`/ledgers/${record.id}/settings/openings`)}>导入期初余额</Button>
+          <Button type="link" onClick={() => navigate(`/ledgers/${record.id}/accounts`)}>导入科目表</Button>
+          <Button type="link" onClick={() => navigate(`/ledgers/${record.id}/vouchers`)}>导入金蝶凭证列表</Button>
+        </Space> },
       ]} />
     </Card>
     <Modal title="新建账套" open={open} footer={null} onCancel={() => setOpen(false)} destroyOnHidden>

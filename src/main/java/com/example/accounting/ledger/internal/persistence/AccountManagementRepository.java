@@ -5,6 +5,7 @@ import com.example.accounting.ledger.LedgerRequests;
 import com.example.accounting.ledger.LedgerResponses;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -87,6 +88,19 @@ public class AccountManagementRepository {
                 ACCOUNT_SELECT + " where a.ledger_id = ? order by a.code",
                 (rs, row) -> mapAccount(rs, List.of()), ledgerId);
         return attachDimensions(ledgerId, accounts);
+    }
+
+    public List<LedgerResponses.Account> listCreatedBetween(
+            UUID ledgerId, OffsetDateTime startInclusive, OffsetDateTime endExclusive) {
+        List<LedgerResponses.Account> accounts = jdbc.query(
+                ACCOUNT_SELECT + """
+                         where a.ledger_id = ?
+                           and a.created_at >= ?
+                           and a.created_at < ?
+                         order by a.code
+                        """,
+                (rs, row) -> mapAccount(rs, List.of()), ledgerId, startInclusive, endExclusive);
+        return attachDimensionsForAccounts(ledgerId, accounts);
     }
 
     public List<LedgerResponses.AccountSearchResult> search(
@@ -474,6 +488,13 @@ public class AccountManagementRepository {
             summaries.put(summary.id(), summary);
         }, arguments);
         return summaries;
+    }
+
+    public Map<UUID, String> codesByIds(UUID ledgerId, Set<UUID> accountIds) {
+        Map<UUID, String> codes = new LinkedHashMap<>();
+        summariesByIds(ledgerId, accountIds).values()
+                .forEach(account -> codes.put(account.id(), account.code()));
+        return codes;
     }
 
     private Map<UUID, List<LedgerResponses.AccountSummary>> childrenByParentIds(

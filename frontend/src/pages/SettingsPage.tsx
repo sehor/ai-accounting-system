@@ -1,6 +1,6 @@
 import { App as AntApp, Alert, Button, Card, Form, Input, Select, Space, Table, Tabs, Tag, Typography, Upload, message } from 'antd'
 import type { FormInstance } from 'antd'
-import { UploadOutlined, PlusOutlined } from '@ant-design/icons'
+import { DownloadOutlined, UploadOutlined, PlusOutlined } from '@ant-design/icons'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
@@ -11,7 +11,20 @@ import { decimalOrZero } from '../features/vouchers/money'
 import { LedgerBackupTab } from './LedgerBackupTab'
 
 type OpeningFormLine = { accountId: string; periodId: string; currency: string; dimensionKey?: string; debitOriginal: string; creditOriginal: string; exchangeRate: string }
-const decimalRule = { pattern: /^\d+(?:\.\d+)?$/, message: '请输入有效数字' }
+export const openingBalanceAmountPattern = /^-?\d+(?:\.\d+)?$/
+const decimalRule = { pattern: openingBalanceAmountPattern, message: '请输入有效金额，可使用负数' }
+const exchangeRateRule = { pattern: /^\d+(?:\.\d+)?$/, message: '请输入有效汇率' }
+export const OPENING_BALANCE_CSV_HEADER = 'periodCode,accountCode,currency,dimensionKey,debitOriginal,creditOriginal,exchangeRate'
+
+export function downloadOpeningBalanceCsvTemplate() {
+  const blob = new Blob([`${OPENING_BALANCE_CSV_HEADER}\n`], { type: 'text/csv;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const anchor = document.createElement('a')
+  anchor.href = url
+  anchor.download = 'opening-balances-template.csv'
+  anchor.click()
+  URL.revokeObjectURL(url)
+}
 
 export function SettingsPage() {
   const { ledgerId = '', '*': tab = 'periods' } = useParams(); const { session } = useAuth(); const client = useQueryClient(); const navigate = useNavigate(); const { modal } = AntApp.useApp(); const [messageApi, contextHolder] = message.useMessage()
@@ -61,13 +74,47 @@ export function SettingsPage() {
 
 function PeriodsTab({ periods, onAction }: { periods: Period[]; onAction: (period: Period, operation: 'close' | 'reopen') => void }) { return <Card><Table rowKey="id" dataSource={periods} columns={[{ title: '期间', dataIndex: 'periodCode' }, { title: '起止日期', render: (_: unknown, p: Period) => `${p.startDate} ~ ${p.endDate}` }, { title: '状态', dataIndex: 'status', render: (value: string) => <Tag color={value === 'OPEN' ? 'green' : 'default'}>{value}</Tag> }, { title: '操作', render: (_: unknown, p: Period) => p.status === 'OPEN' ? <Button onClick={() => onAction(p, 'close')}>关账</Button> : <Button onClick={() => onAction(p, 'reopen')}>反结账</Button> }]} /></Card> }
 
-function OpeningsTab({ rows, accounts, periods, onSave, saving, onImport, importing, onConfirm, confirming }: { rows: OpeningBalance[]; accounts: Account[]; periods: Period[]; onSave: (lines: OpeningFormLine[]) => void; saving: boolean; onImport: (file: File) => void; importing: boolean; onConfirm: () => void; confirming: boolean }) {
+export function OpeningsTab({ rows, accounts, periods, onSave, saving, onImport, importing, onConfirm, confirming }: { rows: OpeningBalance[]; accounts: Account[]; periods: Period[]; onSave: (lines: OpeningFormLine[]) => void; saving: boolean; onImport: (file: File) => void; importing: boolean; onConfirm: () => void; confirming: boolean }) {
   const [form] = Form.useForm<{ lines: OpeningFormLine[] }>()
   useEffect(() => { form.setFieldsValue({ lines: rows.map((row) => ({ accountId: row.accountId, periodId: row.periodId, currency: row.currency, dimensionKey: row.dimensionKey, debitOriginal: row.debitOriginal, creditOriginal: row.creditOriginal, exchangeRate: row.exchangeRate })) }) }, [rows, form])
   const watchedLines = Form.useWatch('lines', form) || []
   const totals = watchedLines.reduce((result, line) => ({ debit: result.debit.plus(decimalOrZero(line.debitOriginal).times(decimalOrZero(line.exchangeRate))), credit: result.credit.plus(decimalOrZero(line.creditOriginal).times(decimalOrZero(line.exchangeRate))) }), { debit: decimalOrZero(0), credit: decimalOrZero(0) })
   const confirmed = rows.some((row) => row.confirmed)
-  return <Card extra={<Space><Upload disabled={confirmed} accept=".csv,text/csv" showUploadList={false} beforeUpload={(file) => { if (!file.name.toLowerCase().endsWith('.csv')) { message.error('只支持 CSV 文件'); return Upload.LIST_IGNORE } onImport(file); return false }}><Button icon={<UploadOutlined />} loading={importing} disabled={confirmed}>导入 CSV</Button></Upload><Button onClick={() => form.submit()} loading={saving} disabled={confirmed}>保存</Button><Button type="primary" onClick={onConfirm} loading={confirming} disabled={confirmed}>{confirmed ? '已确认' : '确认期初余额'}</Button></Space>}><Form form={form} disabled={confirmed} onFinish={(value) => onSave(value.lines)}><Form.List name="lines">{(fields, { add, remove }) => <><Table rowKey="key" dataSource={fields} pagination={false} scroll={{ x: 1000 }} columns={[{ title: '科目', render: (_, field) => <Form.Item name={[field.name, 'accountId']} rules={[{ required: true }]}><Select showSearch optionFilterProp="label" options={accounts.map((account) => ({ value: account.id, label: `${account.code} ${account.name}` }))} /></Form.Item> }, { title: '期间', render: (_, field) => <Form.Item name={[field.name, 'periodId']} rules={[{ required: true }]}><Select options={periods.map((period) => ({ value: period.id, label: period.periodCode }))} /></Form.Item> }, { title: '币种', render: (_, field) => <Form.Item name={[field.name, 'currency']} rules={[{ required: true, pattern: /^[A-Z]{3}$/ }]}><Input maxLength={3} /></Form.Item> }, { title: '维度键', render: (_, field) => <Form.Item name={[field.name, 'dimensionKey']}><Input /></Form.Item> }, { title: '借方', render: (_, field) => <Form.Item name={[field.name, 'debitOriginal']} rules={[{ required: true }, decimalRule]}><Input inputMode="decimal" /></Form.Item> }, { title: '贷方', render: (_, field) => <Form.Item name={[field.name, 'creditOriginal']} rules={[{ required: true }, decimalRule]}><Input inputMode="decimal" /></Form.Item> }, { title: '汇率', render: (_, field) => <Form.Item name={[field.name, 'exchangeRate']} rules={[{ required: true }, decimalRule]}><Input inputMode="decimal" /></Form.Item> }, { title: '操作', render: (_, field) => <Button type="link" danger onClick={() => remove(field.name)}>删除</Button> }]} /><Button icon={<PlusOutlined />} onClick={() => add({ currency: 'CNY', debitOriginal: '0', creditOriginal: '0', exchangeRate: '1' })}>添加期初行</Button></> }</Form.List></Form><Typography.Paragraph>借方合计：{totals.debit.toFixed(2)} / 贷方合计：{totals.credit.toFixed(2)}</Typography.Paragraph></Card>
+  return <Card extra={<Space wrap>
+    <Button icon={<DownloadOutlined />} onClick={downloadOpeningBalanceCsvTemplate}>下载 CSV 模板</Button>
+    <Upload disabled={confirmed} accept=".csv,text/csv" showUploadList={false} beforeUpload={(file) => {
+      if (!file.name.toLowerCase().endsWith('.csv')) {
+        message.error('只支持 CSV 文件')
+        return Upload.LIST_IGNORE
+      }
+      onImport(file)
+      return false
+    }}><Button icon={<UploadOutlined />} loading={importing} disabled={confirmed}>导入 CSV</Button></Upload>
+    <Button onClick={() => form.submit()} loading={saving} disabled={confirmed}>保存</Button>
+    <Button type="primary" onClick={onConfirm} loading={confirming} disabled={confirmed}>{confirmed ? '已确认' : '确认期初余额'}</Button>
+  </Space>}>
+    <Alert type="info" showIcon message="期初余额 CSV 格式" description={<Space direction="vertical" size={4}>
+      <Typography.Text>请使用 UTF-8 CSV，首行必须严格使用以下字段，字段中不要包含逗号：</Typography.Text>
+      <Typography.Text code copyable>{OPENING_BALANCE_CSV_HEADER}</Typography.Text>
+      <Typography.Text>借方和贷方金额允许负数；系统按原列保存，不会把负数自动转到另一方向。同一行仍只能一侧为非零值。</Typography.Text>
+    </Space>} />
+    <Form form={form} disabled={confirmed} onFinish={(value) => onSave(value.lines)}>
+      <Form.List name="lines">{(fields, { add, remove }) => <>
+        <Table rowKey="key" dataSource={fields} pagination={false} scroll={{ x: 1000 }} columns={[
+          { title: '科目', render: (_, field) => <Form.Item name={[field.name, 'accountId']} rules={[{ required: true }]}><Select showSearch optionFilterProp="label" options={accounts.map((account) => ({ value: account.id, label: `${account.code} ${account.name}` }))} /></Form.Item> },
+          { title: '期间', render: (_, field) => <Form.Item name={[field.name, 'periodId']} rules={[{ required: true }]}><Select options={periods.map((period) => ({ value: period.id, label: period.periodCode }))} /></Form.Item> },
+          { title: '币种', render: (_, field) => <Form.Item name={[field.name, 'currency']} rules={[{ required: true, pattern: /^[A-Z]{3}$/ }]}><Input maxLength={3} /></Form.Item> },
+          { title: '维度键', render: (_, field) => <Form.Item name={[field.name, 'dimensionKey']}><Input /></Form.Item> },
+          { title: '借方', render: (_, field) => <Form.Item name={[field.name, 'debitOriginal']} rules={[{ required: true }, decimalRule]}><Input aria-label={`第 ${field.name + 1} 行借方金额`} inputMode="decimal" /></Form.Item> },
+          { title: '贷方', render: (_, field) => <Form.Item name={[field.name, 'creditOriginal']} rules={[{ required: true }, decimalRule]}><Input aria-label={`第 ${field.name + 1} 行贷方金额`} inputMode="decimal" /></Form.Item> },
+          { title: '汇率', render: (_, field) => <Form.Item name={[field.name, 'exchangeRate']} rules={[{ required: true }, exchangeRateRule]}><Input aria-label={`第 ${field.name + 1} 行汇率`} inputMode="decimal" /></Form.Item> },
+          { title: '操作', render: (_, field) => <Button type="link" danger onClick={() => remove(field.name)}>删除</Button> },
+        ]} />
+        <Button icon={<PlusOutlined />} onClick={() => add({ currency: 'CNY', debitOriginal: '0', creditOriginal: '0', exchangeRate: '1' })}>添加期初行</Button>
+      </> }</Form.List>
+    </Form>
+    <Typography.Paragraph>借方合计：{totals.debit.toFixed(2)} / 贷方合计：{totals.credit.toFixed(2)}</Typography.Paragraph>
+  </Card>
 }
 
 function DimensionsTab({ ledgerId, session, types, values, selectedTypeId, onSelect, onChanged }: { ledgerId: string; session: NonNullable<ReturnType<typeof useAuth>['session']>; types: DimensionType[]; values: DimensionValue[]; selectedTypeId?: string; onSelect: (id: string) => void; onChanged: () => void }) {

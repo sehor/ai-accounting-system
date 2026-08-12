@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { apiFetch, apiFetchWithHeaders } from '../api/client'
-import { VoucherEditorPage, VoucherListPage } from './VoucherPages'
+import { voucherAmountPattern, VoucherEditorPage, VoucherListPage } from './VoucherPages'
 
 vi.mock('../api/client', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../api/client')>()
@@ -266,17 +266,73 @@ describe('VoucherEditorPage', () => {
       </QueryClientProvider>,
     )
 
-    expect(await screen.findByRole('heading', { name: '新建凭证' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: '记账凭证' })).toBeInTheDocument()
     expect(screen.queryByLabelText('凭证号')).not.toBeInTheDocument()
   })
 
-  it('allows editing a posted voucher while its period is open', async () => {
+  it('groups debit and credit amounts into adjacent voucher columns', async () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <App>
+          <MemoryRouter initialEntries={['/ledgers/ledger-1/vouchers/new']}>
+            <Routes>
+              <Route path="/ledgers/:ledgerId/vouchers/:voucherId" element={<VoucherEditorPage />} />
+            </Routes>
+          </MemoryRouter>
+        </App>
+      </QueryClientProvider>,
+    )
+
+    expect(await screen.findByRole('columnheader', { name: '借方金额' })).toBeInTheDocument()
+    expect(screen.getByRole('columnheader', { name: '贷方金额' })).toBeInTheDocument()
+    expect(screen.queryByRole('columnheader', { name: '方向' })).not.toBeInTheDocument()
+    const debitInput = screen.getByRole('textbox', { name: '第 1 条分录借方金额' })
+    const creditInput = screen.getByRole('textbox', { name: '第 1 条分录贷方金额' })
+    expect(debitInput).toHaveValue('')
+    expect(creditInput).toHaveValue('')
+
+    fireEvent.change(debitInput, { target: { value: '10' } })
+    expect(debitInput).toHaveValue('10')
+    expect(creditInput).toHaveValue('')
+
+    fireEvent.change(creditInput, { target: { value: '20' } })
+    expect(debitInput).toHaveValue('')
+    expect(creditInput).toHaveValue('20')
+  })
+
+  it('keeps a negative amount on its selected side', async () => {
+    expect(voucherAmountPattern.test('-25.50')).toBe(true)
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <App>
+          <MemoryRouter initialEntries={['/ledgers/ledger-1/vouchers/new']}>
+            <Routes>
+              <Route path="/ledgers/:ledgerId/vouchers/:voucherId" element={<VoucherEditorPage />} />
+            </Routes>
+          </MemoryRouter>
+        </App>
+      </QueryClientProvider>,
+    )
+
+    const debitInput = await screen.findByRole('textbox', { name: '第 1 条分录借方金额' })
+    fireEvent.change(debitInput, { target: { value: '-25.50' } })
+
+    expect(debitInput).toHaveValue('-25.50')
+    expect(screen.getByText('-25.50')).toBeInTheDocument()
+    expect(screen.getByRole('textbox', { name: '第 1 条分录贷方金额' })).toHaveValue('')
+  })
+
+  it('allows editing a posted generated voucher while its period is open', async () => {
     vi.mocked(apiFetch).mockImplementation((path) => Promise.resolve(path.endsWith('/periods') ? [{
       id: 'period-1', ledgerId: 'ledger-1', periodCode: '2026-06', startDate: '2026-06-01', endDate: '2026-06-30', status: 'OPEN',
     }] : path.endsWith('/voucher-1') ? {
       id: 'voucher-1', ledgerId: 'ledger-1', periodId: 'period-1', voucherDate: '2026-06-25',
       voucherType: '记', voucherNumber: '6', summary: '收货款', status: 'POSTED',
-      approvalRequired: false, version: 2, lines: [],
+      approvalRequired: false, version: 2, lines: [], sourceType: 'FIXED_ASSET', sourceId: 'asset-1',
     } : []))
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
 
@@ -292,8 +348,9 @@ describe('VoucherEditorPage', () => {
       </QueryClientProvider>,
     )
 
-    expect(await screen.findByText('版本 2 · POSTED')).toBeInTheDocument()
+    expect(await screen.findByText('POSTED')).toBeInTheDocument()
     expect(await screen.findByRole('button', { name: '保存修改' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '删除凭证' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '校验' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '记账' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '反记账' })).not.toBeInTheDocument()
@@ -322,7 +379,8 @@ describe('VoucherEditorPage', () => {
       </QueryClientProvider>,
     )
 
-    expect(await screen.findByText('期间已结账，请先反结账后修改')).toBeInTheDocument()
+    expect(await screen.findByText('期间已结账，不能修改或删除凭证')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '保存修改' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '删除凭证' })).not.toBeInTheDocument()
   })
 })

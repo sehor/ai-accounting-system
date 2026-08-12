@@ -3,7 +3,7 @@ import { DownloadOutlined, PlusOutlined, UploadOutlined } from '@ant-design/icon
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { useEffect, useMemo, useState } from 'react'
 import { apiFetch, ApiError, jsonBody, type ApiAuth } from '../api/client'
-import type { Account, AccountImportPreview, CashFlowItem, DimensionType } from '../api/types'
+import type { Account, AccountImportPreview, CashFlowItem, DimensionType, Period } from '../api/types'
 
 type AccountTree = Account & { children?: AccountTree[] }
 export type AccountCategoryTab = 'ASSET' | 'LIABILITY' | 'EQUITY' | 'COST' | 'PROFIT_LOSS'
@@ -20,11 +20,12 @@ type AccountForm = {
   requiredDimensionTypeIds?: string[]
 }
 
-export function AccountsTab({ ledgerId, session, accounts, dimensionTypes, loading, writable, onChanged, category }: {
+export function AccountsTab({ ledgerId, session, accounts, dimensionTypes, periods, loading, writable, onChanged, category }: {
   ledgerId: string
   session: ApiAuth
   accounts: Account[]
   dimensionTypes: DimensionType[]
+  periods: Period[]
   loading: boolean
   writable: boolean
   onChanged: () => void
@@ -38,6 +39,7 @@ export function AccountsTab({ ledgerId, session, accounts, dimensionTypes, loadi
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState<string>()
   const [format, setFormat] = useState<'STANDARD' | 'KINGDEE'>('STANDARD')
+  const [createdInPeriodId, setCreatedInPeriodId] = useState<string>()
   const [preview, setPreview] = useState<AccountImportPreview | null>(null)
   const [expandedRowKeys, setExpandedRowKeys] = useState<string[]>([])
   useEffect(() => {
@@ -168,7 +170,13 @@ export function AccountsTab({ ledgerId, session, accounts, dimensionTypes, loadi
 
   const download = async (kind: 'account-import-template' | 'account-export') => {
     try {
-      const blob = await apiFetch<Blob>(`/ledgers/${ledgerId}/${kind}?format=${format}`, session)
+      const periodFilter = kind === 'account-export' && createdInPeriodId
+        ? `&createdInPeriodId=${encodeURIComponent(createdInPeriodId)}`
+        : ''
+      const blob = await apiFetch<Blob>(
+        `/ledgers/${ledgerId}/${kind}?format=${format}${periodFilter}`,
+        session,
+      )
       const url = URL.createObjectURL(blob)
       const anchor = document.createElement('a')
       anchor.href = url
@@ -189,6 +197,13 @@ export function AccountsTab({ ledgerId, session, accounts, dimensionTypes, loadi
         {writable && <Button type="primary" icon={<PlusOutlined />} onClick={() => openCreate(null)}>新增一级科目</Button>}
         <Select value={format} onChange={setFormat} style={{ width: 120 }}
           options={[{ value: 'STANDARD', label: '标准格式' }, { value: 'KINGDEE', label: '金蝶格式' }]} />
+        <span>创建期间</span>
+        <Select allowClear aria-label="创建期间" placeholder="全部期间" value={createdInPeriodId}
+          onChange={setCreatedInPeriodId} style={{ width: 230 }}
+          options={periods.map((period) => ({
+            value: period.id,
+            label: `${period.periodCode}（${period.startDate} ~ ${period.endDate}）`,
+          }))} />
         <Button icon={<DownloadOutlined />} onClick={() => void download('account-import-template')}>下载模板</Button>
         <Button icon={<DownloadOutlined />} onClick={() => void download('account-export')}>导出</Button>
         {writable && <Upload accept={format === 'KINGDEE' ? '.xls,.xlsx' : '.xlsx'} showUploadList={false} beforeUpload={(file) => {

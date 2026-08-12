@@ -83,7 +83,7 @@ public interface VoucherRepository {
 
     void recordApproval(UUID ledgerId, UUID voucherId, String action, String comment, UUID actorId);
 
-    boolean deleteVoucher(UUID ledgerId, UUID voucherId);
+    boolean deleteVoucher(UUID ledgerId, UUID voucherId, long expectedVersion);
 
     List<VoucherResponses.Revision> listRevisions(UUID ledgerId, UUID voucherId);
 

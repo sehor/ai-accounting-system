@@ -47,8 +47,9 @@ public class AccountExchangeController {
     @GetMapping("/account-export")
     public ResponseEntity<byte[]> export(
             HttpServletRequest request, @PathVariable UUID ledgerId,
-            @RequestParam AccountExchangeService.Format format) {
-        return download(exchange.export(user(request), ledgerId, format),
+            @RequestParam AccountExchangeService.Format format,
+            @RequestParam(required = false) UUID createdInPeriodId) {
+        return download(exchange.export(user(request), ledgerId, format, createdInPeriodId),
                 "accounts-" + format.name().toLowerCase() + ".xlsx");
     }
 

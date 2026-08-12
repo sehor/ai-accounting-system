@@ -426,9 +426,8 @@ public class KingdeeExchange {
         if (hasDebit == hasCredit) {
             throw nativeRowProblem(rowNumber, "借方金额/贷方金额", "exactly one amount must be non-zero");
         }
-        BigDecimal signed = hasDebit ? debit : credit;
-        String side = hasDebit == (signed.signum() > 0) ? "DEBIT" : "CREDIT";
-        BigDecimal amount = signed.abs();
+        BigDecimal amount = hasDebit ? debit : credit;
+        String side = hasDebit ? "DEBIT" : "CREDIT";
         String account = nativeText(row, 3, rowNumber);
         String code = account.split("\\s+", 2)[0];
         if (account.isBlank() || !code.matches("\\d+")) {
@@ -481,18 +480,17 @@ public class KingdeeExchange {
         }
         BigDecimal debit = decimal(row, 8, false, rowNumber);
         BigDecimal credit = decimal(row, 9, false, rowNumber);
-        if ((positive(debit) ? 1 : 0) + (positive(credit) ? 1 : 0) != 1
-                || negative(debit) || negative(credit)) {
-            throw rowProblem(rowNumber, "借方金额/贷方金额", "exactly one amount must be positive");
+        if ((nonZero(debit) ? 1 : 0) + (nonZero(credit) ? 1 : 0) != 1) {
+            throw rowProblem(rowNumber, "借方金额/贷方金额", "exactly one amount must be non-zero");
         }
-        String side = positive(debit) ? "DEBIT" : "CREDIT";
-        BigDecimal baseAmount = positive(debit) ? debit : credit;
+        String side = nonZero(debit) ? "DEBIT" : "CREDIT";
+        BigDecimal baseAmount = nonZero(debit) ? debit : credit;
         BigDecimal rate = decimal(row, 23, false, rowNumber);
         rate = rate == null ? BigDecimal.ONE : rate;
         BigDecimal original = decimal(row, 21, false, rowNumber);
         original = original == null
                 ? baseAmount.divide(rate, 4, RoundingMode.HALF_UP) : original;
-        if (!positive(original) || !positive(rate)
+        if (!nonZero(original) || !positive(rate)
                 || original.multiply(rate).setScale(2, RoundingMode.HALF_UP)
                 .compareTo(baseAmount.setScale(2, RoundingMode.HALF_UP)) != 0) {
             throw rowProblem(rowNumber, "原币金额/汇率", "does not match the debit or credit amount");
@@ -659,8 +657,8 @@ public class KingdeeExchange {
         return value != null && value.signum() > 0;
     }
 
-    private boolean negative(BigDecimal value) {
-        return value != null && value.signum() < 0;
+    private boolean nonZero(BigDecimal value) {
+        return value != null && value.signum() != 0;
     }
 
     private ApiProblemException unsupported(int row, String field) {

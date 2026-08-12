@@ -40,7 +40,7 @@ class DataExchangeServiceTest {
     private final KingdeeExchange service = new KingdeeExchange(ledgers, vouchers);
 
     @Test
-    void importsANativeKingdeeVoucherListAndNormalizesNegativeAmounts() throws Exception {
+    void importsANativeKingdeeVoucherListWithoutChangingNegativeAmountSides() throws Exception {
         UUID actorId = UUID.randomUUID();
         UUID ledgerId = UUID.randomUUID();
         UUID periodId = UUID.randomUUID();
@@ -83,9 +83,9 @@ class DataExchangeServiceTest {
         assertThat(request.getValue().voucherType()).isEqualTo("记");
         assertThat(request.getValue().voucherNumber()).isEqualTo("9");
         assertThat(request.getValue().lines()).extracting(VoucherRequests.Line::side)
-                .containsExactly("DEBIT", "CREDIT", "DEBIT");
+                .containsExactly("DEBIT", "CREDIT", "CREDIT");
         assertThat(request.getValue().lines()).extracting(VoucherRequests.Line::originalAmount)
-                .containsExactly(new BigDecimal("100"), new BigDecimal("150"), new BigDecimal("50"));
+                .containsExactly(new BigDecimal("100"), new BigDecimal("150"), new BigDecimal("-50"));
     }
 
     @Test

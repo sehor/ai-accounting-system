@@ -430,15 +430,41 @@ public class JdbcVoucherRepository implements VoucherRepository {
     }
 
     @Override
-    public boolean deleteVoucher(UUID ledgerId, UUID voucherId) {
-        jdbcTemplate.update("delete from voucher_idempotency where ledger_id = ? and voucher_id = ?",
+    public boolean deleteVoucher(UUID ledgerId, UUID voucherId, long expectedVersion) {
+        jdbcTemplate.update("""
+                update fixed_asset set acquisition_voucher_id = null
+                where ledger_id = ? and acquisition_voucher_id = ?
+                """, ledgerId, voucherId);
+        jdbcTemplate.update("""
+                update fixed_asset_depreciation_line set voucher_line_id = null
+                where ledger_id = ? and voucher_line_id in (
+                    select id from voucher_line where ledger_id = ? and voucher_id = ?)
+                """, ledgerId, ledgerId, voucherId);
+        jdbcTemplate.update("""
+                delete from fixed_asset_disposal
+                where ledger_id = ? and (depreciation_voucher_id = ? or transfer_voucher_id = ?
+                    or settlement_voucher_id = ?)
+                """, ledgerId, voucherId, voucherId, voucherId);
+        jdbcTemplate.update("""
+                update fixed_asset_depreciation_run set superseded_by = null
+                where superseded_by in (
+                    select id from fixed_asset_depreciation_run where ledger_id = ? and voucher_id = ?)
+                """, ledgerId, voucherId);
+        jdbcTemplate.update("""
+                delete from fixed_asset_depreciation_line
+                where run_id in (
+                    select id from fixed_asset_depreciation_run where ledger_id = ? and voucher_id = ?)
+                """, ledgerId, voucherId);
+        jdbcTemplate.update("delete from fixed_asset_depreciation_run where ledger_id = ? and voucher_id = ?",
                 ledgerId, voucherId);
-        jdbcTemplate.update("delete from voucher_approval where ledger_id = ? and voucher_id = ?",
-                ledgerId, voucherId);
-        jdbcTemplate.update("delete from voucher_line where ledger_id = ? and voucher_id = ?",
-                ledgerId, voucherId);
-        return jdbcTemplate.update("delete from voucher where ledger_id = ? and id = ?",
-                ledgerId, voucherId) == 1;
+        jdbcTemplate.update("""
+                delete from audit_revision
+                where ledger_id = ? and aggregate_type = 'VOUCHER' and aggregate_id = ?
+                """, ledgerId, voucherId);
+        return jdbcTemplate.update("""
+                delete from voucher
+                where ledger_id = ? and id = ? and deleted_at is null and version = ?
+                """, ledgerId, voucherId, expectedVersion) == 1;
     }
 
     @Override

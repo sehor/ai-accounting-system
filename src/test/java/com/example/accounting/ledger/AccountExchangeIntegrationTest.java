@@ -8,6 +8,8 @@ import com.example.accounting.shared.web.ApiProblemException;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.time.LocalDate;
+import java.time.ZoneId;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import org.apache.poi.ss.usermodel.WorkbookFactory;
@@ -15,6 +17,7 @@ import org.apache.poi.hssf.usermodel.HSSFWorkbook;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.jdbc.core.JdbcTemplate;
 
 @SpringBootTest
 class AccountExchangeIntegrationTest {
@@ -24,6 +27,9 @@ class AccountExchangeIntegrationTest {
 
     @Autowired
     private AccountExchangeService exchange;
+
+    @Autowired
+    private JdbcTemplate jdbc;
 
     @Test
     void previewsAndCommitsANativeKingdeeAccountList() throws Exception {
@@ -104,6 +110,67 @@ class AccountExchangeIntegrationTest {
         AccountExchangeService.Preview committed = exchange.commit(owner, ledgerId, preview.id());
         assertThat(committed.status()).isEqualTo("COMMITTED");
         assertThat(ledgers.listAccounts(owner, ledgerId)).hasSize(15);
+    }
+
+    @Test
+    void exportsOnlyAccountsCreatedInsideTheSelectedPeriod() throws Exception {
+        UUID owner = UUID.randomUUID();
+        UUID ledgerId = ledgers.create(user(owner), new LedgerRequests.Create(
+                "period-account-export", "SME", "2011-17", "CNY",
+                LocalDate.of(2026, 1, 1), false)).id();
+        LedgerResponses.Period period = ledgers.listPeriods(owner, ledgerId).stream()
+                .filter(candidate -> candidate.periodCode().equals("2026-03"))
+                .findFirst().orElseThrow();
+        ZoneId accountingZone = ZoneId.of("Asia/Shanghai");
+        var startInclusive = period.startDate().atStartOfDay(accountingZone).toOffsetDateTime();
+        var endExclusive = period.endDate().plusDays(1).atStartOfDay(accountingZone).toOffsetDateTime();
+
+        jdbc.update("update ledger_account set created_at = ? where ledger_id = ?",
+                startInclusive.minusDays(1), ledgerId);
+        LedgerResponses.Account parent = ledgers.createAccount(owner, ledgerId,
+                new LedgerRequests.AccountCreate("1998", "期间外父科目", "ASSET", "DEBIT"));
+        jdbc.update("update ledger_account set created_at = ? where ledger_id = ? and id = ?",
+                startInclusive.minusDays(1), ledgerId, parent.id());
+        ledgers.createAccount(owner, ledgerId,
+                new LedgerRequests.AccountCreate(
+                        "199801", "期间内子科目", "ASSET", "DEBIT", parent.id(),
+                        false, null, false, null, List.of()));
+        ledgers.createAccount(owner, ledgerId,
+                new LedgerRequests.AccountCreate("1997", "期间外科目", "ASSET", "DEBIT"));
+        jdbc.update("update ledger_account set created_at = ? where ledger_id = ? and code = ?",
+                startInclusive, ledgerId, "199801");
+        jdbc.update("update ledger_account set created_at = ? where ledger_id = ? and code = ?",
+                endExclusive, ledgerId, "1997");
+
+        byte[] exported = exchange.export(
+                owner, ledgerId, AccountExchangeService.Format.STANDARD, period.id());
+        try (var workbook = WorkbookFactory.create(new ByteArrayInputStream(exported))) {
+            var sheet = workbook.getSheet("Accounts");
+            List<String> codes = new ArrayList<>();
+            for (int rowNumber = 1; rowNumber <= sheet.getLastRowNum(); rowNumber++) {
+                codes.add(sheet.getRow(rowNumber).getCell(0).getStringCellValue());
+            }
+            assertThat(codes).containsExactly("199801");
+            assertThat(sheet.getRow(1).getCell(2).getStringCellValue()).isEqualTo("1998");
+        }
+
+        byte[] kingdeeExported = exchange.export(
+                owner, ledgerId, AccountExchangeService.Format.KINGDEE, period.id());
+        try (var workbook = WorkbookFactory.create(new ByteArrayInputStream(kingdeeExported))) {
+            var sheet = workbook.getSheetAt(0);
+            assertThat(sheet.getLastRowNum()).isEqualTo(1);
+            assertThat(sheet.getRow(1).getCell(0).getStringCellValue()).isEqualTo("199801");
+            assertThat(sheet.getRow(1).getCell(2).getStringCellValue()).isEqualTo("1998");
+        }
+
+        UUID otherLedgerId = ledgers.create(user(owner), new LedgerRequests.Create(
+                "other-period-account-export", "SME", "2011-17", "CNY",
+                LocalDate.of(2026, 1, 1), false)).id();
+        UUID otherPeriodId = ledgers.listPeriods(owner, otherLedgerId).getFirst().id();
+        assertThatThrownBy(() -> exchange.export(
+                owner, ledgerId, AccountExchangeService.Format.STANDARD, otherPeriodId))
+                .isInstanceOfSatisfying(ApiProblemException.class,
+                        exception -> assertThat(exception.code()).isEqualTo("PERIOD_NOT_FOUND"));
     }
 
     @Test

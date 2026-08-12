@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect } from 'react'
 import { useParams } from 'react-router-dom'
 import { apiFetch } from '../api/client'
-import type { Account, DimensionType, LedgerRole } from '../api/types'
+import type { Account, DimensionType, LedgerRole, Period } from '../api/types'
 import { useAuth } from '../auth/AuthProvider'
 import { useWorkspaceSearchParams } from '../components/workspaceSearch'
 import { AccountsTab, type AccountCategoryTab } from './AccountsTab'
@@ -42,6 +42,11 @@ export function AccountsPage() {
     queryFn: () => apiFetch<DimensionType[]>(`/ledgers/${ledgerId}/dimension-types`, session!),
     enabled: Boolean(session && ledgerId),
   })
+  const periods = useQuery({
+    queryKey: ['periods', ledgerId],
+    queryFn: () => apiFetch<Period[]>(`/ledgers/${ledgerId}/periods`, session!),
+    enabled: Boolean(session && ledgerId),
+  })
   const ledgerRole = useQuery({
     queryKey: ['ledger-role', ledgerId],
     queryFn: () => apiFetch<{ role: LedgerRole }>(`/ledgers/${ledgerId}/role`, session!),
@@ -59,7 +64,7 @@ export function AccountsPage() {
     <Tabs className="account-category-tabs" activeKey={category} onChange={changeCategory}
       items={categories.map((item) => ({ key: item.key, label: item.label }))} />
     <AccountsTab key={`${ledgerId}:${category}`} ledgerId={ledgerId} session={session!}
-      accounts={accounts.data || []} dimensionTypes={dimensionTypes.data || []}
+      accounts={accounts.data || []} dimensionTypes={dimensionTypes.data || []} periods={periods.data || []}
       loading={accounts.isLoading} writable={['OWNER', 'EDITOR'].includes(ledgerRole.data?.role || '')}
       category={category} onChanged={() => void client.invalidateQueries({ queryKey: ['accounts', ledgerId] })} />
   </section>

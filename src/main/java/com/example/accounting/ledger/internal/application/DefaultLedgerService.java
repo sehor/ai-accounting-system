@@ -475,10 +475,8 @@ public class DefaultLedgerService implements LedgerService {
                             new BalanceProjectionService.OpeningBalanceEvent(
                                     ledgerId, balance.periodId(), balance.id(), 1,
                                     List.of(new BalanceProjectionService.Entry(balance.accountId(),
-                                            balance.debitBase().max(BigDecimal.ZERO)
-                                                    .add(balance.creditBase().negate().max(BigDecimal.ZERO)),
-                                            balance.creditBase().max(BigDecimal.ZERO)
-                                                    .add(balance.debitBase().negate().max(BigDecimal.ZERO)),
+                                            balance.debitBase(),
+                                            balance.creditBase(),
                                             BigDecimal.ZERO,
                                             BigDecimal.ZERO)))));
         }

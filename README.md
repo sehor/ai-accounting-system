@@ -81,6 +81,8 @@ codex mcp add accounting --url http://127.0.0.1:8080/mcp --bearer-token-env-var 
 
 MCP 使用 `POST /mcp`。本地联调启用上述开关后，`X-User-Id` 同时建立 MCP 认证身份；Agent 可使用除账套创建、成员管理和审计日志查询外的 REST 能力，包括账套设置、科目、期间、期初、维度、凭证、附件、导入导出、备份恢复和报表查询。文件导出工具返回 `fileName`、`contentType`、`base64Content` 和 `byteLength`。
 
+MCP 的 `update_voucher` 和 `delete_voucher` 与 REST 使用相同规则：仅 `CLOSED` 会计期间禁止操作；开放期间内，手工、自动生成和导入凭证均可修改或删除。已记账凭证的修改、删除会在同一事务中同步余额投影。
+
 固定资产 Excel 可通过 `import_fixed_assets(ledgerId, fileName, base64Content)` 导入；文件格式、大小限制、类别编码和行校验规则与 REST 固定资产导入接口一致，存在任意行错误时整批不提交。
 
 你提供的 `postgresql+asyncpg://...` 是 Python 异步客户端格式；本项目 Spring JDBC 对应使用 `DB_URL=jdbc:postgresql://localhost:5432/ai-accounting`。

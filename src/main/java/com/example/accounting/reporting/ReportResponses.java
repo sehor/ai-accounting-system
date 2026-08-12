@@ -21,8 +21,7 @@ public final class ReportResponses {
                                 BigDecimal debit, BigDecimal credit, BigDecimal balance) {
             this(accountId, code, name, category,
                     BigDecimal.ZERO, BigDecimal.ZERO, debit, credit,
-                    balance.signum() >= 0 ? balance : BigDecimal.ZERO,
-                    balance.signum() < 0 ? balance.negate() : BigDecimal.ZERO,
+                    balance, BigDecimal.ZERO,
                     debit, credit, balance);
         }
     }

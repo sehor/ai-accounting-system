@@ -104,6 +104,15 @@ public class FinanceMcpTools {
         return audited(actorId, "list_ledgers", null, "", () -> ledgerService.list(actorId));
     }
 
+    @McpTool(name = "create_ledger", description = "Create and initialize a ledger")
+    @PreAuthorize("isAuthenticated()")
+    public LedgerResponses.Ledger createLedger(
+            @McpToolParam(description = "Ledger creation payload") LedgerRequests.Create request) {
+        CurrentUserResolver.ResolvedUser actor = currentUserResolver.resolveAuthenticatedUserDetails();
+        return audited(actor.id(), "create_ledger", null, String.valueOf(request),
+                () -> ledgerService.create(actor, request));
+    }
+
     @McpTool(name = "get_operator_context", description = "List MCP tools by category")
     @PreAuthorize("isAuthenticated()")
     public AgentContextResponses.OperatorContext getOperatorContext() {
@@ -677,7 +686,7 @@ public class FinanceMcpTools {
                 });
     }
 
-    @McpTool(name = "export_report_range", description = "Export a finance report for an accounting-period range")
+    @McpTool(name = "export_report_range", description = "Export report for an accounting period range")
     @PreAuthorize("isAuthenticated()")
     public ExportedFile exportReportRange(
             @McpToolParam UUID ledgerId,
@@ -770,7 +779,7 @@ public class FinanceMcpTools {
                 () -> voucherService.create(actorId, ledgerId, request, key));
     }
 
-    @McpTool(name = "update_voucher", description = "Update voucher draft")
+    @McpTool(name = "update_voucher", description = "Update a voucher in an open accounting period")
     @PreAuthorize("isAuthenticated()")
     public VoucherResponses.Voucher updateVoucher(
             @McpToolParam UUID ledgerId,
@@ -833,7 +842,7 @@ public class FinanceMcpTools {
                 () -> voucherService.post(actorId, ledgerId, voucherId));
     }
 
-    @McpTool(name = "delete_voucher", description = "Delete a voucher")
+    @McpTool(name = "delete_voucher", description = "Delete a voucher in an open accounting period")
     @PreAuthorize("isAuthenticated()")
     public boolean deleteVoucher(
             @McpToolParam UUID ledgerId,

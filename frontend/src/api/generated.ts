@@ -4305,6 +4305,7 @@ export interface operations {
     export: {
         parameters: {
             query: {
+                createdInPeriodId?: string;
                 format: "STANDARD" | "KINGDEE";
             };
             header?: never;

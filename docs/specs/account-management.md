@@ -84,11 +84,13 @@ OWNER/EDITOR 可写，REVIEWER/VIEWER 只读；AGENT 仅能调用受审计的兼
 
 - `GET /v1/ledgers/{ledgerId}/cash-flow-items`
 - `GET /v1/ledgers/{ledgerId}/account-import-template?format=STANDARD|KINGDEE`
-- `GET /v1/ledgers/{ledgerId}/account-export?format=STANDARD|KINGDEE`
+- `GET /v1/ledgers/{ledgerId}/account-export?format=STANDARD|KINGDEE&createdInPeriodId={periodId}`
 - `POST /v1/ledgers/{ledgerId}/account-imports`
 - `GET /v1/ledgers/{ledgerId}/account-imports/{importId}`
 - `PUT /v1/ledgers/{ledgerId}/account-imports/{importId}/rows/{rowNo}`
 - `POST /v1/ledgers/{ledgerId}/account-imports/{importId}:commit`
+
+`createdInPeriodId` 为可选参数；未提供时导出全部科目，提供时仅导出该账套指定期间内新创建的科目。创建时间按 `Asia/Shanghai` 时区解释，范围为期间开始日 `00:00`（包含）至期间结束日次日 `00:00`（不包含）。不存在或不属于当前账套的期间返回 `PERIOD_NOT_FOUND`。
 
 ## 7. Excel 合同
 

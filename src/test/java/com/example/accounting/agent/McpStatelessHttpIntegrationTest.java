@@ -123,6 +123,30 @@ class McpStatelessHttpIntegrationTest {
     }
 
     @Test
+    void ledgerCreationSchemaExposesTheCreationRecord() throws Exception {
+        HttpResponse<String> tools = post("""
+                {"jsonrpc":"2.0","id":9,"method":"tools/list","params":{}}
+                """);
+        JsonNode createLedger = objectMapper.readTree(tools.body()).path("result").path("tools").valueStream()
+                .filter(tool -> "create_ledger".equals(tool.path("name").asText()))
+                .findFirst().orElseThrow();
+        JsonNode requestSchema = createLedger.path("inputSchema").path("properties").path("request");
+
+        assertThat(createLedger.path("inputSchema").path("required"))
+                .extracting(JsonNode::asText).containsExactly("request");
+        assertThat(requestSchema.path("required")).extracting(JsonNode::asText)
+                .containsExactlyInAnyOrder("name", "description", "accountingStandardCode",
+                        "accountingStandardVersion", "baseCurrency", "startDate", "approvalEnabled",
+                        "accountCodeRule");
+        assertThat(requestSchema.path("properties").path("startDate").path("format").asText())
+                .isEqualTo("date");
+        JsonNode codeRuleProperties = requestSchema.path("properties").path("accountCodeRule").path("properties");
+        assertThat(codeRuleProperties.has("level2Width")).isTrue();
+        assertThat(codeRuleProperties.has("level3Width")).isTrue();
+        assertThat(codeRuleProperties.has("level4Width")).isTrue();
+    }
+
+    @Test
     void voucherListingSchemaSupportsKeywordAndDateRangeFilters() throws Exception {
         HttpResponse<String> tools = post("""
                 {"jsonrpc":"2.0","id":8,"method":"tools/list","params":{}}

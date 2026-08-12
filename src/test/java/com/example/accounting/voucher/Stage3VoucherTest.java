@@ -127,16 +127,17 @@ class Stage3VoucherTest {
     }
 
     @Test
-    void updatesAPostedVoucherDirectlyInAnOpenPeriod() {
+    void updatesAGeneratedPostedVoucherDirectlyInAnOpenPeriod() {
         UUID userId = UUID.randomUUID();
         UUID ledgerId = ledgerService.create(
                 new CurrentUserResolver.ResolvedUser(userId, "test", userId.toString()),
-                new LedgerRequests.Create("reverse", "SME", "v1", "CNY", LocalDate.of(2026, 1, 1), false)).id();
+                new LedgerRequests.Create("posted-update", "SME", "v1", "CNY", LocalDate.of(2026, 1, 1), false)).id();
         UUID periodId = periodId(ledgerId, "2026-01");
-        VoucherResponses.Voucher voucher = voucherService.create(userId, ledgerId, new VoucherRequests.Create(
-                periodId, LocalDate.of(2026, 1, 15), "记", "1", "Reverse",
+        VoucherResponses.Voucher voucher = voucherService.createGenerated(userId, ledgerId, new VoucherRequests.Create(
+                periodId, LocalDate.of(2026, 1, 15), "记", "1", "Before",
                 List.of(line(accountId(ledgerId, "1001"), "DEBIT", "100"),
-                        line(accountId(ledgerId, "3001"), "CREDIT", "100"))));
+                        line(accountId(ledgerId, "3001"), "CREDIT", "100"))),
+                "generated-voucher", "FIXED_ASSET", UUID.randomUUID());
         VoucherResponses.Voucher updated = voucherService.update(userId, ledgerId, voucher.id(),
                 new VoucherRequests.Update(voucher.version(), periodId, voucher.voucherDate(), voucher.voucherType(),
                         voucher.voucherNumber(), "After", List.of(
@@ -154,19 +155,97 @@ class Stage3VoucherTest {
     }
 
     @Test
-    void softDeletesRestoresAndListsVoucherRevisions() {
+    void hardDeletesAGeneratedPostedVoucherAndRemovesItsProjectedBalance() {
         UUID userId = UUID.randomUUID();
         UUID ledgerId = ledgerService.create(
                 new CurrentUserResolver.ResolvedUser(userId, "test", userId.toString()),
                 new LedgerRequests.Create("delete", "SME", "v1", "CNY", LocalDate.of(2026, 1, 1), false)).id();
-        VoucherResponses.Voucher voucher = voucherService.create(userId, ledgerId,
+        VoucherResponses.Voucher voucher = voucherService.createGenerated(userId, ledgerId,
                 new VoucherRequests.Create(periodId(ledgerId, "2026-01"), LocalDate.of(2026, 1, 15),
                         "记", "1", "Delete", List.of(line(accountId(ledgerId, "1001"), "DEBIT", "1"),
-                        line(accountId(ledgerId, "3001"), "CREDIT", "1"))));
+                        line(accountId(ledgerId, "3001"), "CREDIT", "1"))),
+                "generated-delete", "FIXED_ASSET", UUID.randomUUID());
+        UUID runId = UUID.randomUUID();
+        jdbcTemplate.update("""
+                insert into fixed_asset_depreciation_run (id, ledger_id, period_id, run_type, status,
+                    voucher_id, input_fingerprint, total_amount, created_by)
+                values (?, ?, ?, 'MONTH_END', 'POSTED', ?, 'test', 1, ?)
+                """, runId, ledgerId, voucher.periodId(), voucher.id(), userId);
 
+        voucherService.delete(userId, ledgerId, voucher.id());
+
+        assertThatThrownBy(() -> voucherService.find(userId, ledgerId, voucher.id()))
+                .isInstanceOf(ApiProblemException.class)
+                .extracting(exception -> ((ApiProblemException) exception).code())
+                .isEqualTo("VOUCHER_NOT_FOUND");
+        assertThat(jdbcTemplate.queryForObject("select count(*) from voucher where ledger_id = ? and id = ?",
+                Long.class, ledgerId, voucher.id())).isZero();
+        assertThat(jdbcTemplate.queryForObject("select count(*) from fixed_asset_depreciation_run where id = ?",
+                Long.class, runId)).isZero();
+        assertThat(jdbcTemplate.queryForObject("""
+                select count(*) from audit_revision
+                where ledger_id = ? and aggregate_type = 'VOUCHER' and aggregate_id = ?
+                """, Long.class, ledgerId, voucher.id())).isZero();
+        assertThat(jdbcTemplate.queryForObject("""
+                select line.period_debit_delta
+                from balance_projection_event event
+                join balance_projection_event_line line on line.event_id = event.id
+                where event.ledger_id = ? and event.aggregate_id = ? and event.event_type = 'UPDATE'
+                  and line.account_id = ?
+                """, BigDecimal.class, ledgerId, voucher.id(), accountId(ledgerId, "1001")))
+                .isEqualByComparingTo("-1.00");
+    }
+
+    @Test
+    void savesNegativeVoucherAmountsOnTheirSelectedSides() {
+        UUID userId = UUID.randomUUID();
+        UUID ledgerId = ledgerService.create(
+                new CurrentUserResolver.ResolvedUser(userId, "test", userId.toString()),
+                new LedgerRequests.Create("negative-voucher", "SME", "v1", "CNY",
+                        LocalDate.of(2026, 1, 1), false)).id();
+        UUID periodId = periodId(ledgerId, "2026-01");
+
+        VoucherResponses.Voucher voucher = voucherService.create(userId, ledgerId, new VoucherRequests.Create(
+                periodId, LocalDate.of(2026, 1, 15), "记", "1", "Negative",
+                List.of(line(accountId(ledgerId, "1001"), "DEBIT", "-100"),
+                        line(accountId(ledgerId, "3001"), "CREDIT", "-100"))));
+
+        assertThat(voucher.lines()).extracting(VoucherResponses.Line::side)
+                .containsExactly("DEBIT", "CREDIT");
+        assertThat(voucher.lines()).extracting(VoucherResponses.Line::originalAmount)
+                .containsExactly(new BigDecimal("-100.0000"), new BigDecimal("-100.0000"));
+    }
+
+    @Test
+    void closedPeriodIsTheOnlyVoucherMutationLock() {
+        UUID userId = UUID.randomUUID();
+        UUID ledgerId = ledgerService.create(
+                new CurrentUserResolver.ResolvedUser(userId, "test", userId.toString()),
+                new LedgerRequests.Create("closed-period", "SME", "v1", "CNY", LocalDate.of(2026, 1, 1), false)).id();
+        UUID periodId = periodId(ledgerId, "2026-01");
+        VoucherResponses.Voucher voucher = voucherService.createGenerated(userId, ledgerId,
+                new VoucherRequests.Create(periodId, LocalDate.of(2026, 1, 15), "记", "1", "Locked",
+                        List.of(line(accountId(ledgerId, "1001"), "DEBIT", "1"),
+                                line(accountId(ledgerId, "3001"), "CREDIT", "1"))),
+                "closed-period-voucher", "FIXED_ASSET", UUID.randomUUID());
+        jdbcTemplate.update("update accounting_period set status = 'CLOSED' where ledger_id = ? and id = ?",
+                ledgerId, periodId);
+
+        assertThatThrownBy(() -> voucherService.update(userId, ledgerId, voucher.id(),
+                new VoucherRequests.Update(voucher.version(), periodId, voucher.voucherDate(), voucher.voucherType(),
+                        voucher.voucherNumber(), "Changed", voucher.lines().stream()
+                        .map(line -> new VoucherRequests.Line(line.accountId(), line.side(), line.currency(),
+                                line.originalAmount(), line.exchangeRate(), line.summary()))
+                        .toList())))
+                .isInstanceOf(ApiProblemException.class)
+                .extracting(exception -> ((ApiProblemException) exception).code())
+                .isEqualTo("ACCOUNTING_PERIOD_CLOSED");
         assertThatThrownBy(() -> voucherService.delete(userId, ledgerId, voucher.id()))
-                .isInstanceOf(ApiProblemException.class);
-        assertThat(voucherService.find(userId, ledgerId, voucher.id()).status()).isEqualTo("POSTED");
+                .isInstanceOf(ApiProblemException.class)
+                .extracting(exception -> ((ApiProblemException) exception).code())
+                .isEqualTo("ACCOUNTING_PERIOD_CLOSED");
+        assertThat(jdbcTemplate.queryForObject("select count(*) from voucher where ledger_id = ? and id = ?",
+                Long.class, ledgerId, voucher.id())).isEqualTo(1L);
     }
 
     @Test

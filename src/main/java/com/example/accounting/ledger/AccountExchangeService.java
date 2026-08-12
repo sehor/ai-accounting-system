@@ -14,6 +14,8 @@ import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.text.Normalizer;
+import java.time.OffsetDateTime;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -47,6 +49,7 @@ public class AccountExchangeService {
 
     public static final long MAX_BYTES = 10L * 1024 * 1024;
     public static final int MAX_ACCOUNTS = 10_000;
+    private static final ZoneId ACCOUNTING_ZONE = ZoneId.of("Asia/Shanghai");
     private static final List<String> STANDARD_HEADERS = List.of(
             "Code", "Name", "ParentCode", "Category", "NormalBalance", "Status",
             "CashFlowRequired", "DefaultCashFlowItemCode", "QuantityEnabled", "UnitName");
@@ -82,9 +85,28 @@ public class AccountExchangeService {
 
     @Transactional(readOnly = true)
     public byte[] export(UUID actorId, UUID ledgerId, Format format) {
+        return export(actorId, ledgerId, format, null);
+    }
+
+    @Transactional(readOnly = true)
+    public byte[] export(UUID actorId, UUID ledgerId, Format format, UUID createdInPeriodId) {
         LedgerResponses.Ledger ledger = ledgers.findLedger(actorId, ledgerId);
+        List<LedgerResponses.Account> exportedAccounts;
+        if (createdInPeriodId == null) {
+            exportedAccounts = ledgers.listAccounts(actorId, ledgerId);
+        } else {
+            LedgerResponses.Period period = ledgers.listPeriods(actorId, ledgerId).stream()
+                    .filter(candidate -> candidate.id().equals(createdInPeriodId))
+                    .findFirst()
+                    .orElseThrow(() -> problem(404, "PERIOD_NOT_FOUND", "Period not found",
+                            "The period is not available to this ledger"));
+            OffsetDateTime startInclusive = period.startDate().atStartOfDay(ACCOUNTING_ZONE).toOffsetDateTime();
+            OffsetDateTime endExclusive = period.endDate().plusDays(1)
+                    .atStartOfDay(ACCOUNTING_ZONE).toOffsetDateTime();
+            exportedAccounts = accounts.listCreatedBetween(ledgerId, startInclusive, endExclusive);
+        }
         return workbook(ledger, accounts.codeRule(ledgerId), format,
-                ledgers.listAccounts(actorId, ledgerId), ledgers.listDimensionTypes(actorId, ledgerId));
+                exportedAccounts, ledgers.listDimensionTypes(actorId, ledgerId));
     }
 
     @Transactional
@@ -353,11 +375,10 @@ public class AccountExchangeService {
             List<LedgerResponses.Account> accountRows, List<LedgerResponses.DimensionType> dimensions) {
         try (Workbook workbook = new XSSFWorkbook(); ByteArrayOutputStream output = new ByteArrayOutputStream()) {
             CellStyle header = headerStyle(workbook);
+            Map<UUID, String> codes = accountCodesForExport(ledger.id(), accountRows);
             if (format == Format.KINGDEE) {
                 Sheet sheet = workbook.createSheet("科目");
                 writeHeaders(sheet, KINGDEE_HEADERS, header);
-                Map<UUID, String> codes = accountRows.stream().collect(
-                        Collectors.toMap(LedgerResponses.Account::id, LedgerResponses.Account::code));
                 int rowNo = 1;
                 for (LedgerResponses.Account account : accountRows) {
                     Row row = sheet.createRow(rowNo++);
@@ -370,7 +391,7 @@ public class AccountExchangeService {
                 autosize(sheet, KINGDEE_HEADERS.size());
             } else {
                 metadata(workbook, ledger, rule, header);
-                accountsSheet(workbook, accountRows, header);
+                accountsSheet(workbook, accountRows, codes, header);
                 dimensionSheets(workbook, dimensions, accountRows, header);
             }
             workbook.write(output);
@@ -379,6 +400,22 @@ public class AccountExchangeService {
             throw problem(500, "ACCOUNT_EXPORT_FAILED", "Account export failed",
                     "The account workbook could not be generated");
         }
+    }
+
+    private Map<UUID, String> accountCodesForExport(
+            UUID ledgerId, List<LedgerResponses.Account> accountRows) {
+        Map<UUID, String> codes = new LinkedHashMap<>();
+        for (LedgerResponses.Account account : accountRows) {
+            codes.put(account.id(), account.code());
+        }
+        Set<UUID> missingParentIds = new HashSet<>();
+        for (LedgerResponses.Account account : accountRows) {
+            if (account.parentId() != null && !codes.containsKey(account.parentId())) {
+                missingParentIds.add(account.parentId());
+            }
+        }
+        codes.putAll(accounts.codesByIds(ledgerId, missingParentIds));
+        return codes;
     }
 
     private void metadata(Workbook workbook, LedgerResponses.Ledger ledger,
@@ -397,11 +434,11 @@ public class AccountExchangeService {
         autosize(sheet, 2);
     }
 
-    private void accountsSheet(Workbook workbook, List<LedgerResponses.Account> accountRows, CellStyle header) {
+    private void accountsSheet(
+            Workbook workbook, List<LedgerResponses.Account> accountRows,
+            Map<UUID, String> codes, CellStyle header) {
         Sheet sheet = workbook.createSheet("Accounts");
         writeHeaders(sheet, STANDARD_HEADERS, header);
-        Map<UUID, String> codes = accountRows.stream().collect(
-                Collectors.toMap(LedgerResponses.Account::id, LedgerResponses.Account::code));
         Map<UUID, String> cashCodes = accountRows.isEmpty() ? Map.of()
                 : accounts.cashFlowItems(accountRows.getFirst().ledgerId()).stream()
                 .collect(Collectors.toMap(LedgerResponses.CashFlowItem::id, LedgerResponses.CashFlowItem::code));

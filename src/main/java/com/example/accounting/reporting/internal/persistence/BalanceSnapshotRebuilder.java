@@ -28,7 +28,8 @@ public class BalanceSnapshotRebuilder {
                 where p.period_code < source.period_code
                 order by p.period_code desc limit 1
             ), anchor as materialized (
-                select b.account_id, b.closing_debit_base - b.closing_credit_base opening_signed
+                select b.account_id, b.closing_debit_base opening_debit,
+                    b.closing_credit_base opening_credit
                 from account_period_balance b
                 join input i on i.ledger_id = b.ledger_id
                 join previous_period previous on previous.period_id = b.period_id
@@ -40,7 +41,8 @@ public class BalanceSnapshotRebuilder {
                     select 1 from ledger_account child
                     where child.ledger_id = a.ledger_id and child.parent_id = a.id)
             ), opening_facts as (
-                select ob.account_id, sum(ob.debit_base - ob.credit_base) opening_signed
+                select ob.account_id, sum(ob.debit_base) opening_debit,
+                    sum(ob.credit_base) opening_credit
                 from opening_balance ob
                 join input i on i.ledger_id = ob.ledger_id
                 where ob.confirmed
@@ -57,12 +59,14 @@ public class BalanceSnapshotRebuilder {
                 group by v.period_id, vl.account_id
             ), leaf_rollup as (
                 select p.ledger_id, p.period_id, p.period_no, p.status, leaf.account_id,
-                    coalesce(anchor.opening_signed, opening.opening_signed, 0::numeric) opening_signed,
+                    coalesce(anchor.opening_debit, opening.opening_debit, 0::numeric) opening_debit,
+                    coalesce(anchor.opening_credit, opening.opening_credit, 0::numeric) opening_credit,
                     coalesce(movement.period_debit, 0::numeric) period_debit,
                     coalesce(movement.period_credit, 0::numeric) period_credit,
-                    coalesce(anchor.opening_signed, opening.opening_signed, 0::numeric)
-                        + coalesce(movement.period_debit, 0::numeric)
-                        - coalesce(movement.period_credit, 0::numeric) closing_signed
+                    coalesce(anchor.opening_debit, opening.opening_debit, 0::numeric)
+                        + coalesce(movement.period_debit, 0::numeric) closing_debit,
+                    coalesce(anchor.opening_credit, opening.opening_credit, 0::numeric)
+                        + coalesce(movement.period_credit, 0::numeric) closing_credit
                 from periods p
                 join leaf_accounts leaf on leaf.ledger_id = p.ledger_id
                 left join anchor on anchor.account_id = leaf.account_id
@@ -75,12 +79,14 @@ public class BalanceSnapshotRebuilder {
                 union all
 
                 select p.ledger_id, p.period_id, p.period_no, p.status, previous.account_id,
-                    previous.closing_signed opening_signed,
+                    previous.closing_debit opening_debit,
+                    previous.closing_credit opening_credit,
                     coalesce(movement.period_debit, 0::numeric) period_debit,
                     coalesce(movement.period_credit, 0::numeric) period_credit,
-                    previous.closing_signed
-                        + coalesce(movement.period_debit, 0::numeric)
-                        - coalesce(movement.period_credit, 0::numeric) closing_signed
+                    previous.closing_debit
+                        + coalesce(movement.period_debit, 0::numeric) closing_debit,
+                    previous.closing_credit
+                        + coalesce(movement.period_credit, 0::numeric) closing_credit
                 from leaf_rollup previous
                 join periods p
                   on p.ledger_id = previous.ledger_id and p.period_no = previous.period_no + 1
@@ -99,10 +105,12 @@ public class BalanceSnapshotRebuilder {
                   on parent.ledger_id = path.ledger_id and parent.id = path.parent_id
             ), snapshots as (
                 select leaf.ledger_id, leaf.period_id, leaf.status, path.account_id,
-                    sum(leaf.opening_signed) opening_signed,
+                    sum(leaf.opening_debit) opening_debit,
+                    sum(leaf.opening_credit) opening_credit,
                     sum(leaf.period_debit) period_debit,
                     sum(leaf.period_credit) period_credit,
-                    sum(leaf.closing_signed) closing_signed
+                    sum(leaf.closing_debit) closing_debit,
+                    sum(leaf.closing_credit) closing_credit
                 from leaf_rollup leaf
                 join account_path path
                   on path.ledger_id = leaf.ledger_id and path.source_id = leaf.account_id
@@ -115,16 +123,18 @@ public class BalanceSnapshotRebuilder {
                 closing_debit_base, closing_credit_base,
                 finalized_at, version, updated_at)
             select ledger_id, period_id, account_id,
-                greatest(opening_signed, 0), greatest(-opening_signed, 0),
+                opening_debit, opening_credit,
                 period_debit, period_credit,
-                greatest(closing_signed, 0), greatest(-closing_signed, 0),
+                closing_debit, closing_credit,
                 case when status = 'CLOSED' then now() else null end,
                 1, now()
             from snapshots
-            where opening_signed <> 0
+            where opening_debit <> 0
+               or opening_credit <> 0
                or period_debit <> 0
                or period_credit <> 0
-               or closing_signed <> 0
+               or closing_debit <> 0
+               or closing_credit <> 0
             """;
 
     private final JdbcTemplate jdbc;

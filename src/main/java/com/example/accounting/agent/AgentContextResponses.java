@@ -14,7 +14,7 @@ public final class AgentContextResponses {
                     "get_operator_context", "get_current_user", "list_ledgers", "get_ledger",
                     "get_ledger_role", "get_ledger_context")),
             new ToolGroup("ledger", List.of(
-                    "update_ledger", "list_periods", "close_period", "reopen_period",
+                    "create_ledger", "update_ledger", "list_periods", "close_period", "reopen_period",
                     "backup_ledger", "restore_ledger")),
             new ToolGroup("accounts", List.of(
                     "list_accounting_standards", "get_accounting_standard", "list_accounts", "search_accounts",
@@ -38,7 +38,8 @@ public final class AgentContextResponses {
                     "delete_voucher", "list_voucher_revisions",
                     "restore_voucher_revision",
                     "import_kingdee_vouchers", "export_kingdee_vouchers")),
-            new ToolGroup("reports", List.of("finance_query", "finance_query_advanced", "export_report")),
+            new ToolGroup("reports", List.of(
+                    "finance_query", "finance_query_advanced", "export_report", "export_report_range")),
             new ToolGroup("assets", List.of("import_fixed_assets")),
             new ToolGroup("experience", List.of(
                     "search_accounting_experiences", "create_accounting_experience",
