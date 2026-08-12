@@ -30,6 +30,15 @@ Spring 集成测试和余额基准测试默认使用 `jdbc:postgresql://127.0.0.
 
 健康检查：`GET http://127.0.0.1:8080/actuator/health`。
 
+### 快速启动或重启本地服务
+
+```powershell
+.\start-backend.ps1
+.\start-frontend.ps1
+```
+
+脚本会只停止分别占用 `8080` 和 `5173` 端口的进程，再启动对应服务并等待可用。运行日志写入 `artifacts/dev-logs/`。
+
 数据库集成测试直接连接配置的本机 PostgreSQL。
 
 ## 第一版 API
