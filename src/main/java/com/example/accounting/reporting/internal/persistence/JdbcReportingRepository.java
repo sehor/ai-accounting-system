@@ -54,7 +54,18 @@ public class JdbcReportingRepository implements ReportingRepository {
     @Override
     public List<ReportResponses.TrialBalanceLine> trialBalance(
             UUID ledgerId, PeriodRange range, boolean includeParents) {
-        if (useProjection(ledgerId, range)) {
+        return trialBalance(ledgerId, range, includeParents, false);
+    }
+
+    @Override
+    public List<ReportResponses.TrialBalanceLine> incomeStatementTrialBalance(
+            UUID ledgerId, PeriodRange range, boolean includeParents) {
+        return trialBalance(ledgerId, range, includeParents, true);
+    }
+
+    private List<ReportResponses.TrialBalanceLine> trialBalance(
+            UUID ledgerId, PeriodRange range, boolean includeParents, boolean excludePeriodClosing) {
+        if (!excludePeriodClosing && useProjection(ledgerId, range)) {
             return projection.trialBalance(ledgerId, range, includeParents);
         }
         markFallback(ledgerId, range);
@@ -93,6 +104,7 @@ public class JdbcReportingRepository implements ReportingRepository {
                     join accounting_period p on p.ledger_id = v.ledger_id and p.id = v.period_id
                     where v.ledger_id = ? and v.status = 'POSTED' and v.deleted_at is null
                       and p.period_code between ? and ?
+                      and (? or (v.source_type is null or v.source_type <> 'PERIOD_CLOSING'))
                     group by vl.account_id
                 ), amounts as (
                     select path.account_id,
@@ -124,7 +136,7 @@ public class JdbcReportingRepository implements ReportingRepository {
                 order by account.code
                 """, (rs, row) -> trialBalanceLine(rs), ledgerId, ledgerId,
                 ledgerId, ledgerId, range.periodFrom(), ledgerId, range.periodFrom(), range.periodTo(),
-                ledgerId, includeParents);
+                !excludePeriodClosing, ledgerId, includeParents);
     }
 
     @Override

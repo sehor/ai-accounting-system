@@ -9,6 +9,7 @@ import com.example.accounting.ledger.LedgerService;
 import com.example.accounting.voucher.VoucherRequests;
 import com.example.accounting.voucher.VoucherResponses;
 import com.example.accounting.voucher.VoucherService;
+import com.example.accounting.reporting.internal.port.BalanceProjectionRepository;
 import com.example.accounting.shared.web.ApiProblemException;
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -33,6 +34,9 @@ class Stage4ReportingTest {
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
+
+    @Autowired
+    private BalanceProjectionRepository projection;
 
     @Test
     void reportsOnlyPostedVoucherAmounts() {
@@ -123,6 +127,65 @@ class Stage4ReportingTest {
                 .singleElement()
                 .extracting(ReportResponses.TrialBalanceLine::debit)
                 .isEqualTo(new BigDecimal("100.00"));
+    }
+
+    @Test
+    void incomeStatementIgnoresPeriodClosingTransferVouchers() {
+        UUID userId = UUID.randomUUID();
+        UUID ledgerId = ledgerService.create(new CurrentUserResolver.ResolvedUser(userId, "test", userId.toString()),
+                new LedgerRequests.Create("income statement closing transfer", "SME", "v1", "CNY",
+                        LocalDate.of(2026, 1, 1), false)).id();
+        UUID periodId = id("select id from accounting_period where ledger_id = ? and period_code = '2026-01'", ledgerId);
+        UUID cashId = id("select id from ledger_account where ledger_id = ? and code = '1001'", ledgerId);
+        UUID revenueId = id("select id from ledger_account where ledger_id = ? and code = '5001'", ledgerId);
+
+        voucherService.create(userId, ledgerId, new VoucherRequests.Create(
+                periodId, LocalDate.of(2026, 1, 15), "记", "1", "Revenue",
+                List.of(line(cashId, "DEBIT", "100"), line(revenueId, "CREDIT", "100"))));
+        voucherService.createGenerated(userId, ledgerId, new VoucherRequests.Create(
+                periodId, LocalDate.of(2026, 1, 31), "记", "2", "Period closing",
+                List.of(line(revenueId, "DEBIT", "100"), line(cashId, "CREDIT", "100"))),
+                "income-statement-closing-transfer", "PERIOD_CLOSING", UUID.randomUUID());
+
+        assertThat(reportingService.incomeStatement(userId, ledgerId, "2026-01").lines())
+                .singleElement()
+                .satisfies(line -> {
+                    assertThat(line.code()).isEqualTo("5001");
+                    assertThat(line.amount()).isEqualByComparingTo("100.00");
+                });
+    }
+
+    @Test
+    void statutoryIncomeStatementUsesActivityAfterPeriodClosing() {
+        UUID userId = UUID.randomUUID();
+        UUID ledgerId = ledgerService.create(new CurrentUserResolver.ResolvedUser(userId, "test", userId.toString()),
+                new LedgerRequests.Create("statutory income closing transfer", "SME", "v1", "CNY",
+                        LocalDate.of(2026, 1, 1), false)).id();
+        UUID periodId = id("select id from accounting_period where ledger_id = ? and period_code = '2026-01'", ledgerId);
+        UUID cashId = id("select id from ledger_account where ledger_id = ? and code = '1001'", ledgerId);
+        UUID revenueId = id("select id from ledger_account where ledger_id = ? and code = '5001'", ledgerId);
+
+        voucherService.create(userId, ledgerId, new VoucherRequests.Create(
+                periodId, LocalDate.of(2026, 1, 15), "记", "1", "Revenue",
+                List.of(line(cashId, "DEBIT", "100"), line(revenueId, "CREDIT", "100"))));
+        voucherService.createGenerated(userId, ledgerId, new VoucherRequests.Create(
+                periodId, LocalDate.of(2026, 1, 31), "记", "2", "Period closing",
+                List.of(line(revenueId, "DEBIT", "100"), line(cashId, "CREDIT", "100"))),
+                "statutory-income-closing-transfer", "PERIOD_CLOSING", UUID.randomUUID());
+        while (projection.applyPendingBatch(200, 5000)) {
+            // Keep applying pending projection batches until the statutory report source is fresh.
+        }
+
+        StatutoryReportResponses.Statement result = reportingService.statutoryStatement(
+                userId, ledgerId, "income-statement", "2026-01");
+        StatutoryReportResponses.Line revenue = result.groups().get(0).lines().stream()
+                .filter(line -> line.lineNo() == 1).findFirst().orElseThrow();
+        StatutoryReportResponses.Line netProfit = result.groups().get(0).lines().stream()
+                .filter(line -> line.lineNo() == 32).findFirst().orElseThrow();
+        assertThat(revenue.primaryAmount()).isEqualByComparingTo("100.00");
+        assertThat(revenue.comparativeAmount()).isEqualByComparingTo("100.00");
+        assertThat(netProfit.primaryAmount()).isEqualByComparingTo("100.00");
+        assertThat(netProfit.comparativeAmount()).isEqualByComparingTo("100.00");
     }
 
     private VoucherRequests.Line line(UUID accountId, String side, String amount) {

@@ -101,7 +101,7 @@ public class DefaultReportingService implements ReportingService {
     public ReportResponses.Statement incomeStatement(UUID actorId, UUID ledgerId, PeriodRange range) {
         requireView(actorId, ledgerId);
         validateRange(ledgerId, range);
-        List<ReportResponses.TrialBalanceLine> lines = reports.trialBalance(ledgerId, range, false);
+        List<ReportResponses.TrialBalanceLine> lines = reports.incomeStatementTrialBalance(ledgerId, range, false);
         Set<String> revenueCategories = reports.formulaCategories(
                 ledgerId, "INCOME_STATEMENT", "revenueCategories");
         Set<String> expenseCategories = reports.formulaCategories(
@@ -154,8 +154,8 @@ public class DefaultReportingService implements ReportingService {
             PeriodRange yearToDate = new PeriodRange(firstPeriod, periodCode);
             requireStatutoryProjection(ledgerId, yearToDate);
             requireStatutoryProjection(ledgerId, selected);
-            primary = reports.statutoryTrialBalance(ledgerId, yearToDate, true);
-            comparative = reports.statutoryTrialBalance(ledgerId, selected, true);
+            primary = reports.incomeStatementTrialBalance(ledgerId, yearToDate, true);
+            comparative = reports.incomeStatementTrialBalance(ledgerId, selected, true);
         } else {
             PeriodRange openingPeriod = PeriodRange.single(firstPeriod);
             requireStatutoryProjection(ledgerId, selected);

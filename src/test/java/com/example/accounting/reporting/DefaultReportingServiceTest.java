@@ -61,8 +61,8 @@ class DefaultReportingServiceTest {
                 line("5401", "主营业务成本", "DEBIT", "8", "8"),
                 line("5601", "销售费用", "DEBIT", "1", "1"),
                 line("5801", "所得税费用", "DEBIT", "1", "1"));
-        when(repository.statutoryTrialBalance(ledgerId, new PeriodRange("2026-01", "2026-06"), true)).thenReturn(ytd);
-        when(repository.statutoryTrialBalance(ledgerId, PeriodRange.single("2026-06"), true)).thenReturn(month);
+        when(repository.incomeStatementTrialBalance(ledgerId, new PeriodRange("2026-01", "2026-06"), true)).thenReturn(ytd);
+        when(repository.incomeStatementTrialBalance(ledgerId, PeriodRange.single("2026-06"), true)).thenReturn(month);
 
         StatutoryReportResponses.Statement result = service.statutoryStatement(
                 actorId, ledgerId, "income-statement", "2026-06");
@@ -140,8 +140,7 @@ class DefaultReportingServiceTest {
                 .isInstanceOf(ApiProblemException.class)
                 .extracting(error -> ((ApiProblemException) error).code())
                 .isEqualTo("STATUTORY_REPORT_PROJECTION_PENDING");
-        verify(repository, never()).trialBalance(ledgerId, new PeriodRange("2026-01", "2026-06"), true);
-        verify(repository, never()).statutoryTrialBalance(ledgerId, new PeriodRange("2026-01", "2026-06"), true);
+        verify(repository, never()).incomeStatementTrialBalance(ledgerId, new PeriodRange("2026-01", "2026-06"), true);
     }
 
     private ReportResponses.TrialBalanceLine line(String code, String name, String side,
