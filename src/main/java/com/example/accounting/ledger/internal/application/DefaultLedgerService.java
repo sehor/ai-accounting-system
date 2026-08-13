@@ -598,13 +598,37 @@ public class DefaultLedgerService implements LedgerService {
                     "A reason is required for period changes");
         }
         if ("CLOSED".equals(nextStatus)) {
+            List<LedgerResponses.Period> periods = ledgers.listPeriods(ledgerId);
+            int index = java.util.stream.IntStream.range(0, periods.size())
+                    .filter(i -> periods.get(i).id().equals(periodId)).findFirst().orElse(-1);
+            if (index > 0 && !"CLOSED".equals(periods.get(index - 1).status())) {
+                throw problem(409, "PERIOD_ORDER_INVALID", "Period order is invalid",
+                        "Close the previous accounting period first");
+            }
             balanceProjection.requireReadyForClose(ledgerId, periodId);
             List<String> blockers = periodCloseGuard.orderedStream()
                     .flatMap(guard -> guard.blockers(actorId, ledgerId, periodId).stream())
                     .distinct().toList();
             if (!blockers.isEmpty()) {
-                throw problem(409, "FIXED_ASSET_PERIOD_INCOMPLETE", "Period close is blocked",
-                        String.join("; ", blockers));
+                String first = blockers.get(0);
+                int separator = first.indexOf(':');
+                String code = separator > 0 && first.substring(0, separator).matches("[A-Z0-9_]+")
+                        ? first.substring(0, separator) : "FIXED_ASSET_PERIOD_INCOMPLETE";
+                String detail = blockers.stream().map(value -> {
+                    int split = value.indexOf(':');
+                    return split > 0 ? value.substring(split + 1).trim() : value;
+                }).collect(java.util.stream.Collectors.joining("; "));
+                throw problem(409, code, "Period close is blocked", detail);
+            }
+        } else if ("OPEN".equals(nextStatus)) {
+            List<LedgerResponses.Period> periods = ledgers.listPeriods(ledgerId);
+            int index = java.util.stream.IntStream.range(0, periods.size())
+                    .filter(i -> periods.get(i).id().equals(periodId)).findFirst().orElse(-1);
+            boolean laterClosed = index >= 0 && periods.stream().skip(index + 1)
+                    .anyMatch(candidate -> "CLOSED".equals(candidate.status()));
+            if (laterClosed) {
+                throw problem(409, "PERIOD_ORDER_INVALID", "Period order is invalid",
+                        "Reopen the latest closed period first");
             }
         }
         ledgers.updatePeriodStatus(ledgerId, periodId, nextStatus);

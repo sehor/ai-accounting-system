@@ -458,6 +458,11 @@ public class JdbcVoucherRepository implements VoucherRepository {
         jdbcTemplate.update("delete from fixed_asset_depreciation_run where ledger_id = ? and voucher_id = ?",
                 ledgerId, voucherId);
         jdbcTemplate.update("""
+                update period_closing_step set voucher_id = null, status = 'STALE',
+                    blocker_code = 'PERIOD_CLOSING_INCOMPLETE', blocker_detail = '生成凭证已被删除', updated_at = now()
+                where ledger_id = ? and voucher_id = ?
+                """, ledgerId, voucherId);
+        jdbcTemplate.update("""
                 delete from audit_revision
                 where ledger_id = ? and aggregate_type = 'VOUCHER' and aggregate_id = ?
                 """, ledgerId, voucherId);

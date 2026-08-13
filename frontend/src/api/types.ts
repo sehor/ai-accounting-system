@@ -271,6 +271,34 @@ export interface FixedAssetPreview {
 export interface FixedAssetRun { id: string; periodId: string; runType: string; status: string; voucherId: string; totalAmount: string; inputFingerprint: string; createdAt: string }
 export interface FixedAssetDisposal { id: string; assetId: string; periodId: string; depreciationVoucherId: string | null; transferVoucherId: string; settlementVoucherId: string; carryingAmount: string; gainOrLoss: string }
 
+export type PeriodClosingStepType = 'DEPRECIATION' | 'EXPENSE_TRANSFER' | 'REVENUE_TRANSFER' | 'YEAR_END_PROFIT_TRANSFER'
+export type PeriodClosingStepStatus = 'NOT_REQUIRED' | 'PENDING' | 'GENERATED' | 'STALE' | 'BLOCKED'
+export interface PeriodClosingBlocker { code: string; title: string; detail: string }
+export interface PeriodClosingStep {
+  step: PeriodClosingStepType
+  status: PeriodClosingStepStatus
+  amount: string
+  voucherId: string | null
+  inputFingerprint: string | null
+  blockers: PeriodClosingBlocker[]
+  updatedAt: string
+}
+export interface PeriodClosingTrialBalance {
+  openingDebit: string; openingCredit: string; periodDebit: string; periodCredit: string
+  closingDebit: string; closingCredit: string
+  openingDifference: string; periodDifference: string; closingDifference: string
+  balanced: boolean
+}
+export interface PeriodClosingStatus {
+  ledgerId: string; periodId: string; periodCode: string
+  steps: PeriodClosingStep[]; blockers: PeriodClosingBlocker[]
+  trialBalance: PeriodClosingTrialBalance; canClose: boolean
+}
+export interface PeriodClosingSettings {
+  ledgerId: string; profitAccountId: string | null; retainedEarningsAccountId: string | null
+  defaultProfitAccountId: string | null; defaultRetainedEarningsAccountId: string | null; version: number
+}
+
 export interface VoucherRevision {
   id: string
   revision: number

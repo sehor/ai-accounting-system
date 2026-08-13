@@ -5,10 +5,11 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { apiFetch, ApiError, jsonBody } from '../api/client'
-import type { Account, DimensionType, DimensionValue, FixedAssetPreview, Ledger, LedgerRole, Member, OpeningBalance, Period, User } from '../api/types'
+import type { Account, DimensionType, DimensionValue, Ledger, LedgerRole, Member, OpeningBalance, Period, User } from '../api/types'
 import { useAuth } from '../auth/AuthProvider'
 import { decimalOrZero } from '../features/vouchers/money'
 import { LedgerBackupTab } from './LedgerBackupTab'
+import { PeriodClosingPanel } from './PeriodClosingPanel'
 
 type OpeningFormLine = { accountId: string; periodId: string; currency: string; dimensionKey?: string; debitOriginal: string; creditOriginal: string; exchangeRate: string }
 export const openingBalanceAmountPattern = /^-?\d+(?:\.\d+)?$/
@@ -56,11 +57,8 @@ export function SettingsPage() {
   const addMember = async (role: LedgerRole) => { if (!candidate) return; try { await apiFetch<Member>(`/ledgers/${ledgerId}/members`, session!, { method: 'POST', body: jsonBody({ userId: candidate.id, role }) }); setCandidate(null); emailForm.resetFields(); messageApi.success('成员已添加'); void client.invalidateQueries({ queryKey: ['members', ledgerId] }) } catch (error) { messageApi.error(error instanceof ApiError ? error.message : '成员添加失败') } }
   const openReasonModal = (title: string, onConfirm: (reason: string) => void) => { let reason = ''; modal.confirm({ title, content: <Input autoFocus placeholder="原因必填" onChange={(event) => { reason = event.target.value }} />, onOk: () => { if (!reason.trim()) return Promise.reject(new Error('原因必填')); onConfirm(reason.trim()) } }) }
   const requestConfirmOpening = () => modal.confirm({ title: '确认期初余额？', content: '确认后将无法继续编辑或导入期初余额。', okText: '确认', okType: 'danger', cancelText: '取消', onOk: () => confirmOpening.mutateAsync() })
-  const openClosePanel = async (period: Period) => {
-    try {
-      const preview = await apiFetch<FixedAssetPreview>(`/ledgers/${ledgerId}/fixed-asset-depreciation/preview?periodId=${period.id}`, session!)
-      modal.confirm({ title: `期末处理 · ${period.periodCode}`, width: 560, content: <Space direction="vertical" style={{ width: '100%' }}><Typography.Text>应计折旧：{preview.totalAmount}，待处理资产：{preview.pendingCount}</Typography.Text>{preview.blockers.length ? <Alert type="warning" showIcon message="存在阻塞项" description={<ul>{preview.blockers.map((item) => <li key={item}>{item}</li>)}</ul>} /> : <Alert type="success" message="折旧状态正常，可以关账" />}</Space>, okText: preview.readyToClose ? '关账' : '生成折旧', onOk: async () => { if (!preview.readyToClose) { await apiFetch(`/ledgers/${ledgerId}/fixed-asset-depreciation:generate`, session!, { method: 'POST', body: jsonBody({ periodId: period.id }) }); messageApi.success('折旧凭证已生成，请再次执行关账'); return } await periodAction.mutateAsync({ period, operation: 'close', reason: '固定资产折旧已完成' }) } })
-    } catch (error) { messageApi.error(error instanceof ApiError ? error.message : '期末处理检查失败') }
+  const openClosePanel = (period: Period) => {
+    const closeDialog = modal.info({ title: `期末结账 · ${period.periodCode}`, width: 980, icon: null, footer: null, content: <PeriodClosingPanel ledgerId={ledgerId} session={session!} period={period} accounts={accounts.data || []} onClose={() => { closeDialog.destroy(); openReasonModal('结账原因', (reason) => periodAction.mutate({ period, operation: 'close', reason })) }} /> })
   }
   const changeTab = (key: string) => navigate(`/ledgers/${ledgerId}/settings/${key}`)
   return <>{contextHolder}<Space direction="vertical" size={16} style={{ width: '100%' }}><Typography.Title level={1}>账套设置</Typography.Title><Card title="账套基本信息"><Form form={ledgerForm} layout="vertical" onFinish={(value) => ledgerUpdate.mutate(value)}><Form.Item name="name" label="账套名称" rules={[{ required: true, message: '请输入账套名称' }]}><Input disabled={!['OWNER', 'EDITOR'].includes(ledgerRole.data?.role || '')} /></Form.Item><Form.Item name="description" label="公司主营业务" rules={[{ max: 2000, message: '主营业务描述不能超过 2000 个字符' }]}><Input.TextArea rows={4} maxLength={2000} showCount disabled={!['OWNER', 'EDITOR'].includes(ledgerRole.data?.role || '')} placeholder="例如：研发、生产和销售智能硬件及配套软件" /></Form.Item><Button type="primary" htmlType="submit" loading={ledgerUpdate.isPending} disabled={!['OWNER', 'EDITOR'].includes(ledgerRole.data?.role || '')}>保存</Button></Form></Card><Tabs activeKey={tab} onChange={changeTab} items={[
