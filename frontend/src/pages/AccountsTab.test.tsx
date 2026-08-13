@@ -31,7 +31,7 @@ Object.defineProperty(window, 'matchMedia', {
 
 function account(id: string, name: string, createdAt: string, overrides: Partial<Account> = {}): Account {
   return {
-    id, ledgerId: 'ledger-1', code: id, name, category: 'ASSET', normalBalance: 'DEBIT', status: 'ACTIVE',
+    id, ledgerId: 'ledger-1', code: id, name, category: 'CURRENT_ASSET', normalBalance: 'DEBIT', status: 'ACTIVE',
     parentId: null, level: 1, isLeaf: true, isTemplate: false, hasBusinessUsage: false, coreLocked: false,
     legacyCode: false, version: 0, cashFlowRequired: false, defaultCashFlowItemId: null,
     quantityEnabled: false, unitName: null, dimensionRequirements: [], createdAt, ...overrides,
@@ -55,7 +55,7 @@ describe('AccountsTab account form', () => {
             periods={[]}
             loading={false}
             writable
-            category="ASSET"
+            category="CURRENT_ASSET"
             onChanged={() => {}}
           />
         </App>
@@ -99,7 +99,7 @@ describe('AccountsTab account form', () => {
             }]}
             loading={false}
             writable
-            category="ASSET"
+            category="CURRENT_ASSET"
             onChanged={() => {}}
           />
         </App>
@@ -150,7 +150,7 @@ describe('AccountsTab account form', () => {
             }]}
             loading={false}
             writable
-            category="ASSET"
+            category="CURRENT_ASSET"
             onChanged={() => {}}
           />
         </App>

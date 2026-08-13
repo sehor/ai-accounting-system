@@ -14,7 +14,6 @@ import com.example.accounting.ledger.LedgerAccessService;
 import com.example.accounting.ledger.LedgerResponses;
 import com.example.accounting.ledger.LedgerRole;
 import com.example.accounting.ledger.LedgerService;
-import com.example.accounting.ledger.PeriodCloseGuard;
 import com.example.accounting.shared.web.ApiProblemException;
 import com.example.accounting.voucher.VoucherRequests;
 import com.example.accounting.voucher.VoucherResponses;
@@ -47,7 +46,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
-public class DefaultFixedAssetService implements FixedAssetService, PeriodCloseGuard {
+public class DefaultFixedAssetService implements FixedAssetService {
 
     private static final Set<LedgerRole> WRITE_ROLES = Set.of(LedgerRole.OWNER, LedgerRole.EDITOR);
     private static final Set<LedgerRole> READ_ROLES = Set.of(LedgerRole.OWNER, LedgerRole.EDITOR,
@@ -456,11 +455,6 @@ public class DefaultFixedAssetService implements FixedAssetService, PeriodCloseG
             }
         }
         return blockers.stream().distinct().toList();
-    }
-
-    @Override
-    public List<String> blockers(UUID actorId, UUID ledgerId, UUID periodId) {
-        return periodBlockers(actorId, ledgerId, periodId);
     }
 
     @Override

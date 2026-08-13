@@ -6,7 +6,29 @@ import { apiFetch, ApiError, jsonBody, type ApiAuth } from '../api/client'
 import type { Account, AccountImportPreview, CashFlowItem, DimensionType, Period } from '../api/types'
 
 type AccountTree = Account & { children?: AccountTree[] }
-export type AccountCategoryTab = 'ASSET' | 'LIABILITY' | 'EQUITY' | 'COST' | 'PROFIT_LOSS'
+export type AccountCategoryTab =
+  | 'CURRENT_ASSET' | 'NON_CURRENT_ASSET'
+  | 'CURRENT_LIABILITY' | 'NON_CURRENT_LIABILITY'
+  | 'EQUITY' | 'COST'
+  | 'OPERATING_REVENUE' | 'OTHER_INCOME'
+  | 'OPERATING_COST_AND_TAX' | 'OTHER_EXPENSE' | 'PERIOD_EXPENSE'
+  | 'INCOME_TAX' | 'PRIOR_YEAR_ADJUSTMENT'
+
+export const ACCOUNT_CATEGORY_LABELS: Record<AccountCategoryTab, string> = {
+  CURRENT_ASSET: '流动资产',
+  NON_CURRENT_ASSET: '非流动资产',
+  CURRENT_LIABILITY: '流动负债',
+  NON_CURRENT_LIABILITY: '非流动负债',
+  EQUITY: '所有者权益',
+  COST: '成本',
+  OPERATING_REVENUE: '营业收入',
+  OTHER_INCOME: '其他收益',
+  OPERATING_COST_AND_TAX: '营业成本及税金',
+  OTHER_EXPENSE: '其他损失',
+  PERIOD_EXPENSE: '期间费用',
+  INCOME_TAX: '所得税',
+  PRIOR_YEAR_ADJUSTMENT: '以前年度损益调整',
+}
 type AccountForm = {
   code: string
   name: string
@@ -238,7 +260,8 @@ export function AccountsTab({ ledgerId, session, accounts, dimensionTypes, perio
         { title: '编码', dataIndex: 'code', render: (value, account) =>
           <Space>{value}{account.legacyCode && <Tag color="warning">遗留</Tag>}</Space> },
         { title: '名称', dataIndex: 'name' },
-        { title: '类别 / 余额方向', render: (_, account) => `${account.category} / ${account.normalBalance}` },
+        { title: '类别 / 余额方向', render: (_, account) =>
+          `${ACCOUNT_CATEGORY_LABELS[account.category as AccountCategoryTab] || account.category} / ${account.normalBalance === 'CREDIT' ? '贷' : '借'}` },
         { title: '控制', render: (_, account) => <Space wrap>
           {account.cashFlowRequired && <Tag>现金流</Tag>}
           {account.quantityEnabled && <Tag>数量：{account.unitName}</Tag>}
@@ -277,11 +300,11 @@ export function AccountsTab({ ledgerId, session, accounts, dimensionTypes, perio
         <Space style={{ width: '100%' }} align="start">
           <Form.Item name="category" label="类别" rules={[{ required: true }]}>
             <Select disabled={Boolean(parent || editing?.parentId || editing?.coreLocked || editing?.isTemplate)}
-              style={{ width: 180 }} options={['ASSET', 'LIABILITY', 'EQUITY', 'COST', 'REVENUE', 'EXPENSE']
-                .map((value) => ({ value, label: value }))} />
+              style={{ width: 180 }} options={Object.entries(ACCOUNT_CATEGORY_LABELS)
+                .map(([value, label]) => ({ value, label }))} />
           </Form.Item>
           <Form.Item name="normalBalance" label="余额方向" rules={[{ required: true }]}>
-            <Select disabled={Boolean(parent || editing?.parentId || editing?.coreLocked || editing?.isTemplate)}
+            <Select disabled={Boolean(editing)}
               style={{ width: 150 }} options={[{ value: 'DEBIT', label: '借' }, { value: 'CREDIT', label: '贷' }]} />
           </Form.Item>
         </Space>
@@ -353,9 +376,7 @@ function buildTree(accounts: Account[]): AccountTree[] {
 }
 
 function matchesCategory(account: Account, category: AccountCategoryTab) {
-  return category === 'PROFIT_LOSS'
-    ? account.category === 'REVENUE' || account.category === 'EXPENSE'
-    : account.category === category
+  return account.category === category
 }
 
 function wasCreatedInPeriod(createdAt: string | null, period: Period) {

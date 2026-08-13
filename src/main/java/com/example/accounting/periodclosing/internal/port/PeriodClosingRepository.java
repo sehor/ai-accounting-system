@@ -23,6 +23,7 @@ public interface PeriodClosingRepository {
     Optional<PeriodRecord> period(UUID ledgerId, UUID periodId);
     List<PeriodRecord> periods(UUID ledgerId);
     List<AccountAmount> amounts(UUID ledgerId, UUID periodId, String category);
+    List<AccountAmount> netAmounts(UUID ledgerId, UUID periodId, String category);
     Optional<AccountAmount> amountThrough(UUID ledgerId, String periodCode, UUID accountId, UUID excludedVoucherId);
     Optional<AccountInfo> account(UUID ledgerId, UUID accountId);
     Optional<AccountInfo> accountByCode(UUID ledgerId, String code);

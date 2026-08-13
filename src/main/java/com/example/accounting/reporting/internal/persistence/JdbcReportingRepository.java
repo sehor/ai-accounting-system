@@ -385,12 +385,6 @@ public class JdbcReportingRepository implements ReportingRepository {
     }
 
     private BalancePosition position(String normalBalance, BigDecimal debit, BigDecimal credit) {
-        if (credit.compareTo(BigDecimal.ZERO) == 0 && debit.compareTo(BigDecimal.ZERO) != 0) {
-            return new BalancePosition("DEBIT", debit, debit, credit);
-        }
-        if (debit.compareTo(BigDecimal.ZERO) == 0 && credit.compareTo(BigDecimal.ZERO) != 0) {
-            return new BalancePosition("CREDIT", credit, debit, credit);
-        }
         return new BalancePosition(normalBalance, normalAmount(normalBalance, debit, credit), debit, credit);
     }
 

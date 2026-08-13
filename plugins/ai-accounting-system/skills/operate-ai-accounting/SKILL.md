@@ -17,6 +17,7 @@ Use the `accounting` MCP service for all system reads and writes. Never write ac
    - Simplified month-end sales or service cost: `close-month-end-sales-cost`
    - Received invoices: `process-received-invoices`
    - Issued invoices: `process-issued-invoices`
+   - Create or verify an accounting account: `create-accounting-account`
 3. Ask the user when company-specific treatment remains ambiguous; never invent an account, detail account, or business purpose.
 4. Call the MCP operation that matches the requested end state and report the returned IDs, status, and unresolved items.
 

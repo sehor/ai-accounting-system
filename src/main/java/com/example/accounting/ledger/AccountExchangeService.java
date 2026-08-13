@@ -525,8 +525,7 @@ public class AccountExchangeService {
                     if (parent != null && !parent.issues().contains("ERROR:INVALID_CATEGORY")
                             && !parent.issues().contains("ERROR:INVALID_NORMAL_BALANCE")) {
                         row.cleaned().put("category", parent.cleaned().get("category"));
-                        row.cleaned().put("normalBalance", parent.cleaned().get("normalBalance"));
-                        row.issues().removeAll(List.of("ERROR:INVALID_CATEGORY", "ERROR:INVALID_NORMAL_BALANCE"));
+                        row.issues().remove("ERROR:INVALID_CATEGORY");
                     }
                 });
             }
@@ -543,12 +542,19 @@ public class AccountExchangeService {
 
     private ParsedAccount nativeKingdee(List<String> headers, List<String> cells, AccountCodeRule rule) {
         String category = switch (clean(cells.get(2))) {
-            case "流动资产", "非流动资产" -> "ASSET";
-            case "流动负债", "非流动负债" -> "LIABILITY";
+            case "流动资产" -> "CURRENT_ASSET";
+            case "非流动资产" -> "NON_CURRENT_ASSET";
+            case "流动负债" -> "CURRENT_LIABILITY";
+            case "非流动负债" -> "NON_CURRENT_LIABILITY";
             case "所有者权益" -> "EQUITY";
             case "成本" -> "COST";
-            case "营业收入", "其他收益" -> "REVENUE";
-            case "营业成本及税金", "其他损失", "期间费用", "所得税", "以前年度损益调整" -> "EXPENSE";
+            case "营业收入" -> "OPERATING_REVENUE";
+            case "其他收益" -> "OTHER_INCOME";
+            case "营业成本及税金" -> "OPERATING_COST_AND_TAX";
+            case "其他损失" -> "OTHER_EXPENSE";
+            case "期间费用" -> "PERIOD_EXPENSE";
+            case "所得税" -> "INCOME_TAX";
+            case "以前年度损益调整" -> "PRIOR_YEAR_ADJUSTMENT";
             default -> "";
         };
         String normal = switch (clean(cells.get(3))) {
@@ -600,7 +606,7 @@ public class AccountExchangeService {
         if (name.isBlank()) {
             issues.add("ERROR:NAME_REQUIRED");
         }
-        if (!Set.of("ASSET", "LIABILITY", "EQUITY", "COST", "REVENUE", "EXPENSE").contains(category)) {
+        if (!AccountCategory.isValid(category)) {
             issues.add("ERROR:INVALID_CATEGORY");
         }
         if (!Set.of("DEBIT", "CREDIT").contains(normal)) {
@@ -781,22 +787,8 @@ public class AccountExchangeService {
     }
 
     private String nativeKingdeeCategory(LedgerResponses.Account account) {
-        String primaryCode = account.code().length() > 4 ? account.code().substring(0, 4) : account.code();
-        return switch (account.category()) {
-            case "ASSET" -> primaryCode.compareTo("1500") < 0 ? "流动资产" : "非流动资产";
-            case "LIABILITY" -> primaryCode.compareTo("2500") < 0 ? "流动负债" : "非流动负债";
-            case "EQUITY" -> "所有者权益";
-            case "COST" -> "成本";
-            case "REVENUE" -> primaryCode.compareTo("5100") < 0 ? "营业收入" : "其他收益";
-            case "EXPENSE" -> switch (primaryCode) {
-                case "5401", "5402", "5403" -> "营业成本及税金";
-                case "5601", "5602", "5603" -> "期间费用";
-                case "5801" -> "所得税";
-                case "6000" -> "以前年度损益调整";
-                default -> "其他损失";
-            };
-            default -> account.category();
-        };
+        AccountCategory category = AccountCategory.fromCode(account.category());
+        return category == null ? account.category() : category.label();
     }
 
     private String nativeKingdeeBalance(String normalBalance) {

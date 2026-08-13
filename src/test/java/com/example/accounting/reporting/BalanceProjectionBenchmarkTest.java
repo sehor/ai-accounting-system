@@ -188,7 +188,9 @@ class BalanceProjectionBenchmarkTest {
                 insert into ledger_account (id, ledger_id, code, name, category, normal_balance, level)
                 select md5('benchmark-account-' || n)::uuid, ?, lpad(n::text, 4, '0'),
                     'Benchmark account ' || n,
-                    case when n % 3 = 0 then 'REVENUE' when n % 3 = 1 then 'ASSET' else 'EXPENSE' end,
+                    case when n % 3 = 0 then 'OPERATING_REVENUE'
+                         when n % 3 = 1 then 'CURRENT_ASSET'
+                         else 'PERIOD_EXPENSE' end,
                     case when n % 3 = 0 then 'CREDIT' else 'DEBIT' end, 1
                 from generate_series(1, ?) n
                 """, ledgerId, accounts);

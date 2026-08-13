@@ -74,6 +74,10 @@ public class AccountingStandardCatalog {
             throw new IllegalStateException("duplicate account code in " + standard.key());
         }
         for (AccountingStandard.Account account : standard.accounts()) {
+            if (!AccountCategory.isValid(account.category())) {
+                throw new IllegalStateException("invalid account category in " + standard.key()
+                        + ": " + account.code() + "/" + account.category());
+            }
             int level = standard.accountCodeRule().levelOf(account.code());
             if (level == 0 || (level == 1 && account.parentCode() != null)
                     || (level > 1 && !codes.contains(account.parentCode()))

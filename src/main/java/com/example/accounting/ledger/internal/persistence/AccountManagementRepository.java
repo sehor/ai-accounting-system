@@ -308,7 +308,7 @@ public class AccountManagementRepository {
                 ledgerId, accountId, ledgerId, accountId, ledgerId, accountId, ledgerId, accountId,
                 ledgerId, accountId, ledgerId, accountId, ledgerId, accountId,
                 ledgerId, accountId, ledgerId, accountId, ledgerId, accountId, ledgerId, accountId,
-                ledgerId, accountId, ledgerId, accountId, ledgerId, accountId));
+                ledgerId, accountId, ledgerId, accountId));
     }
 
     public boolean hasActiveDescendants(UUID ledgerId, UUID accountId) {

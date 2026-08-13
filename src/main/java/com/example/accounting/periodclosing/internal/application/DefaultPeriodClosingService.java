@@ -37,6 +37,11 @@ public class DefaultPeriodClosingService implements PeriodClosingService, Period
     private static final Set<LedgerRole> READ_ROLES = Set.of(LedgerRole.OWNER, LedgerRole.EDITOR,
             LedgerRole.REVIEWER, LedgerRole.VIEWER, LedgerRole.AGENT);
     private static final Set<LedgerRole> WRITE_ROLES = Set.of(LedgerRole.OWNER, LedgerRole.EDITOR);
+    private static final Set<String> REVENUE_TRANSFER_CATEGORIES = Set.of(
+            "OPERATING_REVENUE", "OTHER_INCOME");
+    private static final Set<String> EXPENSE_TRANSFER_CATEGORIES = Set.of(
+            "OPERATING_COST_AND_TAX", "OTHER_EXPENSE", "PERIOD_EXPENSE",
+            "INCOME_TAX", "PRIOR_YEAR_ADJUSTMENT");
 
     private final PeriodClosingRepository closing;
     private final LedgerAccessService ledgerAccess;
@@ -109,28 +114,8 @@ public class DefaultPeriodClosingService implements PeriodClosingService, Period
             }
             PeriodClosingResponses.Step response = step(record);
             steps.add(response);
-            blockers.addAll(response.blockers());
-            if (record.status() == PeriodClosingStepStatus.PENDING) {
-                boolean requiresConfiguredProfit = (type == PeriodClosingStepType.EXPENSE_TRANSFER
-                        && hasNonZero(ledgerId, period.id(), "EXPENSE"))
-                        || (type == PeriodClosingStepType.REVENUE_TRANSFER
-                        && hasNonZero(ledgerId, period.id(), "REVENUE"))
-                        || type == PeriodClosingStepType.YEAR_END_PROFIT_TRANSFER && period.code().endsWith("-12");
-                String code = requiresConfiguredProfit && effectiveProfitAccount(actorId, ledgerId) == null
-                        ? "PERIOD_CLOSING_ACCOUNT_CONFIG_MISSING" : "PERIOD_CLOSING_INCOMPLETE";
-                blockers.add(new PeriodClosingResponses.Blocker(code, "结账步骤未完成", "请点击生成按钮完成该步骤"));
-            } else if (record.status() == PeriodClosingStepStatus.STALE) {
-                blockers.add(new PeriodClosingResponses.Blocker("PERIOD_CLOSING_STALE", "结账步骤已失效",
-                        "输入事实发生变化，请重新生成原凭证"));
-            }
         }
 
-        FixedAssetResponses.DepreciationPreview depreciation = fixedAssets.previewDepreciation(actorId, ledgerId, periodId);
-        if (!depreciation.blockers().isEmpty() || depreciation.pendingCount() > 0) {
-            blockers.add(new PeriodClosingResponses.Blocker("FIXED_ASSET_DEPRECIATION_INCOMPLETE", "固定资产折旧未完成",
-                    String.join("；", depreciation.blockers()) + (depreciation.pendingCount() > 0
-                            ? "；尚有 " + depreciation.pendingCount() + " 项资产待处理" : "")));
-        }
         PeriodClosingResponses.TrialBalanceTotals totals = trialBalance(ledgerId, period.code());
         if (!totals.balanced()) {
             blockers.add(new PeriodClosingResponses.Blocker("TRIAL_BALANCE_UNBALANCED", "试算平衡未通过",
@@ -229,7 +214,7 @@ public class DefaultPeriodClosingService implements PeriodClosingService, Period
                                                          PeriodClosingRepository.StepRecord record,
                                                          boolean revenue) {
         UUID profitAccount = effectiveProfitAccount(actorId, ledgerId);
-        List<PeriodClosingRepository.AccountAmount> amounts = closing.amounts(ledgerId, period.id(), revenue ? "REVENUE" : "EXPENSE");
+        List<PeriodClosingRepository.AccountAmount> amounts = transferAmounts(ledgerId, period.id(), revenue);
         List<PeriodClosingRepository.AccountAmount> nonZero = amounts.stream()
                 .filter(a -> a.debit().subtract(a.credit()).signum() != 0).toList();
         if (nonZero.isEmpty()) {
@@ -365,7 +350,7 @@ public class DefaultPeriodClosingService implements PeriodClosingService, Period
         if (type == PeriodClosingStepType.EXPENSE_TRANSFER || type == PeriodClosingStepType.REVENUE_TRANSFER) {
             boolean revenue = type == PeriodClosingStepType.REVENUE_TRANSFER;
             UUID profit = effectiveProfitAccount(actorId, ledgerId);
-            List<PeriodClosingRepository.AccountAmount> amounts = closing.amounts(ledgerId, period.id(), revenue ? "REVENUE" : "EXPENSE")
+            List<PeriodClosingRepository.AccountAmount> amounts = transferAmounts(ledgerId, period.id(), revenue)
                     .stream().filter(a -> a.debit().subtract(a.credit()).signum() != 0).toList();
             return fingerprint(amounts, profit, revenue);
         }
@@ -389,9 +374,9 @@ public class DefaultPeriodClosingService implements PeriodClosingService, Period
         if (record.status() != PeriodClosingStepStatus.PENDING) return record;
         boolean noAmount = switch (record.type()) {
             case DEPRECIATION -> fixedAssets.previewDepreciation(actorId, ledgerId, period.id()).pendingCount() == 0;
-            case EXPENSE_TRANSFER -> closing.amounts(ledgerId, period.id(), "EXPENSE").stream()
+            case EXPENSE_TRANSFER -> transferNetAmounts(ledgerId, period.id(), false).stream()
                     .noneMatch(a -> a.debit().subtract(a.credit()).signum() != 0);
-            case REVENUE_TRANSFER -> closing.amounts(ledgerId, period.id(), "REVENUE").stream()
+            case REVENUE_TRANSFER -> transferNetAmounts(ledgerId, period.id(), true).stream()
                     .noneMatch(a -> a.debit().subtract(a.credit()).signum() != 0);
             case YEAR_END_PROFIT_TRANSFER -> {
                 if (!period.code().endsWith("-12")) {
@@ -411,9 +396,22 @@ public class DefaultPeriodClosingService implements PeriodClosingService, Period
         return record;
     }
 
-    private boolean hasNonZero(UUID ledgerId, UUID periodId, String category) {
-        return closing.amounts(ledgerId, periodId, category).stream()
-                .anyMatch(a -> a.debit().subtract(a.credit()).signum() != 0);
+    private List<PeriodClosingRepository.AccountAmount> transferAmounts(
+            UUID ledgerId, UUID periodId, boolean revenue) {
+        List<PeriodClosingRepository.AccountAmount> result = new ArrayList<>();
+        for (String category : revenue ? REVENUE_TRANSFER_CATEGORIES : EXPENSE_TRANSFER_CATEGORIES) {
+            result.addAll(closing.amounts(ledgerId, periodId, category));
+        }
+        return result;
+    }
+
+    private List<PeriodClosingRepository.AccountAmount> transferNetAmounts(
+            UUID ledgerId, UUID periodId, boolean revenue) {
+        List<PeriodClosingRepository.AccountAmount> result = new ArrayList<>();
+        for (String category : revenue ? REVENUE_TRANSFER_CATEGORIES : EXPENSE_TRANSFER_CATEGORIES) {
+            result.addAll(closing.netAmounts(ledgerId, periodId, category));
+        }
+        return result;
     }
 
     private String digest(String value) {

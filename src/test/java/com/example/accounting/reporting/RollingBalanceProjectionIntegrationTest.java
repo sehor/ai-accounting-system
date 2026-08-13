@@ -57,7 +57,7 @@ class RollingBalanceProjectionIntegrationTest {
         UUID february = period(ledgerId, "2021-02");
         UUID cashParent = account(ledgerId, "1001");
         UUID cashLeaf = ledgers.createAccount(actorId, ledgerId,
-                new LedgerRequests.AccountCreate("100101", "银行存款", "ASSET", "DEBIT")).id();
+                new LedgerRequests.AccountCreate("100101", "银行存款", "CURRENT_ASSET", "DEBIT")).id();
         UUID capital = account(ledgerId, "3001");
 
         ledgers.replaceOpeningBalances(actorId, ledgerId, List.of(
@@ -129,7 +129,7 @@ class RollingBalanceProjectionIntegrationTest {
         UUID january = period(ledgerId, "2024-01");
         UUID cashParent = account(ledgerId, "1001");
         UUID cashLeaf = ledgers.createAccount(actorId, ledgerId,
-                new LedgerRequests.AccountCreate("100101", "negative cash", "ASSET", "DEBIT")).id();
+                new LedgerRequests.AccountCreate("100101", "negative cash", "CURRENT_ASSET", "DEBIT")).id();
         UUID capital = account(ledgerId, "3001");
 
         ledgers.replaceOpeningBalances(actorId, ledgerId, List.of(
@@ -183,13 +183,13 @@ class RollingBalanceProjectionIntegrationTest {
                         actorId, ledgerId, range, 1, 50).data().stream()
                 .filter(line -> line.accountId().equals(cash)).findFirst().orElseThrow();
         assertThat(general.normalBalance()).isEqualTo("DEBIT");
-        assertThat(general.openingDirection()).isEqualTo("CREDIT");
-        assertThat(general.openingBalance()).isEqualByComparingTo("10.00");
+        assertThat(general.openingDirection()).isEqualTo("DEBIT");
+        assertThat(general.openingBalance()).isEqualByComparingTo("-10.00");
 
         ReportResponses.SubLedgerPage detail = reports.subLedgerBook(
                 actorId, ledgerId, range, cash, 1, 50);
-        assertThat(detail.openingDirection()).isEqualTo("CREDIT");
-        assertThat(detail.openingBalance()).isEqualByComparingTo("10.00");
+        assertThat(detail.openingDirection()).isEqualTo("DEBIT");
+        assertThat(detail.openingBalance()).isEqualByComparingTo("-10.00");
     }
 
     @Test
@@ -203,16 +203,16 @@ class RollingBalanceProjectionIntegrationTest {
         UUID february = period(ledgerId, "2021-02");
         UUID cashParent = account(ledgerId, "1001");
         UUID firstBranch = ledgers.createAccount(actorId, ledgerId,
-                new LedgerRequests.AccountCreate("100101", "cash branch", "ASSET", "DEBIT",
+                new LedgerRequests.AccountCreate("100101", "cash branch", "CURRENT_ASSET", "DEBIT",
                         cashParent, false, null, false, null, List.of())).id();
         UUID thirdLevel = ledgers.createAccount(actorId, ledgerId,
-                new LedgerRequests.AccountCreate("10010101", "cash third level", "ASSET", "DEBIT",
+                new LedgerRequests.AccountCreate("10010101", "cash third level", "CURRENT_ASSET", "DEBIT",
                         firstBranch, false, null, false, null, List.of())).id();
         UUID fourthLevelLeaf = ledgers.createAccount(actorId, ledgerId,
-                new LedgerRequests.AccountCreate("1001010101", "cash fourth level", "ASSET", "DEBIT",
+                new LedgerRequests.AccountCreate("1001010101", "cash fourth level", "CURRENT_ASSET", "DEBIT",
                         thirdLevel, false, null, false, null, List.of())).id();
         UUID secondChild = ledgers.createAccount(actorId, ledgerId,
-                new LedgerRequests.AccountCreate("100102", "cash two", "ASSET", "DEBIT",
+                new LedgerRequests.AccountCreate("100102", "cash two", "CURRENT_ASSET", "DEBIT",
                         cashParent, false, null, false, null, List.of())).id();
         UUID capital = account(ledgerId, "3001");
 

@@ -7,6 +7,7 @@ import com.example.accounting.identity.CurrentUserResolver;
 import com.example.accounting.identity.IdentityService;
 import com.example.accounting.identity.UserResponse;
 import com.example.accounting.ledger.AccountCodeRule;
+import com.example.accounting.ledger.AccountCategory;
 import com.example.accounting.ledger.AccountingStandard;
 import com.example.accounting.ledger.AccountingStandardCatalog;
 import com.example.accounting.ledger.LedgerAccessService;
@@ -58,9 +59,6 @@ public class DefaultLedgerService implements LedgerService {
     private static final Set<LedgerRole> AGENT_ACCOUNT_ROLES = Set.of(
             LedgerRole.OWNER, LedgerRole.EDITOR, LedgerRole.AGENT);
     private static final Set<LedgerRole> OWNER_ROLE = Set.of(LedgerRole.OWNER);
-    private static final Set<String> ACCOUNT_CATEGORIES = Set.of(
-            "ASSET", "LIABILITY", "EQUITY", "COST", "REVENUE", "EXPENSE");
-
     private final LedgerRepository ledgers;
     private final AccountManagementRepository accounts;
     private final LedgerAccessService ledgerAccess;
@@ -215,6 +213,11 @@ public class DefaultLedgerService implements LedgerService {
         String name = text(request.name(), before.name()).trim();
         String category = text(request.category(), before.category()).toUpperCase(Locale.ROOT);
         String normalBalance = text(request.normalBalance(), before.normalBalance()).toUpperCase(Locale.ROOT);
+        if (request.normalBalance() != null
+                && !request.normalBalance().trim().toUpperCase(Locale.ROOT).equals(before.normalBalance())) {
+            throw problem(409, "ACCOUNT_NORMAL_BALANCE_IMMUTABLE", "Account normal balance is immutable",
+                    "The balance direction of an account cannot change after it is created");
+        }
         String status = text(request.status(), before.status()).toUpperCase(Locale.ROOT);
         boolean cashFlowRequired = request.cashFlowRequired() == null
                 ? before.cashFlowRequired() : request.cashFlowRequired();
@@ -226,9 +229,8 @@ public class DefaultLedgerService implements LedgerService {
         String unitName = quantityEnabled && unitSource != null ? unitSource.trim() : null;
         ParentResolution parent = resolveParent(ledgerId, accountId, code,
                 request.parentId() == null ? before.parentId() : request.parentId(),
-                category, normalBalance);
+                category);
         category = parent.category();
-        normalBalance = parent.normalBalance();
 
         validateAccountValues(ledgerId, code, name, category, normalBalance, cashFlowRequired,
                 defaultCashFlowItemId, quantityEnabled, unitName, request.dimensionRequirements());
@@ -237,7 +239,7 @@ public class DefaultLedgerService implements LedgerService {
         }
         boolean structuralChange = !code.equals(before.code())
                 || !java.util.Objects.equals(parent.parentId(), before.parentId())
-                || !category.equals(before.category()) || !normalBalance.equals(before.normalBalance());
+                || !category.equals(before.category());
         boolean coreChange = structuralChange
                 || cashFlowRequired != before.cashFlowRequired()
                 || !java.util.Objects.equals(defaultCashFlowItemId, before.defaultCashFlowItemId())
@@ -687,9 +689,8 @@ public class DefaultLedgerService implements LedgerService {
         boolean quantityEnabled = Boolean.TRUE.equals(request.quantityEnabled());
         String unitName = request.unitName() == null ? null : request.unitName().trim();
         ParentResolution parent = resolveParent(
-                ledgerId, null, code, request.parentId(), category, normalBalance);
+                ledgerId, null, code, request.parentId(), category);
         category = parent.category();
-        normalBalance = parent.normalBalance();
         validateAccountValues(ledgerId, code, name, category, normalBalance, cashFlowRequired,
                 request.defaultCashFlowItemId(), quantityEnabled, unitName,
                 request.dimensionRequirements());
@@ -735,7 +736,7 @@ public class DefaultLedgerService implements LedgerService {
 
     private ParentResolution resolveParent(
             UUID ledgerId, UUID accountId, String code, UUID requestedParentId,
-            String category, String normalBalance) {
+            String category) {
         AccountCodeRule rule = accounts.codeRule(ledgerId);
         int level = rule.levelOf(code);
         if (level == 0) {
@@ -745,7 +746,7 @@ public class DefaultLedgerService implements LedgerService {
             if (requestedParentId != null) {
                 throw accountInvalid("A level-one account cannot have a parent");
             }
-            return new ParentResolution(null, 1, category, normalBalance);
+            return new ParentResolution(null, 1, category);
         }
         String parentCode = rule.parentCode(code).orElseThrow();
         LedgerResponses.Account parent = accounts.findByCode(ledgerId, parentCode).orElseThrow(() ->
@@ -756,10 +757,10 @@ public class DefaultLedgerService implements LedgerService {
                 || parent.level() + 1 != level) {
             throw accountInvalid("The parent does not match the account code");
         }
-        if (!category.equals(parent.category()) || !normalBalance.equals(parent.normalBalance())) {
-            throw accountInvalid("A child must inherit category and normal balance from its parent");
+        if (!category.equals(parent.category())) {
+            throw accountInvalid("A child must inherit its category from its parent");
         }
-        return new ParentResolution(parent.id(), level, parent.category(), parent.normalBalance());
+        return new ParentResolution(parent.id(), level, parent.category());
     }
 
     private void validateAccountValues(
@@ -767,7 +768,7 @@ public class DefaultLedgerService implements LedgerService {
             boolean cashFlowRequired, UUID defaultCashFlowItemId, boolean quantityEnabled,
             String unitName, List<LedgerRequests.DimensionRequirement> dimensions) {
         if (code.length() > 32 || name.isBlank() || name.length() > 200
-                || !ACCOUNT_CATEGORIES.contains(category)
+                || !AccountCategory.isValid(category)
                 || !Set.of("DEBIT", "CREDIT").contains(normalBalance)) {
             throw accountInvalid("Code, name, category, and normal balance are invalid");
         }
@@ -922,6 +923,6 @@ public class DefaultLedgerService implements LedgerService {
     }
 
     private record ParentResolution(
-            UUID parentId, int level, String category, String normalBalance) {
+            UUID parentId, int level, String category) {
     }
 }

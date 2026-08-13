@@ -59,14 +59,14 @@ describe('AccountsPage', () => {
       </QueryClientProvider>,
     )
 
-    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('?category=ASSET'))
+    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('?category=CURRENT_ASSET'))
     fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Created at' }))
     fireEvent.click(await screen.findByText('2026-08（2026-08-01 ~ 2026-08-31）'))
     expect(screen.getByRole('combobox', { name: 'Created at' }).closest('.ant-select'))
       .toHaveTextContent('2026-08')
 
-    screen.getByRole('tab', { name: '负债' }).click()
-    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('?category=LIABILITY'))
+    screen.getByRole('tab', { name: '流动负债' }).click()
+    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('?category=CURRENT_LIABILITY'))
     expect(screen.getByRole('combobox', { name: 'Created at' }).closest('.ant-select'))
       .toHaveTextContent('2026-08')
   })

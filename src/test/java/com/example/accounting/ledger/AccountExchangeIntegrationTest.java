@@ -77,8 +77,8 @@ class AccountExchangeIntegrationTest {
         assertThat(accounts).filteredOn(account -> account.code().equals("10020001"))
                 .singleElement().satisfies(account -> {
                     assertThat(account.parentId()).isEqualTo(parentId);
-                    assertThat(account.category()).isEqualTo("ASSET");
-                    assertThat(account.normalBalance()).isEqualTo("DEBIT");
+                    assertThat(account.category()).isEqualTo("CURRENT_ASSET");
+                    assertThat(account.normalBalance()).isEqualTo("CREDIT");
                 });
     }
 
@@ -100,7 +100,7 @@ class AccountExchangeIntegrationTest {
         AccountExchangeService.Preview preview = exchange.preview(
                 owner, ledgerId, AccountExchangeService.Format.STANDARD,
                 "accounts.xlsx", exported.length, new ByteArrayInputStream(exported));
-        assertThat(preview.rows()).hasSize(15);
+        assertThat(preview.rows()).hasSize(17);
         assertThat(preview.rows()).allMatch(row -> "MAP".equals(row.action())
                 && row.targetAccountId() != null && row.issues().isEmpty());
         exchange.decideAll(owner, ledgerId, preview.id(), preview.rows().stream()
@@ -109,7 +109,7 @@ class AccountExchangeIntegrationTest {
                 .toList());
         AccountExchangeService.Preview committed = exchange.commit(owner, ledgerId, preview.id());
         assertThat(committed.status()).isEqualTo("COMMITTED");
-        assertThat(ledgers.listAccounts(owner, ledgerId)).hasSize(15);
+        assertThat(ledgers.listAccounts(owner, ledgerId)).hasSize(17);
     }
 
     @Test
@@ -128,15 +128,15 @@ class AccountExchangeIntegrationTest {
         jdbc.update("update ledger_account set created_at = ? where ledger_id = ?",
                 startInclusive.minusDays(1), ledgerId);
         LedgerResponses.Account parent = ledgers.createAccount(owner, ledgerId,
-                new LedgerRequests.AccountCreate("1998", "期间外父科目", "ASSET", "DEBIT"));
+                new LedgerRequests.AccountCreate("1998", "期间外父科目", "CURRENT_ASSET", "DEBIT"));
         jdbc.update("update ledger_account set created_at = ? where ledger_id = ? and id = ?",
                 startInclusive.minusDays(1), ledgerId, parent.id());
         ledgers.createAccount(owner, ledgerId,
                 new LedgerRequests.AccountCreate(
-                        "199801", "期间内子科目", "ASSET", "DEBIT", parent.id(),
+                        "199801", "期间内子科目", "CURRENT_ASSET", "DEBIT", parent.id(),
                         false, null, false, null, List.of()));
         ledgers.createAccount(owner, ledgerId,
-                new LedgerRequests.AccountCreate("1997", "期间外科目", "ASSET", "DEBIT"));
+                new LedgerRequests.AccountCreate("1997", "期间外科目", "CURRENT_ASSET", "DEBIT"));
         jdbc.update("update ledger_account set created_at = ? where ledger_id = ? and code = ?",
                 startInclusive, ledgerId, "199801");
         jdbc.update("update ledger_account set created_at = ? where ledger_id = ? and code = ?",
@@ -266,7 +266,7 @@ class AccountExchangeIntegrationTest {
         UUID operating = ledgers.listCashFlowItems(owner, source).stream()
                 .filter(item -> item.code().equals("OPERATING")).findFirst().orElseThrow().id();
         ledgers.createAccount(owner, source, new LedgerRequests.AccountCreate(
-                "100101", "区域现金", "ASSET", "DEBIT", null, true, operating,
+                "100101", "区域现金", "CURRENT_ASSET", "DEBIT", null, true, operating,
                 false, null, List.of(new LedgerRequests.DimensionRequirement(region.id(), true))));
         byte[] exported = exchange.export(owner, source, AccountExchangeService.Format.STANDARD);
 

@@ -108,7 +108,7 @@ class Stage4ReportingTest {
                         LocalDate.of(2026, 1, 1), false)).id();
         UUID periodId = id("select id from accounting_period where ledger_id = ? and period_code = '2026-01'", ledgerId);
         UUID cash = ledgerService.createAccount(userId, ledgerId,
-                new LedgerRequests.AccountCreate("100101", "库存现金-人民币", "ASSET", "DEBIT")).id();
+                new LedgerRequests.AccountCreate("100101", "库存现金-人民币", "CURRENT_ASSET", "DEBIT")).id();
         UUID capital = id("select id from ledger_account where ledger_id = ? and code = '3001'", ledgerId);
         VoucherResponses.Voucher voucher = voucherService.create(userId, ledgerId, new VoucherRequests.Create(
                 periodId, LocalDate.of(2026, 1, 15), "记", "2", "Parent rollup",

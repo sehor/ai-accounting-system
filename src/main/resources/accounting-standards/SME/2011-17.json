@@ -5,26 +5,27 @@
   "effectiveDate": "2013-01-01",
   "accountCodeRule": {"level2Width": 2, "level3Width": 2, "level4Width": 2},
   "accounts": [
-    {"code":"1001","name":"库存现金","category":"ASSET","normalBalance":"DEBIT","cashFlowRequired":false,"quantityEnabled":false},
-    {"code":"1002","name":"银行存款","category":"ASSET","normalBalance":"DEBIT","cashFlowRequired":false,"quantityEnabled":false},
-    {"code":"1122","name":"应收账款","category":"ASSET","normalBalance":"DEBIT","cashFlowRequired":false,"quantityEnabled":false},
-    {"code":"1403","name":"原材料","category":"ASSET","normalBalance":"DEBIT","cashFlowRequired":false,"quantityEnabled":false},
-    {"code":"1601","name":"固定资产","category":"ASSET","normalBalance":"DEBIT","cashFlowRequired":false,"quantityEnabled":false},
-    {"code":"1701","name":"无形资产","category":"ASSET","normalBalance":"DEBIT","cashFlowRequired":false,"quantityEnabled":false},
-    {"code":"2001","name":"短期借款","category":"LIABILITY","normalBalance":"CREDIT","cashFlowRequired":false,"quantityEnabled":false},
-    {"code":"2202","name":"应付账款","category":"LIABILITY","normalBalance":"CREDIT","cashFlowRequired":false,"quantityEnabled":false},
-    {"code":"2241","name":"其他应付款","category":"LIABILITY","normalBalance":"CREDIT","cashFlowRequired":false,"quantityEnabled":false},
+    {"code":"1001","name":"库存现金","category":"CURRENT_ASSET","normalBalance":"DEBIT","cashFlowRequired":false,"quantityEnabled":false},
+    {"code":"1002","name":"银行存款","category":"CURRENT_ASSET","normalBalance":"DEBIT","cashFlowRequired":false,"quantityEnabled":false},
+    {"code":"1122","name":"应收账款","category":"CURRENT_ASSET","normalBalance":"DEBIT","cashFlowRequired":false,"quantityEnabled":false},
+    {"code":"1403","name":"原材料","category":"CURRENT_ASSET","normalBalance":"DEBIT","cashFlowRequired":false,"quantityEnabled":false},
+    {"code":"1601","name":"固定资产","category":"NON_CURRENT_ASSET","normalBalance":"DEBIT","cashFlowRequired":false,"quantityEnabled":false},
+    {"code":"1701","name":"无形资产","category":"NON_CURRENT_ASSET","normalBalance":"DEBIT","cashFlowRequired":false,"quantityEnabled":false},
+    {"code":"2001","name":"短期借款","category":"CURRENT_LIABILITY","normalBalance":"CREDIT","cashFlowRequired":false,"quantityEnabled":false},
+    {"code":"2202","name":"应付账款","category":"CURRENT_LIABILITY","normalBalance":"CREDIT","cashFlowRequired":false,"quantityEnabled":false},
+    {"code":"2241","name":"其他应付款","category":"CURRENT_LIABILITY","normalBalance":"CREDIT","cashFlowRequired":false,"quantityEnabled":false},
     {"code":"3001","name":"实收资本","category":"EQUITY","normalBalance":"CREDIT","cashFlowRequired":false,"quantityEnabled":false},
     {"code":"3103","name":"本年利润","category":"EQUITY","normalBalance":"CREDIT","cashFlowRequired":false,"quantityEnabled":false},
+    {"code":"3104","name":"未分配利润","category":"EQUITY","normalBalance":"CREDIT","cashFlowRequired":false,"quantityEnabled":false},
     {"code":"4001","name":"生产成本","category":"COST","normalBalance":"DEBIT","cashFlowRequired":false,"quantityEnabled":false},
-    {"code":"5001","name":"主营业务收入","category":"REVENUE","normalBalance":"CREDIT","cashFlowRequired":false,"quantityEnabled":false},
-    {"code":"5401","name":"主营业务成本","category":"EXPENSE","normalBalance":"DEBIT","cashFlowRequired":false,"quantityEnabled":false},
-    {"code":"5601","name":"销售费用","category":"EXPENSE","normalBalance":"DEBIT","cashFlowRequired":false,"quantityEnabled":false},
-    {"code":"5602","name":"管理费用","category":"EXPENSE","normalBalance":"DEBIT","cashFlowRequired":false,"quantityEnabled":false},
-    {"code":"5603","name":"财务费用","category":"EXPENSE","normalBalance":"DEBIT","cashFlowRequired":false,"quantityEnabled":false}
+    {"code":"5001","name":"主营业务收入","category":"OPERATING_REVENUE","normalBalance":"CREDIT","cashFlowRequired":false,"quantityEnabled":false},
+    {"code":"5401","name":"主营业务成本","category":"OPERATING_COST_AND_TAX","normalBalance":"DEBIT","cashFlowRequired":false,"quantityEnabled":false},
+    {"code":"5601","name":"销售费用","category":"PERIOD_EXPENSE","normalBalance":"DEBIT","cashFlowRequired":false,"quantityEnabled":false},
+    {"code":"5602","name":"管理费用","category":"PERIOD_EXPENSE","normalBalance":"DEBIT","cashFlowRequired":false,"quantityEnabled":false},
+    {"code":"5603","name":"财务费用","category":"PERIOD_EXPENSE","normalBalance":"DEBIT","cashFlowRequired":false,"quantityEnabled":false}
   ],
   "formulas": [
-    {"code":"BALANCE_SHEET","name":"资产负债表","definition":{"type":"balance-sheet","debitCategories":["ASSET"],"creditCategories":["LIABILITY","EQUITY"],"statutory":{"template":"SME-2011-17","lineCount":53,"periodMode":"CLOSING_AND_OPENING","allowedOperations":["ACCOUNT_BALANCE","LINEAR_COMBINATION"],"groups":[
+    {"code":"BALANCE_SHEET","name":"资产负债表","definition":{"type":"balance-sheet","debitCategories":["CURRENT_ASSET","NON_CURRENT_ASSET"],"creditCategories":["CURRENT_LIABILITY","NON_CURRENT_LIABILITY","EQUITY"],"statutory":{"template":"SME-2011-17","lineCount":53,"periodMode":"CLOSING_AND_OPENING","allowedOperations":["ACCOUNT_BALANCE","LINEAR_COMBINATION"],"groups":[
       {"key":"LEFT","title":"资产","lines":[
         {"key":"bs-0","lineNo":0,"name":"流动资产：","rowType":"SECTION","operation":{"kind":"LINEAR_COMBINATION"}},
         {"key":"bs-1","lineNo":1,"name":"货币资金","operation":{"kind":"ACCOUNT_BALANCE","side":"DEBIT","accounts":[{"code":"1001"},{"code":"1002"},{"code":"1012"}]}},
@@ -86,7 +87,7 @@
         {"key":"bs-53","lineNo":53,"name":"负债和所有者权益（或股东权益）总计","rowType":"TOTAL","operation":{"kind":"LINEAR_COMBINATION","components":[{"key":"bs-47"},{"key":"bs-52"}]}}
       ]}
     ]}}},
-    {"code":"INCOME_STATEMENT","name":"利润表","definition":{"type":"income-statement","revenueCategories":["REVENUE"],"expenseCategories":["COST","EXPENSE"],"statutory":{"template":"SME-2011-17","lineCount":32,"periodMode":"YEAR_TO_DATE_AND_MONTH","allowedOperations":["ACCOUNT_ACTIVITY","LINEAR_COMBINATION"],"groups":[
+    {"code":"INCOME_STATEMENT","name":"利润表","definition":{"type":"income-statement","revenueCategories":["OPERATING_REVENUE","OTHER_INCOME"],"expenseCategories":["COST","OPERATING_COST_AND_TAX","OTHER_EXPENSE","PERIOD_EXPENSE","INCOME_TAX","PRIOR_YEAR_ADJUSTMENT"],"statutory":{"template":"SME-2011-17","lineCount":32,"periodMode":"YEAR_TO_DATE_AND_MONTH","allowedOperations":["ACCOUNT_ACTIVITY","LINEAR_COMBINATION"],"groups":[
       {"key":"FULL","title":"利润表","lines":[
         {"key":"is-1","lineNo":1,"name":"一、营业收入","rowType":"SECTION","operation":{"kind":"ACCOUNT_ACTIVITY","side":"CREDIT","accounts":[{"code":"5001"},{"code":"5051"},{"code":"5101"}]}},
         {"key":"is-2","lineNo":2,"name":"减：营业成本","operation":{"kind":"ACCOUNT_ACTIVITY","side":"DEBIT","accounts":[{"code":"5401"},{"code":"5405"}]}},

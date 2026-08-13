@@ -39,7 +39,7 @@ class VoucherAccountControlsIntegrationTest {
         LedgerResponses.CashFlowItem cashFlow = ledgers.listCashFlowItems(owner, ledgerId).getFirst();
         LedgerResponses.Account controlled = ledgers.createAccount(owner, ledgerId,
                 new LedgerRequests.AccountCreate(
-                        "1410", "受控资产", "ASSET", "DEBIT", null,
+                        "1410", "受控资产", "CURRENT_ASSET", "DEBIT", null,
                         true, cashFlow.id(), true, "件",
                         List.of(new LedgerRequests.DimensionRequirement(customer.id(), true))));
         LedgerResponses.Account cash = ledgers.listAccounts(owner, ledgerId).stream()

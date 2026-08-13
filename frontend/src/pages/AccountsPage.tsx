@@ -6,18 +6,26 @@ import { apiFetch } from '../api/client'
 import type { Account, DimensionType, LedgerRole, Period } from '../api/types'
 import { useAuth } from '../auth/AuthProvider'
 import { useWorkspaceSearchParams } from '../components/workspaceSearch'
-import { AccountsTab, type AccountCategoryTab } from './AccountsTab'
+import { AccountsTab, ACCOUNT_CATEGORY_LABELS, type AccountCategoryTab } from './AccountsTab'
 
 const categories: Array<{ key: AccountCategoryTab; label: string }> = [
-  { key: 'ASSET', label: '资产' },
-  { key: 'LIABILITY', label: '负债' },
-  { key: 'EQUITY', label: '权益' },
-  { key: 'COST', label: '成本' },
-  { key: 'PROFIT_LOSS', label: '损益' },
+  { key: 'CURRENT_ASSET', label: ACCOUNT_CATEGORY_LABELS.CURRENT_ASSET },
+  { key: 'NON_CURRENT_ASSET', label: ACCOUNT_CATEGORY_LABELS.NON_CURRENT_ASSET },
+  { key: 'CURRENT_LIABILITY', label: ACCOUNT_CATEGORY_LABELS.CURRENT_LIABILITY },
+  { key: 'NON_CURRENT_LIABILITY', label: ACCOUNT_CATEGORY_LABELS.NON_CURRENT_LIABILITY },
+  { key: 'EQUITY', label: ACCOUNT_CATEGORY_LABELS.EQUITY },
+  { key: 'COST', label: ACCOUNT_CATEGORY_LABELS.COST },
+  { key: 'OPERATING_REVENUE', label: ACCOUNT_CATEGORY_LABELS.OPERATING_REVENUE },
+  { key: 'OTHER_INCOME', label: ACCOUNT_CATEGORY_LABELS.OTHER_INCOME },
+  { key: 'OPERATING_COST_AND_TAX', label: ACCOUNT_CATEGORY_LABELS.OPERATING_COST_AND_TAX },
+  { key: 'OTHER_EXPENSE', label: ACCOUNT_CATEGORY_LABELS.OTHER_EXPENSE },
+  { key: 'PERIOD_EXPENSE', label: ACCOUNT_CATEGORY_LABELS.PERIOD_EXPENSE },
+  { key: 'INCOME_TAX', label: ACCOUNT_CATEGORY_LABELS.INCOME_TAX },
+  { key: 'PRIOR_YEAR_ADJUSTMENT', label: ACCOUNT_CATEGORY_LABELS.PRIOR_YEAR_ADJUSTMENT },
 ]
 
 function categoryFromSearch(value: string | null): AccountCategoryTab {
-  return categories.some((category) => category.key === value) ? value as AccountCategoryTab : 'ASSET'
+  return categories.some((category) => category.key === value) ? value as AccountCategoryTab : 'CURRENT_ASSET'
 }
 
 export function AccountsPage() {

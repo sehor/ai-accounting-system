@@ -43,13 +43,13 @@ beforeEach(() => {
     })
     if (path.endsWith('/periods')) return Promise.resolve(periods)
     if (path.endsWith('/accounts')) return Promise.resolve([{
-      id: 'account-1', ledgerId: 'ledger-1', code: '1002', name: '银行存款', category: 'ASSET',
+      id: 'account-1', ledgerId: 'ledger-1', code: '1002', name: '银行存款', category: 'CURRENT_ASSET',
       normalBalance: 'DEBIT', status: 'ACTIVE', parentId: null, level: 1, isLeaf: false,
       isTemplate: false, hasBusinessUsage: true, coreLocked: false, legacyCode: false, version: 0,
       cashFlowRequired: false, defaultCashFlowItemId: null, quantityEnabled: false, unitName: null,
       dimensionRequirements: [],
     }, {
-      id: 'account-2', ledgerId: 'ledger-1', code: '100201', name: '基本户', category: 'ASSET',
+      id: 'account-2', ledgerId: 'ledger-1', code: '100201', name: '基本户', category: 'CURRENT_ASSET',
       normalBalance: 'DEBIT', status: 'ACTIVE', parentId: 'account-1', level: 2, isLeaf: true,
       isTemplate: false, hasBusinessUsage: true, coreLocked: false, legacyCode: false, version: 0,
       cashFlowRequired: false, defaultCashFlowItemId: null, quantityEnabled: false, unitName: null,

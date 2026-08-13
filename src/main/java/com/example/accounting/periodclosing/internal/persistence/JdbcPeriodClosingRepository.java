@@ -121,6 +121,25 @@ public class JdbcPeriodClosingRepository implements PeriodClosingRepository {
     }
 
     @Override
+    public List<AccountAmount> netAmounts(UUID ledgerId, UUID periodId, String category) {
+        return jdbc.query("""
+                select a.id, a.code, a.name, a.category,
+                    coalesce(sum(case when v.id is not null and vl.side = 'DEBIT' then vl.base_amount else 0 end), 0) debit,
+                    coalesce(sum(case when v.id is not null and vl.side = 'CREDIT' then vl.base_amount else 0 end), 0) credit
+                from ledger_account a
+                left join voucher_line vl on vl.ledger_id = a.ledger_id and vl.account_id = a.id
+                left join voucher v on v.ledger_id = vl.ledger_id and v.id = vl.voucher_id
+                    and v.period_id = ? and v.status = 'POSTED' and v.deleted_at is null
+                where a.ledger_id = ? and a.category = ? and a.status = 'ACTIVE'
+                  and not exists (select 1 from ledger_account child
+                                  where child.ledger_id = a.ledger_id and child.parent_id = a.id)
+                group by a.id, a.code, a.name, a.category order by a.code
+                """, (rs, row) -> new AccountAmount(rs.getObject("id", UUID.class), rs.getString("code"),
+                rs.getString("name"), rs.getString("category"), rs.getBigDecimal("debit"),
+                rs.getBigDecimal("credit")), periodId, ledgerId, category);
+    }
+
+    @Override
     public Optional<AccountAmount> amountThrough(UUID ledgerId, String periodCode, UUID accountId, UUID excludedVoucherId) {
         return Optional.ofNullable(jdbc.query("""
                 select a.id, a.code, a.name, a.category,

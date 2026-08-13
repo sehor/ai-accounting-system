@@ -147,7 +147,7 @@ class FinanceMcpToolsIntegrationTest {
         ledgerService.addMember(ownerId, ledgerId, new LedgerRequests.AddMember(agentId, LedgerRole.AGENT));
         authenticate(agentId);
         var request = new LedgerRequests.AccountCreate(
-                "100201", "银行存款-建设银行", "ASSET", "DEBIT");
+                "100201", "银行存款-建设银行", "CURRENT_ASSET", "DEBIT");
 
         var account = tools.ensureAccount(ledgerId, request);
         var retried = tools.ensureAccount(ledgerId, request);
@@ -168,7 +168,7 @@ class FinanceMcpToolsIntegrationTest {
         assertThat(tools.listPeriods(ledgerId))
                 .anyMatch(period -> period.periodCode().equals("2026-06"));
         assertThatThrownBy(() -> tools.ensureAccount(ledgerId, new LedgerRequests.AccountCreate(
-                "100201", "冲突科目", "ASSET", "DEBIT")))
+                "100201", "冲突科目", "CURRENT_ASSET", "DEBIT")))
                 .isInstanceOf(ApiProblemException.class);
     }
 
