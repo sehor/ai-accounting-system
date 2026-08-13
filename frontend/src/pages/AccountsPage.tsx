@@ -63,7 +63,7 @@ export function AccountsPage() {
     <Typography.Title level={1}>科目</Typography.Title>
     <Tabs className="account-category-tabs" activeKey={category} onChange={changeCategory}
       items={categories.map((item) => ({ key: item.key, label: item.label }))} />
-    <AccountsTab key={`${ledgerId}:${category}`} ledgerId={ledgerId} session={session!}
+    <AccountsTab ledgerId={ledgerId} session={session!}
       accounts={accounts.data || []} dimensionTypes={dimensionTypes.data || []} periods={periods.data || []}
       loading={accounts.isLoading} writable={['OWNER', 'EDITOR'].includes(ledgerRole.data?.role || '')}
       category={category} onChanged={() => void client.invalidateQueries({ queryKey: ['accounts', ledgerId] })} />

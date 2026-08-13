@@ -1,6 +1,7 @@
 package com.example.accounting.ledger;
 
 import java.time.LocalDate;
+import java.time.OffsetDateTime;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.UUID;
@@ -45,12 +46,19 @@ public final class LedgerResponses {
             UUID defaultCashFlowItemId,
             boolean quantityEnabled,
             String unitName,
-            List<DimensionRequirement> dimensionRequirements) {
+            List<DimensionRequirement> dimensionRequirements,
+            OffsetDateTime createdAt) {
 
         public Account(UUID id, UUID ledgerId, String code, String name, String category,
                        String normalBalance, String status) {
             this(id, ledgerId, code, name, category, normalBalance, status, null, 1,
-                    true, false, false, false, false, 0, false, null, false, null, List.of());
+                    true, false, false, false, false, 0, false, null, false, null, List.of(), null);
+        }
+
+        public Account(UUID id, UUID ledgerId, String code, String name, String category,
+                       String normalBalance, String status, OffsetDateTime createdAt) {
+            this(id, ledgerId, code, name, category, normalBalance, status, null, 1,
+                    true, false, false, false, false, 0, false, null, false, null, List.of(), createdAt);
         }
     }
 

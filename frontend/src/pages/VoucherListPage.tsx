@@ -6,7 +6,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { ApiError, apiFetch, apiFetchWithHeaders, createIdempotencyKey, jsonBody } from '../api/client'
 import type { Account, KingdeeImportResult, Voucher, VoucherLine } from '../api/types'
 import { useAuth } from '../auth/AuthProvider'
-import { PeriodSelector, usePeriodFilter } from '../components/PeriodSelector'
+import { PeriodRangeSelector, usePeriodRangeFilter } from '../components/PeriodSelector'
 import { useWorkspaceSearchParams } from '../components/workspaceSearch'
 
 type DisplayRow = {
@@ -28,6 +28,11 @@ const statusColor = (status: string) => ({
 const amount = (value?: string) => value
   ? Number(value).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
   : ''
+const periodLabel = (periodCode: string) => `${periodCode.slice(0, 4)}年第${Number(periodCode.slice(5))}期`
+const laterDate = (first?: string, second?: string) => first && second
+  ? (first > second ? first : second) : (first || second || '')
+const earlierDate = (first?: string, second?: string) => first && second
+  ? (first < second ? first : second) : (first || second || '')
 
 export function VoucherListPage() {
   const { ledgerId = '' } = useParams()
@@ -36,7 +41,7 @@ export function VoucherListPage() {
   const client = useQueryClient()
   const { message } = AntApp.useApp()
   const [search, setSearch] = useWorkspaceSearchParams()
-  const { periods, periodCode, setPeriodCode } = usePeriodFilter(ledgerId)
+  const { periods, periodFrom, periodTo, setPeriodRange } = usePeriodRangeFilter(ledgerId)
   const limit = Number(search.get('limit') || 20)
   const offset = Number(search.get('offset') || 0)
   const startDate = search.get('startDate') || ''
@@ -47,21 +52,27 @@ export function VoucherListPage() {
   const [bulkComment, setBulkComment] = useState('')
   const [exportOpen, setExportOpen] = useState(false)
   const [mergeEntries, setMergeEntries] = useState(false)
+  const periodStartDate = periods.data?.find((period) => period.periodCode === periodFrom)?.startDate
+  const periodEndDate = periods.data?.find((period) => period.periodCode === periodTo)?.endDate
+  const effectiveStartDate = laterDate(periodStartDate, startDate)
+  const effectiveEndDate = earlierDate(periodEndDate, endDate)
+  const rangeLabel = periodFrom && periodTo
+    ? `${periodLabel(periodFrom)}${periodFrom === periodTo ? '' : `至${periodLabel(periodTo)}`}`
+    : '当前期间范围'
 
   const query = useQuery({
-    queryKey: ['vouchers', ledgerId, periodCode, startDate, endDate, keyword, limit, offset],
+    queryKey: ['vouchers', ledgerId, periodFrom, periodTo, effectiveStartDate, effectiveEndDate, keyword, limit, offset],
     queryFn: async () => {
       const params = new URLSearchParams({ limit: String(limit), offset: String(offset) })
-      if (periodCode) params.set('periodCode', periodCode)
-      if (startDate) params.set('startDate', startDate)
-      if (endDate) params.set('endDate', endDate)
+      if (effectiveStartDate) params.set('startDate', effectiveStartDate)
+      if (effectiveEndDate) params.set('endDate', effectiveEndDate)
       if (keyword) params.set('keyword', keyword)
       const response = await apiFetchWithHeaders<Voucher[]>(
         `/ledgers/${ledgerId}/vouchers?${params}`, session!,
       )
       return { data: response.data, total: Number(response.headers.get('X-Total-Count') || response.data.length) }
     },
-    enabled: Boolean(session && ledgerId && (periodCode || startDate || endDate)),
+    enabled: Boolean(session && ledgerId && periodFrom && periodTo && effectiveStartDate && effectiveEndDate),
   })
   const accounts = useQuery({
     queryKey: ['accounts', ledgerId],
@@ -71,11 +82,7 @@ export function VoucherListPage() {
   const accountById = useMemo(
     () => new Map((accounts.data || []).map((account) => [account.id, account])), [accounts.data],
   )
-  const selectedPeriodId = periods.data?.find((period) => period.periodCode === periodCode)?.id
-  const rawVouchers = useMemo(() => query.data?.data || [], [query.data?.data])
-  const vouchers = useMemo(() => periodCode && selectedPeriodId
-    ? rawVouchers.filter((voucher) => voucher.periodId === selectedPeriodId) : rawVouchers,
-  [periodCode, rawVouchers, selectedPeriodId])
+  const vouchers = useMemo(() => query.data?.data || [], [query.data?.data])
   const total = query.data?.total || 0
   const rows = useMemo<DisplayRow[]>(() => vouchers.flatMap((voucher) => {
     const lines: Array<VoucherLine | null> = voucher.lines.length ? voucher.lines : [null]
@@ -131,9 +138,12 @@ export function VoucherListPage() {
     onError: (error) => message.error(error instanceof ApiError ? error.message : '金蝶凭证导入失败'),
   })
   const exportKingdee = useMutation({
-    mutationFn: (shouldMerge: boolean) => apiFetch<Blob>(
-      `/ledgers/${ledgerId}/data-exchange/kingdee:export?mergeEntries=${shouldMerge}`, session!,
-    ),
+    mutationFn: (shouldMerge: boolean) => {
+      const params = new URLSearchParams({ mergeEntries: String(shouldMerge) })
+      if (effectiveStartDate) params.set('startDate', effectiveStartDate)
+      if (effectiveEndDate) params.set('endDate', effectiveEndDate)
+      return apiFetch<Blob>(`/ledgers/${ledgerId}/data-exchange/kingdee:export?${params}`, session!)
+    },
     onSuccess: (blob) => {
       setExportOpen(false)
       const url = URL.createObjectURL(blob)
@@ -167,7 +177,6 @@ export function VoucherListPage() {
     const next = new URLSearchParams(search)
     if (value) next.set(name, value)
     else next.delete(name)
-    if (name !== 'keyword') next.delete('periodCode')
     next.delete('offset')
     next.delete('page')
     setSelectedKeys([])
@@ -175,15 +184,15 @@ export function VoucherListPage() {
   }
 
   return <section className="financial-page" aria-labelledby="voucher-list-title">
-    <div className="financial-toolbar">
+    <div className="financial-toolbar voucher-toolbar">
       <Typography.Title id="voucher-list-title" level={1}>查凭证</Typography.Title>
-      <PeriodSelector
-        label="凭证期间"
-        periodCode={periodCode}
+      <PeriodRangeSelector
+        periodFrom={periodFrom}
+        periodTo={periodTo}
         periods={periods.data || []}
         loading={periods.isLoading}
         refreshing={query.isFetching}
-        onChange={setPeriodCode}
+        onChange={setPeriodRange}
         onRefresh={() => void query.refetch()}
       />
       <Space wrap>
@@ -204,7 +213,8 @@ export function VoucherListPage() {
           importKingdee.mutate(file)
           return false
         }}><Button icon={<UploadOutlined />} loading={importKingdee.isPending}>导入金蝶凭证</Button></Upload>
-        <Button icon={<DownloadOutlined />} loading={exportKingdee.isPending} onClick={() => setExportOpen(true)}>导出金蝶凭证</Button>
+        <Button icon={<DownloadOutlined />} loading={exportKingdee.isPending}
+          disabled={!effectiveStartDate || !effectiveEndDate} onClick={() => setExportOpen(true)}>导出金蝶凭证</Button>
         {reviewable.length > 0 && <Button onClick={() => setBulkAction('approve')}>批量审核</Button>}
         {postable.length > 0 && <Button loading={batch.isPending} onClick={() => batch.mutate({ action: 'post', selectedVouchers: postable })}>批量记账</Button>}
         <Button type="primary" icon={<PlusOutlined />} onClick={() => navigate(`/ledgers/${ledgerId}/vouchers/new`)}>新建凭证</Button>
@@ -216,11 +226,9 @@ export function VoucherListPage() {
         rowKey="key"
         size="small"
         className="financial-table voucher-table"
-        loading={query.isLoading || !periodCode}
+        loading={query.isLoading || !periodFrom || !periodTo}
         dataSource={rows}
-        locale={{ emptyText: <Empty description={periodCode
-          ? `${periodCode.slice(0, 4)}年第${Number(periodCode.slice(5))}期没有凭证数据`
-          : '当前期间没有凭证数据'} /> }}
+        locale={{ emptyText: <Empty description={`${rangeLabel}没有凭证数据`} /> }}
         pagination={false}
         scroll={{ x: 1260 }}
         columns={[
@@ -263,6 +271,7 @@ export function VoucherListPage() {
     <Modal open={exportOpen} title="导出金蝶凭证" okText="导出" cancelText="取消"
       confirmLoading={exportKingdee.isPending} onCancel={() => setExportOpen(false)} onOk={() => exportKingdee.mutate(mergeEntries)}>
       <Space direction="vertical" size={4}>
+        <Typography.Text>导出范围：{rangeLabel}</Typography.Text>
         <Checkbox checked={mergeEntries} onChange={(event) => setMergeEntries(event.target.checked)}>合并同类分录</Checkbox>
         <Typography.Text type="secondary">仅合并同月、同银行，且一级科目符合“收款-主营、付款-日常、付款-主营、银行费用”之一的凭证。</Typography.Text>
       </Space>

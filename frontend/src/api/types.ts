@@ -62,6 +62,7 @@ export interface Account {
   quantityEnabled: boolean
   unitName: string | null
   dimensionRequirements: AccountDimensionRequirement[]
+  createdAt: string | null
 }
 
 export interface AccountDimensionRequirement {

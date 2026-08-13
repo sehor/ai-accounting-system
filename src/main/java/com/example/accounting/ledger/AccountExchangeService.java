@@ -375,21 +375,21 @@ public class AccountExchangeService {
             List<LedgerResponses.Account> accountRows, List<LedgerResponses.DimensionType> dimensions) {
         try (Workbook workbook = new XSSFWorkbook(); ByteArrayOutputStream output = new ByteArrayOutputStream()) {
             CellStyle header = headerStyle(workbook);
-            Map<UUID, String> codes = accountCodesForExport(ledger.id(), accountRows);
             if (format == Format.KINGDEE) {
-                Sheet sheet = workbook.createSheet("科目");
-                writeHeaders(sheet, KINGDEE_HEADERS, header);
+                Sheet sheet = workbook.createSheet("科目列表");
+                CellStyle nativeHeader = nativeKingdeeHeaderStyle(workbook);
+                CellStyle nativeBody = nativeKingdeeBodyStyle(workbook);
+                writeNativeKingdeeHeaders(sheet, nativeHeader);
                 int rowNo = 1;
                 for (LedgerResponses.Account account : accountRows) {
                     Row row = sheet.createRow(rowNo++);
                     values(row, List.of(account.code(), account.name(),
-                            nullable(codes.get(account.parentId())), account.category(),
-                            account.normalBalance(), account.status(),
-                            Boolean.toString(account.cashFlowRequired()),
-                            Boolean.toString(account.quantityEnabled()), nullable(account.unitName())));
+                            nativeKingdeeCategory(account), nativeKingdeeBalance(account.normalBalance())),
+                            nativeBody);
                 }
-                autosize(sheet, KINGDEE_HEADERS.size());
+                sizeNativeKingdeeSheet(sheet);
             } else {
+                Map<UUID, String> codes = accountCodesForExport(ledger.id(), accountRows);
                 metadata(workbook, ledger, rule, header);
                 accountsSheet(workbook, accountRows, codes, header);
                 dimensionSheets(workbook, dimensions, accountRows, header);
@@ -746,9 +746,86 @@ public class AccountExchangeService {
         return style;
     }
 
+    private void writeNativeKingdeeHeaders(Sheet sheet, CellStyle style) {
+        Row row = sheet.createRow(0);
+        row.setHeightInPoints(22);
+        for (int index = 0; index < NATIVE_KINGDEE_HEADERS.size(); index++) {
+            Cell cell = row.createCell(index);
+            cell.setCellValue(NATIVE_KINGDEE_HEADERS.get(index));
+            cell.setCellStyle(style);
+        }
+        sheet.createFreezePane(0, 1);
+    }
+
+    private CellStyle nativeKingdeeHeaderStyle(Workbook workbook) {
+        CellStyle style = nativeKingdeeBodyStyle(workbook);
+        Font font = workbook.createFont();
+        font.setBold(true);
+        font.setColor(IndexedColors.BLACK.getIndex());
+        style.setFont(font);
+        style.setFillForegroundColor(IndexedColors.GREY_25_PERCENT.getIndex());
+        style.setFillPattern(FillPatternType.SOLID_FOREGROUND);
+        style.setAlignment(org.apache.poi.ss.usermodel.HorizontalAlignment.CENTER);
+        style.setVerticalAlignment(org.apache.poi.ss.usermodel.VerticalAlignment.CENTER);
+        return style;
+    }
+
+    private CellStyle nativeKingdeeBodyStyle(Workbook workbook) {
+        CellStyle style = workbook.createCellStyle();
+        style.setBorderTop(org.apache.poi.ss.usermodel.BorderStyle.THIN);
+        style.setBorderBottom(org.apache.poi.ss.usermodel.BorderStyle.THIN);
+        style.setBorderLeft(org.apache.poi.ss.usermodel.BorderStyle.THIN);
+        style.setBorderRight(org.apache.poi.ss.usermodel.BorderStyle.THIN);
+        style.setVerticalAlignment(org.apache.poi.ss.usermodel.VerticalAlignment.CENTER);
+        return style;
+    }
+
+    private String nativeKingdeeCategory(LedgerResponses.Account account) {
+        String primaryCode = account.code().length() > 4 ? account.code().substring(0, 4) : account.code();
+        return switch (account.category()) {
+            case "ASSET" -> primaryCode.compareTo("1500") < 0 ? "流动资产" : "非流动资产";
+            case "LIABILITY" -> primaryCode.compareTo("2500") < 0 ? "流动负债" : "非流动负债";
+            case "EQUITY" -> "所有者权益";
+            case "COST" -> "成本";
+            case "REVENUE" -> primaryCode.compareTo("5100") < 0 ? "营业收入" : "其他收益";
+            case "EXPENSE" -> switch (primaryCode) {
+                case "5401", "5402", "5403" -> "营业成本及税金";
+                case "5601", "5602", "5603" -> "期间费用";
+                case "5801" -> "所得税";
+                case "6000" -> "以前年度损益调整";
+                default -> "其他损失";
+            };
+            default -> account.category();
+        };
+    }
+
+    private String nativeKingdeeBalance(String normalBalance) {
+        return switch (normalBalance) {
+            case "DEBIT" -> "借";
+            case "CREDIT" -> "贷";
+            default -> normalBalance;
+        };
+    }
+
+    private void sizeNativeKingdeeSheet(Sheet sheet) {
+        sheet.setDefaultRowHeightInPoints(18);
+        sheet.setColumnWidth(0, 18 * 256);
+        sheet.setColumnWidth(1, 22 * 256);
+        sheet.setColumnWidth(2, 18 * 256);
+        sheet.setColumnWidth(3, 18 * 256);
+    }
+
     private void values(Row row, List<String> values) {
         for (int index = 0; index < values.size(); index++) {
             row.createCell(index).setCellValue(safeCell(values.get(index)));
+        }
+    }
+
+    private void values(Row row, List<String> values, CellStyle style) {
+        for (int index = 0; index < values.size(); index++) {
+            Cell cell = row.createCell(index);
+            cell.setCellValue(safeCell(values.get(index)));
+            cell.setCellStyle(style);
         }
     }
 

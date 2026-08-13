@@ -3,6 +3,7 @@ package com.example.accounting.exchange;
 import com.example.accounting.identity.CurrentUserResolver;
 import jakarta.servlet.http.HttpServletRequest;
 import java.io.IOException;
+import java.time.LocalDate;
 import java.util.UUID;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -45,10 +46,13 @@ public class DataExchangeController {
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
     public ResponseEntity<byte[]> exportKingdee(
             HttpServletRequest request, @PathVariable UUID ledgerId,
-            @RequestParam(defaultValue = "false") boolean mergeEntries) {
+            @RequestParam(defaultValue = "false") boolean mergeEntries,
+            @RequestParam(required = false) LocalDate startDate,
+            @RequestParam(required = false) LocalDate endDate) {
         return ResponseEntity.ok()
                 .contentType(XLSX)
                 .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"kingdee-vouchers.xlsx\"")
-                .body(kingdee.exportKingdee(currentUserResolver.resolve(request), ledgerId, mergeEntries));
+                .body(kingdee.exportKingdee(currentUserResolver.resolve(request), ledgerId, mergeEntries,
+                        startDate, endDate));
     }
 }

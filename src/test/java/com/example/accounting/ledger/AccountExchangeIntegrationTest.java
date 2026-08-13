@@ -141,6 +141,10 @@ class AccountExchangeIntegrationTest {
                 startInclusive, ledgerId, "199801");
         jdbc.update("update ledger_account set created_at = ? where ledger_id = ? and code = ?",
                 endExclusive, ledgerId, "1997");
+        assertThat(ledgers.listAccounts(owner, ledgerId)).anySatisfy(account -> {
+            assertThat(account.code()).isEqualTo("199801");
+            assertThat(account.createdAt()).isEqualTo(startInclusive);
+        });
 
         byte[] exported = exchange.export(
                 owner, ledgerId, AccountExchangeService.Format.STANDARD, period.id());
@@ -160,7 +164,7 @@ class AccountExchangeIntegrationTest {
             var sheet = workbook.getSheetAt(0);
             assertThat(sheet.getLastRowNum()).isEqualTo(1);
             assertThat(sheet.getRow(1).getCell(0).getStringCellValue()).isEqualTo("199801");
-            assertThat(sheet.getRow(1).getCell(2).getStringCellValue()).isEqualTo("1998");
+            assertThat(sheet.getRow(1).getCell(2).getStringCellValue()).isEqualTo("流动资产");
         }
 
         UUID otherLedgerId = ledgers.create(user(owner), new LedgerRequests.Create(

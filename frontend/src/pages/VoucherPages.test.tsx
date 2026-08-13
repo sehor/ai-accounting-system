@@ -50,7 +50,7 @@ afterEach(() => {
 })
 
 describe('VoucherListPage', () => {
-  it('sends keyword and date-range filters without a conflicting period filter', async () => {
+  it('intersects detailed date filters with the selected accounting period range', async () => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
 
     render(
@@ -68,8 +68,44 @@ describe('VoucherListPage', () => {
       .map(([requestPath]) => requestPath).find((requestPath) => requestPath.includes('/vouchers?'))!
     const params = new URL(path, 'http://localhost').searchParams
     expect(params.get('startDate')).toBe('2026-06-01')
-    expect(params.get('endDate')).toBe('2026-07-31')
+    expect(params.get('endDate')).toBe('2026-06-30')
     expect(params.get('keyword')).toBe('工资')
+    expect(params.get('periodCode')).toBeNull()
+  })
+
+  it('queries and shows vouchers across the selected accounting period range', async () => {
+    vi.mocked(apiFetch).mockImplementation((path) => Promise.resolve(
+      path.endsWith('/periods') ? [
+        { id: 'period-6', ledgerId: 'ledger-1', periodCode: '2026-06', startDate: '2026-06-01', endDate: '2026-06-30', status: 'OPEN', hasVouchers: true },
+        { id: 'period-7', ledgerId: 'ledger-1', periodCode: '2026-07', startDate: '2026-07-01', endDate: '2026-07-31', status: 'OPEN', hasVouchers: true },
+      ] : [],
+    ))
+    vi.mocked(apiFetchWithHeaders).mockResolvedValue({
+      data: [
+        { id: 'voucher-6', ledgerId: 'ledger-1', periodId: 'period-6', voucherDate: '2026-06-02', voucherType: '记', voucherNumber: '1', summary: '六月凭证', status: 'POSTED', approvalRequired: false, version: 0, lines: [] },
+        { id: 'voucher-7', ledgerId: 'ledger-1', periodId: 'period-7', voucherDate: '2026-07-02', voucherType: '记', voucherNumber: '2', summary: '七月凭证', status: 'POSTED', approvalRequired: false, version: 0, lines: [] },
+      ],
+      headers: new Headers({ 'X-Total-Count': '2' }),
+    })
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <App>
+          <MemoryRouter initialEntries={['/ledgers/ledger-1/vouchers?periodFrom=2026-06&periodTo=2026-07']}>
+            <Routes><Route path="/ledgers/:ledgerId/vouchers" element={<VoucherListPage />} /></Routes>
+          </MemoryRouter>
+        </App>
+      </QueryClientProvider>,
+    )
+
+    expect(await screen.findByText('六月凭证')).toBeInTheDocument()
+    expect(screen.getByText('七月凭证')).toBeInTheDocument()
+    const path = vi.mocked(apiFetchWithHeaders).mock.calls
+      .map(([requestPath]) => requestPath).find((requestPath) => requestPath.includes('/vouchers?'))!
+    const params = new URL(path, 'http://localhost').searchParams
+    expect(params.get('startDate')).toBe('2026-06-01')
+    expect(params.get('endDate')).toBe('2026-07-31')
     expect(params.get('periodCode')).toBeNull()
   })
 
@@ -103,9 +139,11 @@ describe('VoucherListPage', () => {
 
     expect(await screen.findByText('2026年第7期没有凭证数据')).toBeInTheDocument()
     expect(screen.queryByText('2026-06-02')).not.toBeInTheDocument()
-    expect(apiFetchWithHeaders).toHaveBeenCalledWith(
-      expect.stringContaining('periodCode=2026-07'), expect.anything(),
-    )
+    const path = vi.mocked(apiFetchWithHeaders).mock.calls
+      .map(([requestPath]) => requestPath).find((requestPath) => requestPath.includes('/vouchers?'))!
+    const params = new URL(path, 'http://localhost').searchParams
+    expect(params.get('startDate')).toBe('2026-07-01')
+    expect(params.get('endDate')).toBe('2026-07-31')
   })
 
   it('shows a clear processing entry for draft vouchers', async () => {
@@ -234,7 +272,9 @@ describe('VoucherListPage', () => {
       </QueryClientProvider>,
     )
 
-    fireEvent.click(screen.getByRole('button', { name: /导出金蝶凭证/ }))
+    const exportButton = screen.getByRole('button', { name: /导出金蝶凭证/ })
+    await waitFor(() => expect(exportButton).toBeEnabled())
+    fireEvent.click(exportButton)
     expect(screen.getByText(/收款-主营、付款-日常、付款-主营、银行费用/)).toBeInTheDocument()
     fireEvent.click(screen.getByRole('checkbox', { name: '合并同类分录' }))
     fireEvent.click(within(screen.getByRole('dialog', { name: '导出金蝶凭证' }))
@@ -242,7 +282,7 @@ describe('VoucherListPage', () => {
 
     await waitFor(() => expect(downloadedFileName).toBe('kingdee-vouchers.xlsx'))
     expect(apiFetch).toHaveBeenCalledWith(
-      '/ledgers/ledger-1/data-exchange/kingdee:export?mergeEntries=true',
+      '/ledgers/ledger-1/data-exchange/kingdee:export?mergeEntries=true&startDate=2026-06-01&endDate=2026-06-30',
       { localUserId: 'user-1', localUserName: 'admin' },
     )
     expect(createObjectUrl).toHaveBeenCalledWith(expect.any(Blob))

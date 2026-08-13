@@ -1754,6 +1754,8 @@ export interface components {
             quantityEnabled?: boolean;
             unitName?: string;
             dimensionRequirements?: components["schemas"]["DimensionRequirement"][];
+            /** Format: date-time */
+            createdAt?: string;
         };
         DimensionRequirement: {
             /** Format: uuid */
@@ -4135,6 +4137,8 @@ export interface operations {
         parameters: {
             query?: {
                 mergeEntries?: boolean;
+                startDate?: string;
+                endDate?: string;
             };
             header?: never;
             path: {

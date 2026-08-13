@@ -25,6 +25,7 @@ public class AccountManagementRepository {
             select a.id, a.ledger_id, a.code, a.name, a.category, a.normal_balance, a.status,
                 a.parent_id, a.level, a.is_template, a.legacy_code, a.version,
                 a.cash_flow_required, a.default_cash_flow_item_id, a.quantity_enabled, a.unit_name,
+                a.created_at,
                 not exists (
                     select 1 from ledger_account child
                     where child.ledger_id = a.ledger_id and child.parent_id = a.id) leaf,
@@ -564,7 +565,8 @@ public class AccountManagementRepository {
                 rs.getBoolean("core_locked"), rs.getBoolean("legacy_code"), rs.getLong("version"),
                 rs.getBoolean("cash_flow_required"),
                 rs.getObject("default_cash_flow_item_id", UUID.class),
-                rs.getBoolean("quantity_enabled"), rs.getString("unit_name"), dimensions);
+                rs.getBoolean("quantity_enabled"), rs.getString("unit_name"), dimensions,
+                rs.getObject("created_at", OffsetDateTime.class));
     }
 
     private LedgerResponses.Account copyWithDimensions(
@@ -574,7 +576,8 @@ public class AccountManagementRepository {
                 account.normalBalance(), account.status(), account.parentId(), account.level(),
                 account.isLeaf(), account.isTemplate(), account.hasBusinessUsage(), account.coreLocked(),
                 account.legacyCode(), account.version(), account.cashFlowRequired(),
-                account.defaultCashFlowItemId(), account.quantityEnabled(), account.unitName(), dimensions);
+                account.defaultCashFlowItemId(), account.quantityEnabled(), account.unitName(), dimensions,
+                account.createdAt());
     }
 
     private void bumpLedgerVersion(UUID ledgerId) {

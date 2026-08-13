@@ -13,6 +13,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.example.accounting.identity.CurrentUserResolver;
+import java.time.LocalDate;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpHeaders;
@@ -32,7 +33,7 @@ class DataExchangeControllerTest {
         UUID ledgerId = UUID.randomUUID();
         when(service.importKingdee(eq(actorId), eq(ledgerId), eq("upload-1"), eq(3L), any()))
                 .thenReturn(new KingdeeExchange.ImportResult(1, 2));
-        when(service.exportKingdee(actorId, ledgerId, false)).thenReturn(new byte[]{1, 2, 3});
+        when(service.exportKingdee(actorId, ledgerId, false, null, null)).thenReturn(new byte[]{1, 2, 3});
 
         mockMvc.perform(multipart("/v1/ledgers/{ledgerId}/data-exchange/kingdee:import", ledgerId)
                         .file(new MockMultipartFile("file", "kingdee.xlsx",
@@ -51,14 +52,14 @@ class DataExchangeControllerTest {
                         "attachment; filename=\"kingdee-vouchers.xlsx\""))
                 .andExpect(content().bytes(new byte[]{1, 2, 3}));
 
-        verify(service).exportKingdee(actorId, ledgerId, false);
+        verify(service).exportKingdee(actorId, ledgerId, false, null, null);
     }
 
     @Test
     void passesTheMergeChoiceToTheExporter() throws Exception {
         UUID actorId = UUID.randomUUID();
         UUID ledgerId = UUID.randomUUID();
-        when(service.exportKingdee(actorId, ledgerId, true)).thenReturn(new byte[]{4, 5, 6});
+        when(service.exportKingdee(actorId, ledgerId, true, null, null)).thenReturn(new byte[]{4, 5, 6});
 
         mockMvc.perform(get("/v1/ledgers/{ledgerId}/data-exchange/kingdee:export", ledgerId)
                         .queryParam("mergeEntries", "true")
@@ -66,6 +67,25 @@ class DataExchangeControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(content().bytes(new byte[]{4, 5, 6}));
 
-        verify(service).exportKingdee(actorId, ledgerId, true);
+        verify(service).exportKingdee(actorId, ledgerId, true, null, null);
+    }
+
+    @Test
+    void passesTheVoucherDateRangeToTheExporter() throws Exception {
+        UUID actorId = UUID.randomUUID();
+        UUID ledgerId = UUID.randomUUID();
+        LocalDate startDate = LocalDate.of(2026, 6, 1);
+        LocalDate endDate = LocalDate.of(2026, 7, 31);
+        when(service.exportKingdee(actorId, ledgerId, false, startDate, endDate))
+                .thenReturn(new byte[]{7, 8, 9});
+
+        mockMvc.perform(get("/v1/ledgers/{ledgerId}/data-exchange/kingdee:export", ledgerId)
+                        .queryParam("startDate", "2026-06-01")
+                        .queryParam("endDate", "2026-07-31")
+                        .header("X-User-Id", actorId))
+                .andExpect(status().isOk())
+                .andExpect(content().bytes(new byte[]{7, 8, 9}));
+
+        verify(service).exportKingdee(actorId, ledgerId, false, startDate, endDate);
     }
 }

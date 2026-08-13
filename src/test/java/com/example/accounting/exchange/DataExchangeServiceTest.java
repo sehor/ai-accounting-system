@@ -40,6 +40,22 @@ class DataExchangeServiceTest {
     private final KingdeeExchange service = new KingdeeExchange(ledgers, vouchers);
 
     @Test
+    void exportsOnlyVouchersInsideTheRequestedDateRange() throws Exception {
+        UUID actorId = UUID.randomUUID();
+        UUID ledgerId = UUID.randomUUID();
+        LocalDate startDate = LocalDate.of(2026, 6, 1);
+        LocalDate endDate = LocalDate.of(2026, 7, 31);
+        VoucherRequests.Search search = new VoucherRequests.Search(null, startDate, endDate, null);
+        when(ledgers.listAccounts(actorId, ledgerId)).thenReturn(List.of());
+        when(vouchers.list(actorId, ledgerId, search, 500, 0)).thenReturn(List.of());
+
+        byte[] output = service.exportKingdee(actorId, ledgerId, false, startDate, endDate);
+
+        assertThat(output).isNotEmpty();
+        verify(vouchers).list(actorId, ledgerId, search, 500, 0);
+    }
+
+    @Test
     void importsANativeKingdeeVoucherListWithoutChangingNegativeAmountSides() throws Exception {
         UUID actorId = UUID.randomUUID();
         UUID ledgerId = UUID.randomUUID();
@@ -426,6 +442,6 @@ class DataExchangeServiceTest {
             UUID id, UUID ledgerId, String code, String name, UUID parentId, int level) {
         return new LedgerResponses.Account(id, ledgerId, code, name, "ASSET", "DEBIT", "ACTIVE",
                 parentId, level, true, false, false, false, false, 0,
-                false, null, false, null, List.of());
+                false, null, false, null, List.of(), null);
     }
 }

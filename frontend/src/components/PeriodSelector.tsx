@@ -77,6 +77,7 @@ export function usePeriodRangeFilter(ledgerId: string, active = true) {
     next.delete('periodCode')
     next.set('periodFrom', periodFrom)
     next.set('periodTo', periodTo)
+    next.delete('offset')
     next.delete('page')
     setSearch(next, { replace: true })
   }, [active, legacy, periodFrom, periodTo, search, setSearch])
@@ -86,6 +87,7 @@ export function usePeriodRangeFilter(ledgerId: string, active = true) {
     next.delete('periodCode')
     next.set('periodFrom', from)
     next.set('periodTo', to >= from ? to : from)
+    next.delete('offset')
     next.delete('page')
     setSearch(next)
   }
@@ -103,13 +105,16 @@ export function PeriodRangeSelector({
   onChange: (periodFrom: string, periodTo: string) => void
   onRefresh: () => void
 }) {
-  const options = periods.map((period) => ({ value: period.periodCode, label: period.periodCode }))
+  const options = periods.map((period) => ({
+    value: period.periodCode,
+    label: `${period.periodCode.slice(0, 4)}年第${Number(period.periodCode.slice(5))}期`,
+  }))
   return <Space className="period-selector" size={8} wrap>
     <Typography.Text>会计期间</Typography.Text>
-    <Select aria-label="起始会计期间" value={periodFrom} loading={loading} options={options}
+    <Select aria-label="起始会计期间" value={periodFrom} loading={loading} placeholder="起始期间" options={options}
       onChange={(value) => onChange(value, periodTo && periodTo >= value ? periodTo : value)} />
     <Typography.Text>至</Typography.Text>
-    <Select aria-label="结束会计期间" value={periodTo} loading={loading}
+    <Select aria-label="结束会计期间" value={periodTo} loading={loading} placeholder="结束期间"
       options={options.filter((option) => !periodFrom || option.value >= periodFrom)}
       onChange={(value) => periodFrom && onChange(periodFrom, value)} />
     <Button aria-label="刷新当前期间范围数据" icon={<ReloadOutlined />} loading={refreshing}

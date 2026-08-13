@@ -65,12 +65,14 @@ export function AccountsTab({ ledgerId, session, accounts, dimensionTypes, perio
     queryKey: ['cash-flow-items', ledgerId],
     queryFn: () => apiFetch<CashFlowItem[]>(`/ledgers/${ledgerId}/cash-flow-items`, session),
   })
+  const createdAtPeriod = periods.find((period) => period.id === createdInPeriodId)
   const tree = useMemo(() => filterTree(
     buildTree(accounts.filter((account) => matchesCategory(account, category))),
-    (account) => (!status || account.status === status) &&
+    (account) => (!createdAtPeriod || wasCreatedInPeriod(account.createdAt, createdAtPeriod)) &&
+      (!status || account.status === status) &&
       (!search.trim() || `${account.code} ${account.name}`.toLowerCase().includes(search.trim().toLowerCase())),
-  ), [accounts, category, search, status])
-  const filtering = Boolean(status || search.trim())
+  ), [accounts, category, createdAtPeriod, search, status])
+  const filtering = Boolean(createdAtPeriod || status || search.trim())
   const visibleExpandedKeys = filtering ? expandedKeysFor(tree) : expandedRowKeys
 
   const save = useMutation({
@@ -197,8 +199,10 @@ export function AccountsTab({ ledgerId, session, accounts, dimensionTypes, perio
         {writable && <Button type="primary" icon={<PlusOutlined />} onClick={() => openCreate(null)}>新增一级科目</Button>}
         <Select value={format} onChange={setFormat} style={{ width: 120 }}
           options={[{ value: 'STANDARD', label: '标准格式' }, { value: 'KINGDEE', label: '金蝶格式' }]} />
-        <span>创建期间</span>
-        <Select allowClear aria-label="创建期间" placeholder="全部期间" value={createdInPeriodId}
+        <Tooltip title="仅导出在所选会计期间创建的科目">
+          <span>Created at</span>
+        </Tooltip>
+        <Select allowClear aria-label="Created at" placeholder="全部期间" value={createdInPeriodId}
           onChange={setCreatedInPeriodId} style={{ width: 230 }}
           options={periods.map((period) => ({
             value: period.id,
@@ -352,6 +356,14 @@ function matchesCategory(account: Account, category: AccountCategoryTab) {
   return category === 'PROFIT_LOSS'
     ? account.category === 'REVENUE' || account.category === 'EXPENSE'
     : account.category === category
+}
+
+function wasCreatedInPeriod(createdAt: string | null, period: Period) {
+  if (!createdAt) return false
+  const timestamp = Date.parse(createdAt)
+  const start = Date.parse(`${period.startDate}T00:00:00+08:00`)
+  const end = Date.parse(`${period.endDate}T00:00:00+08:00`) + 24 * 60 * 60 * 1000
+  return Number.isFinite(timestamp) && timestamp >= start && timestamp < end
 }
 
 function filterTree(nodes: AccountTree[], matches: (account: Account) => boolean): AccountTree[] {

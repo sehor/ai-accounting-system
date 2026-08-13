@@ -122,6 +122,8 @@ a { color: #1677a7; }
 }
 .financial-toolbar-actions { margin-left: auto; }
 .period-selector .ant-select { min-width: 150px; }
+.voucher-toolbar { flex-wrap: wrap; }
+.voucher-toolbar .period-selector { flex: 0 0 auto; flex-wrap: nowrap; }
 .financial-grid-card {
   border-color: #cfd5dc;
   border-radius: 0;
