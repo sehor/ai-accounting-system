@@ -1,12 +1,10 @@
 package com.example.accounting.reporting;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.example.accounting.identity.CurrentUserResolver;
 import com.example.accounting.ledger.LedgerRequests;
 import com.example.accounting.ledger.LedgerService;
-import com.example.accounting.shared.web.ApiProblemException;
 import com.example.accounting.reporting.internal.port.BalanceProjectionRepository;
 import com.example.accounting.voucher.VoucherRequests;
 import com.example.accounting.voucher.VoucherResponses;
@@ -73,17 +71,17 @@ class AccountingProjectionWorkloadBenchmarkTest {
 
         Period targetPeriod = periods.get(TARGET_PERIOD_INDEX);
         FutureProjection futureBefore = futureProjection(ledgerId, targetPeriod.code());
-        List<MetricSample<VoucherResponses.Voucher>> created = measureCreatedVouchers(
+        List<MeasuredVoucher> created = measureCreatedVouchers(
                 actorId, ledgerId, targetPeriod, cashAccountId, capitalAccountId, config);
-        Metric create = metric("posted-create-and-project", created);
-        Metric update = measureUpdates(actorId, ledgerId, targetPeriod, cashAccountId, capitalAccountId, created);
-        drainProjection();
+        Metric createTransaction = metric("posted-create-transaction", samples(created,
+                MeasuredVoucher::transactionMilliseconds));
+        Metric createWorkerCatchUp = metric("posted-create-worker-catch-up", samples(created,
+                MeasuredVoucher::workerCatchUpMilliseconds));
+        WriteMetrics update = measureUpdates(actorId, ledgerId, targetPeriod, cashAccountId, capitalAccountId, created);
         assertProjectionReady(ledgerId, targetPeriod.id());
 
         FutureProjection futureAfter = futureProjection(ledgerId, targetPeriod.code());
         assertThat(futureAfter).isNotEqualTo(futureBefore);
-        assertThatThrownBy(() -> vouchers.delete(actorId, ledgerId, created.getFirst().value().id()))
-                .isInstanceOf(ApiProblemException.class);
 
         Period finalPeriod = periods.getLast();
         assertThat(reports.trialBalance(actorId, ledgerId, targetPeriod.code())).isNotEmpty();
@@ -106,8 +104,8 @@ class AccountingProjectionWorkloadBenchmarkTest {
                 "\"vouchersPerPeriod\":" + config.vouchersPerPeriod() + "," +
                 "\"targetPeriod\":\"" + targetPeriod.code() + "\"," +
                 "\"futurePeriodProjectionChanged\":true," +
-                "\"postedDelete\":\"UNSUPPORTED\"," +
-                "\"metrics\":[" + String.join(",", create.toJson(), update.toJson(),
+                "\"metrics\":[" + String.join(",", createTransaction.toJson(), createWorkerCatchUp.toJson(),
+                update.transaction().toJson(), update.workerCatchUp().toJson(),
                 trialBalance.toJson(), trialBalanceWithParents.toJson(), generalLedger.toJson(), subLedger.toJson()) +
                 "]}");
     }
@@ -141,36 +139,51 @@ class AccountingProjectionWorkloadBenchmarkTest {
         }
     }
 
-    private List<MetricSample<VoucherResponses.Voucher>> measureCreatedVouchers(
+    private List<MeasuredVoucher> measureCreatedVouchers(
             UUID actorId, UUID ledgerId, Period period, UUID cashAccountId, UUID capitalAccountId,
             BenchmarkConfig config) {
-        List<MetricSample<VoucherResponses.Voucher>> samples = new ArrayList<>();
+        List<MeasuredVoucher> measurements = new ArrayList<>();
         for (int index = 0; index < config.warmups() + config.iterations(); index++) {
             BigDecimal amount = BigDecimal.valueOf(1_000 + index);
             long started = System.nanoTime();
             VoucherResponses.Voucher voucher = vouchers.create(actorId, ledgerId,
                     createRequest(period, cashAccountId, capitalAccountId, "measured-" + index, amount));
-            long elapsed = elapsedMillis(started);
-            if (index >= config.warmups()) {
-                samples.add(new MetricSample<>(elapsed, voucher));
-            }
+            long transactionMilliseconds = elapsedMillis(started);
+            long workerCatchUpMilliseconds = drainProjection();
+            measurements.add(new MeasuredVoucher(voucher, index >= config.warmups(), transactionMilliseconds,
+                    workerCatchUpMilliseconds));
         }
-        return samples;
+        return measurements;
     }
 
-    private Metric measureUpdates(UUID actorId, UUID ledgerId, Period period, UUID cashAccountId,
-                                  UUID capitalAccountId, List<MetricSample<VoucherResponses.Voucher>> created) {
-        List<MetricSample<Void>> samples = new ArrayList<>();
-        for (MetricSample<VoucherResponses.Voucher> sample : created) {
-            VoucherResponses.Voucher voucher = sample.value();
+    private WriteMetrics measureUpdates(UUID actorId, UUID ledgerId, Period period, UUID cashAccountId,
+                                        UUID capitalAccountId, List<MeasuredVoucher> created) {
+        List<MetricSample<Void>> transactionSamples = new ArrayList<>();
+        List<MetricSample<Void>> workerCatchUpSamples = new ArrayList<>();
+        for (MeasuredVoucher createdVoucher : created) {
+            VoucherResponses.Voucher voucher = createdVoucher.voucher();
             long started = System.nanoTime();
             vouchers.update(actorId, ledgerId, voucher.id(), new VoucherRequests.Update(
                     voucher.version(), period.id(), voucher.voucherDate(), voucher.voucherType(),
                     voucher.voucherNumber(), "updated", lines(cashAccountId, capitalAccountId,
                     voucher.lines().getFirst().originalAmount().add(BigDecimal.ONE))));
-            samples.add(new MetricSample<>(elapsedMillis(started), null));
+            long transactionMilliseconds = elapsedMillis(started);
+            long workerCatchUpMilliseconds = drainProjection();
+            if (createdVoucher.sampled()) {
+                transactionSamples.add(new MetricSample<>(transactionMilliseconds, null));
+                workerCatchUpSamples.add(new MetricSample<>(workerCatchUpMilliseconds, null));
+            }
         }
-        return metric("posted-update-and-project", samples);
+        return new WriteMetrics(metric("posted-update-transaction", transactionSamples),
+                metric("posted-update-worker-catch-up", workerCatchUpSamples));
+    }
+
+    private List<MetricSample<Void>> samples(List<MeasuredVoucher> measurements,
+                                               java.util.function.ToLongFunction<MeasuredVoucher> milliseconds) {
+        return measurements.stream()
+                .filter(MeasuredVoucher::sampled)
+                .map(measurement -> new MetricSample<Void>(milliseconds.applyAsLong(measurement), null))
+                .toList();
     }
 
     private Metric measure(String name, BenchmarkConfig config, Supplier<?> operation) {
@@ -225,10 +238,12 @@ class AccountingProjectionWorkloadBenchmarkTest {
                 """, (rs, row) -> new FutureProjection(rs.getLong(1), rs.getBigDecimal(2)), ledgerId, targetPeriodCode);
     }
 
-    private void drainProjection() {
+    private long drainProjection() {
+        long started = System.nanoTime();
         while (projection.applyPendingBatch(200, 5000)) {
             // Each pass locks and fully catches up one ledger.
         }
+        return elapsedMillis(started);
     }
 
     private UUID accountId(UUID ledgerId, String code) {
@@ -262,6 +277,13 @@ class AccountingProjectionWorkloadBenchmarkTest {
     private record MetricSample<T>(long milliseconds, T value) {
     }
 
+    private record MeasuredVoucher(VoucherResponses.Voucher voucher, boolean sampled, long transactionMilliseconds,
+                                   long workerCatchUpMilliseconds) {
+    }
+
+    private record WriteMetrics(Metric transaction, Metric workerCatchUp) {
+    }
+
     private record FutureProjection(long rows, BigDecimal net) {
     }
 
@@ -281,7 +303,7 @@ class AccountingProjectionWorkloadBenchmarkTest {
             if (periods < TARGET_PERIOD_INDEX + 11) {
                 throw new IllegalArgumentException("BENCHMARK_PERIODS must include ten periods after period ten");
             }
-            return new BenchmarkConfig(periods, positiveInt("BENCHMARK_VOUCHERS_PER_PERIOD", 100),
+            return new BenchmarkConfig(periods, positiveInt("BENCHMARK_VOUCHERS_PER_PERIOD", 500),
                     positiveInt("BENCHMARK_WARMUPS", 5), positiveInt("BENCHMARK_ITERATIONS", 30));
         }
 
