@@ -181,13 +181,23 @@ public class AccountExchangeService {
                 if (duplicateCodes.contains(account.code())) {
                     issues.add("ERROR:DUPLICATE_CODE");
                 }
-                LedgerResponses.Account target = existingAccounts.get(account.code());
+                LedgerResponses.Account sameCodeTarget = existingAccounts.get(account.code());
                 AccountAiMapper.Suggestion aiSuggestion = ai.suggestions().get(rowNo);
-                if (target == null && aiSuggestion != null) {
+                LedgerResponses.Account target = sameCodeTarget;
+                String suggestedAction;
+                if (target != null) {
+                    suggestedAction = "UPDATE";
+                    if (target.hasBusinessUsage()
+                            || (!target.isLeaf() && accounts.hasNonZeroBalance(ledgerId, target.id()))) {
+                        issues.add("ERROR:ACCOUNT_OVERWRITE_FORBIDDEN");
+                    }
+                } else if (aiSuggestion != null) {
                     target = existingById.get(aiSuggestion.targetAccountId());
                     issues.add("AI:SUGGESTED:" + aiSuggestion.reason());
+                    suggestedAction = "MAP";
+                } else {
+                    suggestedAction = "CREATE";
                 }
-                String suggestedAction = target == null ? "CREATE" : "MAP";
                 BigDecimal confidence = aiSuggestion != null
                         ? aiSuggestion.confidence()
                         : target == null ? new BigDecimal("0.9000") : BigDecimal.ONE;
@@ -325,6 +335,10 @@ public class AccountExchangeService {
                         "Every row must be valid and explicitly confirmed before commit");
             }
         }
+        AccountCodeRule rule = accounts.codeRule(ledgerId);
+        Map<String, LedgerResponses.Account> existingByCode = existingAccountsByCode(actorId, ledgerId);
+        validateOverwriteRules(ledgerId, rows, existingByCode);
+        validateImportNames(actorId, ledgerId, rows);
         Map<String, UUID> dimensionIds = ledgers.listDimensionTypes(actorId, ledgerId).stream()
                 .collect(Collectors.toMap(LedgerResponses.DimensionType::code, LedgerResponses.DimensionType::id));
         for (CommitRow row : rows) {
@@ -341,7 +355,6 @@ public class AccountExchangeService {
         }
         Map<String, UUID> cashFlowIds = accounts.cashFlowItems(ledgerId).stream()
                 .collect(Collectors.toMap(LedgerResponses.CashFlowItem::code, LedgerResponses.CashFlowItem::id));
-        AccountCodeRule rule = accounts.codeRule(ledgerId);
         List<CommitRow> orderedRows = rows.stream()
                 .sorted(java.util.Comparator.comparingInt(row ->
                         Math.max(0, rule.levelOf(row.account().values().get("code")))))
@@ -356,8 +369,13 @@ public class AccountExchangeService {
                         throw problem(409, "ACCOUNT_IMPORT_STALE", "Account import is stale",
                                 "A target account changed after preview");
                     }
-                    ledgers.updateAccount(actorId, ledgerId, target.id(),
-                            row.account().patchRequest(target.version(), dimensionIds, cashFlowIds));
+                    if (java.util.Objects.equals(target.code(), row.account().values().get("code"))) {
+                        ledgers.overwriteAccount(actorId, ledgerId, target.id(),
+                                row.account().patchRequest(target.version(), dimensionIds, cashFlowIds));
+                    } else {
+                        ledgers.updateAccount(actorId, ledgerId, target.id(),
+                                row.account().patchRequest(target.version(), dimensionIds, cashFlowIds));
+                    }
                 }
                 case "MAP", "SKIP" -> {
                     // Explicitly resolved without mutating master data.
@@ -918,6 +936,81 @@ public class AccountExchangeService {
             });
         } catch (JsonProcessingException exception) {
             throw workbookProblem("Saved import issues are invalid");
+        }
+    }
+
+    private Map<String, LedgerResponses.Account> existingAccountsByCode(UUID actorId, UUID ledgerId) {
+        return ledgers.listAccounts(actorId, ledgerId).stream()
+                .collect(Collectors.toMap(LedgerResponses.Account::code, account -> account));
+    }
+
+    private void validateOverwriteRules(
+            UUID ledgerId, List<CommitRow> rows, Map<String, LedgerResponses.Account> existingByCode) {
+        for (CommitRow row : rows) {
+            String code = row.account().values().get("code");
+            LedgerResponses.Account sameCode = existingByCode.get(code);
+            if (sameCode == null) {
+                continue;
+            }
+            if (!"UPDATE".equals(row.action())) {
+                throw problem(409, "ACCOUNT_IMPORT_OVERWRITE_REQUIRED",
+                        "Account import must overwrite an existing code",
+                        "Account code " + code + " already exists and must be overwritten");
+            }
+            if (row.targetAccountId() == null || !row.targetAccountId().equals(sameCode.id())) {
+                throw problem(409, "ACCOUNT_IMPORT_OVERWRITE_REQUIRED",
+                        "Account import target is invalid",
+                        "Account code " + code + " must be overwritten with its existing account");
+            }
+            if (sameCode.hasBusinessUsage()
+                    || (!sameCode.isLeaf() && accounts.hasNonZeroBalance(ledgerId, sameCode.id()))) {
+                throw problem(409, "ACCOUNT_OVERWRITE_FORBIDDEN", "Account cannot be overwritten",
+                        "Account " + code + " has business usage or a non-zero balance");
+            }
+        }
+    }
+
+    private void validateImportNames(
+            UUID actorId, UUID ledgerId, List<CommitRow> rows) {
+        List<LedgerResponses.Account> existing = ledgers.listAccounts(actorId, ledgerId);
+        Map<UUID, String> codeById = existing.stream()
+                .collect(Collectors.toMap(LedgerResponses.Account::id, LedgerResponses.Account::code));
+        Map<String, String> nameByCode = new LinkedHashMap<>();
+        Map<String, String> parentByCode = new LinkedHashMap<>();
+        for (LedgerResponses.Account account : existing) {
+            String parentCode = account.parentId() == null
+                    ? "" : codeById.getOrDefault(account.parentId(), "");
+            nameByCode.put(account.code(), account.name());
+            parentByCode.put(account.code(), parentCode);
+        }
+        for (CommitRow row : rows) {
+            String code = row.account().values().get("code");
+            if ("CREATE".equals(row.action())) {
+                nameByCode.put(code, row.account().values().get("name"));
+                parentByCode.put(code, row.account().values().getOrDefault("parentCode", ""));
+            } else if ("UPDATE".equals(row.action())) {
+                if (row.targetAccountId() != null) {
+                    String oldCode = codeById.get(row.targetAccountId());
+                    if (oldCode != null && !oldCode.equals(code)) {
+                        nameByCode.remove(oldCode);
+                        parentByCode.remove(oldCode);
+                    }
+                }
+                nameByCode.put(code, row.account().values().get("name"));
+                parentByCode.put(code, row.account().values().getOrDefault("parentCode", ""));
+            }
+        }
+        Map<String, String> firstByKey = new HashMap<>();
+        for (Map.Entry<String, String> entry : nameByCode.entrySet()) {
+            String code = entry.getKey();
+            String parentCode = parentByCode.getOrDefault(code, "");
+            String key = parentCode + "\u0000" + entry.getValue();
+            String previous = firstByKey.putIfAbsent(key, code);
+            if (previous != null) {
+                throw problem(409, "ACCOUNT_NAME_CONFLICT", "Account name conflict",
+                        "Accounts with the same parent must have unique names: "
+                                + previous + " and " + code);
+            }
         }
     }
 

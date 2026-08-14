@@ -208,12 +208,26 @@ public class DefaultLedgerService implements LedgerService {
     public LedgerResponses.Account updateAccount(
             UUID actorId, UUID ledgerId, UUID accountId, LedgerRequests.AccountPatch request) {
         requireRole(actorId, ledgerId, WRITE_ROLES);
+        return updateAccount(actorId, ledgerId, accountId, request, false);
+    }
+
+    @Override
+    @Transactional
+    public LedgerResponses.Account overwriteAccount(
+            UUID actorId, UUID ledgerId, UUID accountId, LedgerRequests.AccountPatch request) {
+        requireRole(actorId, ledgerId, WRITE_ROLES);
+        return updateAccount(actorId, ledgerId, accountId, request, true);
+    }
+
+    private LedgerResponses.Account updateAccount(
+            UUID actorId, UUID ledgerId, UUID accountId, LedgerRequests.AccountPatch request,
+            boolean overwrite) {
         LedgerResponses.Account before = requireAccount(ledgerId, accountId);
         String code = text(request.code(), before.code()).trim();
         String name = text(request.name(), before.name()).trim();
         String category = text(request.category(), before.category()).toUpperCase(Locale.ROOT);
         String normalBalance = text(request.normalBalance(), before.normalBalance()).toUpperCase(Locale.ROOT);
-        if (request.normalBalance() != null
+        if (!overwrite && request.normalBalance() != null
                 && !request.normalBalance().trim().toUpperCase(Locale.ROOT).equals(before.normalBalance())) {
             throw problem(409, "ACCOUNT_NORMAL_BALANCE_IMMUTABLE", "Account normal balance is immutable",
                     "The balance direction of an account cannot change after it is created");
@@ -246,15 +260,15 @@ public class DefaultLedgerService implements LedgerService {
                 || quantityEnabled != before.quantityEnabled()
                 || !java.util.Objects.equals(unitName, before.unitName())
                 || request.dimensionRequirements() != null;
-        if (before.isTemplate() && structuralChange) {
+        if (!overwrite && before.isTemplate() && structuralChange) {
             throw problem(409, "ACCOUNT_TEMPLATE_LOCKED", "Template account is locked",
                     "Template account code, parent, category, and normal balance cannot be changed");
         }
-        if (before.coreLocked() && coreChange) {
+        if (!overwrite && before.coreLocked() && coreChange) {
             throw problem(409, "ACCOUNT_CORE_LOCKED", "Account core attributes are locked",
                     "Posted vouchers or confirmed opening balances lock core account attributes");
         }
-        if (!before.isLeaf() && structuralChange) {
+        if (!overwrite && !before.isLeaf() && structuralChange) {
             throw problem(409, "ACCOUNT_HAS_CHILDREN", "Account has children",
                     "A parent account cannot change its structural attributes");
         }

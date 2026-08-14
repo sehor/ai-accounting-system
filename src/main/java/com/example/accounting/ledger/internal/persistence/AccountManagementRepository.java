@@ -258,6 +258,39 @@ public class AccountManagementRepository {
                 """, Boolean.class, ledgerId, accountId));
     }
 
+    public boolean hasNonZeroBalance(UUID ledgerId, UUID accountId) {
+        return Boolean.TRUE.equals(jdbc.queryForObject("""
+                with recursive account_scope as (
+                    select id from ledger_account
+                    where ledger_id = ? and id = ?
+                    union all
+                    select child.id
+                    from ledger_account child
+                    join account_scope parent on parent.id = child.parent_id
+                    where child.ledger_id = ?
+                ),
+                amounts as (
+                    select ob.debit_base debit, ob.credit_base credit
+                    from opening_balance ob
+                    where ob.ledger_id = ?
+                      and ob.account_id in (select id from account_scope)
+                    union all
+                    select
+                        case when vl.side = 'DEBIT' then vl.base_amount else 0 end debit,
+                        case when vl.side = 'CREDIT' then vl.base_amount else 0 end credit
+                    from voucher_line vl
+                    where vl.ledger_id = ?
+                      and vl.account_id in (select id from account_scope)
+                )
+                select exists (
+                    select 1
+                    from (select coalesce(sum(debit), 0) debit, coalesce(sum(credit), 0) credit
+                          from amounts) totals
+                    where totals.debit <> totals.credit
+                )
+                """, Boolean.class, ledgerId, accountId, ledgerId, ledgerId, ledgerId));
+    }
+
     public Optional<String> findConfigurationReference(UUID ledgerId, UUID accountId) {
         return Optional.ofNullable(jdbc.query("""
                 select reference from (

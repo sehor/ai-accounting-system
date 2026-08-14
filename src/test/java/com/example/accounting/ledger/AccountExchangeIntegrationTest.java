@@ -67,7 +67,7 @@ class AccountExchangeIntegrationTest {
         exchange.decideAll(owner, ledgerId, preview.id(), preview.rows().stream()
                 .map(row -> new AccountExchangeService.RowDecision(row.rowNo(),
                         new AccountExchangeService.Decision(
-                                row.targetAccountId() == null ? "CREATE" : "MAP", row.targetAccountId(), null)))
+                                row.targetAccountId() == null ? "CREATE" : "UPDATE", row.targetAccountId(), null)))
                 .toList());
         exchange.commit(owner, ledgerId, preview.id());
 
@@ -83,7 +83,47 @@ class AccountExchangeIntegrationTest {
     }
 
     @Test
-    void exportsPreviewsAndMapsAStandardWorkbookWithoutChangingAccounts() throws Exception {
+    void rejectsDuplicateNamesWithinTheSameParentAndRollsBack() throws Exception {
+        UUID owner = UUID.randomUUID();
+        UUID ledgerId = ledgers.create(user(owner), new LedgerRequests.Create(
+                "account-name-unique", "SME", "2011-17", "CNY",
+                LocalDate.of(2026, 1, 1), false)).id();
+        byte[] workbook;
+        try (var source = new HSSFWorkbook(); var output = new ByteArrayOutputStream()) {
+            var sheet = source.createSheet("科目列表");
+            var header = sheet.createRow(0);
+            List.of("编码", "名称", "类别", "余额方向")
+                    .forEach(value -> header.createCell(header.getLastCellNum() < 0 ? 0 : header.getLastCellNum())
+                            .setCellValue(value));
+            var first = sheet.createRow(1);
+            first.createCell(0).setCellValue("1998");
+            first.createCell(1).setCellValue("重复名称");
+            first.createCell(2).setCellValue("流动资产");
+            first.createCell(3).setCellValue("借");
+            var second = sheet.createRow(2);
+            second.createCell(0).setCellValue("1999");
+            second.createCell(1).setCellValue("重复名称");
+            second.createCell(2).setCellValue("流动资产");
+            second.createCell(3).setCellValue("借");
+            source.write(output);
+            workbook = output.toByteArray();
+        }
+
+        AccountExchangeService.Preview preview = exchange.preview(owner, ledgerId,
+                AccountExchangeService.Format.KINGDEE, "duplicate-name.xls", workbook.length,
+                new ByteArrayInputStream(workbook));
+        exchange.decideAll(owner, ledgerId, preview.id(), preview.rows().stream()
+                .map(row -> new AccountExchangeService.RowDecision(row.rowNo(),
+                        new AccountExchangeService.Decision("CREATE", null, null)))
+                .toList());
+
+        assertThatThrownBy(() -> exchange.commit(owner, ledgerId, preview.id()))
+                .isInstanceOfSatisfying(ApiProblemException.class,
+                        exception -> assertThat(exception.code()).isEqualTo("ACCOUNT_NAME_CONFLICT"));
+    }
+
+    @Test
+    void exportsPreviewsAndOverwritesAStandardWorkbookWithoutChangingAccounts() throws Exception {
         UUID owner = UUID.randomUUID();
         UUID ledgerId = ledgers.create(user(owner), new LedgerRequests.Create(
                 "account-exchange", "SME", "2011-17", "CNY",
@@ -100,16 +140,16 @@ class AccountExchangeIntegrationTest {
         AccountExchangeService.Preview preview = exchange.preview(
                 owner, ledgerId, AccountExchangeService.Format.STANDARD,
                 "accounts.xlsx", exported.length, new ByteArrayInputStream(exported));
-        assertThat(preview.rows()).hasSize(17);
-        assertThat(preview.rows()).allMatch(row -> "MAP".equals(row.action())
+        assertThat(preview.rows()).hasSize(18);
+        assertThat(preview.rows()).allMatch(row -> "UPDATE".equals(row.action())
                 && row.targetAccountId() != null && row.issues().isEmpty());
         exchange.decideAll(owner, ledgerId, preview.id(), preview.rows().stream()
                 .map(row -> new AccountExchangeService.RowDecision(row.rowNo(),
-                        new AccountExchangeService.Decision("MAP", row.targetAccountId(), null)))
+                        new AccountExchangeService.Decision("UPDATE", row.targetAccountId(), null)))
                 .toList());
         AccountExchangeService.Preview committed = exchange.commit(owner, ledgerId, preview.id());
         assertThat(committed.status()).isEqualTo("COMMITTED");
-        assertThat(ledgers.listAccounts(owner, ledgerId)).hasSize(17);
+        assertThat(ledgers.listAccounts(owner, ledgerId)).hasSize(18);
     }
 
     @Test
@@ -277,7 +317,7 @@ class AccountExchangeIntegrationTest {
                 new ByteArrayInputStream(exported));
         for (AccountExchangeService.PreviewRow row : preview.rows()) {
             exchange.decide(owner, target, preview.id(), row.rowNo(),
-                    new AccountExchangeService.Decision(row.targetAccountId() == null ? "CREATE" : "MAP",
+                    new AccountExchangeService.Decision(row.targetAccountId() == null ? "CREATE" : "UPDATE",
                             row.targetAccountId(), null));
         }
         exchange.commit(owner, target, preview.id());
