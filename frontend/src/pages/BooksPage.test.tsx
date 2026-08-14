@@ -62,6 +62,10 @@ beforeEach(() => {
       endingDirection: 'DEBIT', endingBalance: '100.00',
       pagination: { page: 1, pageSize: 50, totalItems: 0, totalPages: 0 },
     })
+    if (path.includes('/books/dimension-ledger:query')) return Promise.resolve({
+      projectionStatus: 'READY', warnings: [], balances: [], entries: [],
+      pagination: { page: 1, pageSize: 50, totalItems: 0, totalPages: 0 },
+    })
     if (path.includes('/reports/income-statement')) return Promise.resolve({ periodCode: '2026-08', lines: [] })
     return Promise.resolve([])
   })
@@ -157,5 +161,24 @@ describe('independent book and report periods', () => {
       expect.stringContaining('/books/sub-ledger?periodFrom=2026-06&periodTo=2026-06&accountId=account-1'),
       expect.anything(),
     ))
+  })
+
+  it('queries the auxiliary ledger with a leaf account and structured filters', async () => {
+    renderRoute(
+      '/ledgers/ledger-1/books/dimension-ledger?periodCode=2026-06',
+      '/ledgers/:ledgerId/books/:bookType',
+      <BooksPage />,
+    )
+
+    await waitFor(() => {
+      const call = vi.mocked(apiFetch).mock.calls.find(([path]) =>
+        String(path).includes('/books/dimension-ledger:query'))
+      expect(call).toBeDefined()
+      expect(call?.[2]).toEqual(expect.objectContaining({ method: 'POST' }))
+      expect(JSON.parse(String(call?.[2]?.body))).toEqual({
+        periodFrom: '2026-06', periodTo: '2026-06', accountId: 'account-2', currency: null,
+        dimensionValues: [], groupDimensionTypeIds: [], page: 1, pageSize: 50,
+      })
+    })
   })
 })

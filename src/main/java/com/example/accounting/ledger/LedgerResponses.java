@@ -87,15 +87,43 @@ public final class LedgerResponses {
         }
     }
 
-    public record DimensionType(UUID id, UUID ledgerId, String code, String name, boolean required, String status) {
+    public record DimensionType(UUID id, UUID ledgerId, String code, String name, boolean required, String status,
+                                long version) {
+
+        public DimensionType(UUID id, UUID ledgerId, String code, String name, boolean required, String status) {
+            this(id, ledgerId, code, name, required, status, 0);
+        }
     }
 
-    public record DimensionValue(UUID id, UUID ledgerId, UUID dimensionTypeId, String code, String name, String status) {
+    public record DimensionValue(UUID id, UUID ledgerId, UUID dimensionTypeId, String code, String name,
+                                 String status, long version) {
+
+        public DimensionValue(UUID id, UUID ledgerId, UUID dimensionTypeId, String code, String name,
+                              String status) {
+            this(id, ledgerId, dimensionTypeId, code, name, status, 0);
+        }
     }
 
     public record OpeningBalance(UUID id, UUID ledgerId, UUID periodId, UUID accountId, String currency,
                                  String dimensionKey, BigDecimal debitOriginal, BigDecimal creditOriginal,
                                  BigDecimal exchangeRate, BigDecimal debitBase, BigDecimal creditBase,
-                                 boolean confirmed) {
+                                 boolean confirmed, List<OpeningBalanceDimension> dimensions) {
+
+        public OpeningBalance {
+            dimensions = dimensions == null ? List.of() : List.copyOf(dimensions);
+        }
+
+        public OpeningBalance(UUID id, UUID ledgerId, UUID periodId, UUID accountId, String currency,
+                              String dimensionKey, BigDecimal debitOriginal, BigDecimal creditOriginal,
+                              BigDecimal exchangeRate, BigDecimal debitBase, BigDecimal creditBase,
+                              boolean confirmed) {
+            this(id, ledgerId, periodId, accountId, currency, dimensionKey, debitOriginal, creditOriginal,
+                    exchangeRate, debitBase, creditBase, confirmed, List.of());
+        }
+    }
+
+    public record OpeningBalanceDimension(UUID dimensionTypeId, UUID dimensionValueId,
+                                          String dimensionTypeCode, String dimensionTypeName,
+                                          String dimensionValueCode, String dimensionValueName) {
     }
 }

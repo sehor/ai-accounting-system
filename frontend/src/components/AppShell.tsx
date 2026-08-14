@@ -44,7 +44,7 @@ export function describeTab(pathname: string, search: string): WorkspaceTab | un
   const bookType = pathname.match(/\/books\/([^/]+)$/)?.[1]
   if (bookType) return {
     id: `book-${bookType}`,
-    title: { 'trial-balance': '科目余额表', 'general-ledger': '总账', 'sub-ledger': '明细账' }[bookType] || '账簿',
+    title: { 'trial-balance': '科目余额表', 'general-ledger': '总账', 'sub-ledger': '明细账', 'dimension-ledger': '辅助核算账' }[bookType] || '账簿',
     location,
     closable: true,
   }
@@ -157,6 +157,7 @@ export function AppShell() {
     if (path.includes('/books/trial-balance')) return 'trial-balance'
     if (path.includes('/books/general-ledger')) return 'general-ledger'
     if (path.includes('/books/sub-ledger')) return 'sub-ledger'
+    if (path.includes('/books/dimension-ledger')) return 'dimension-ledger'
     if (path.includes('/reports/balance-sheet')) return 'balance-sheet'
     if (path.includes('/reports/income-statement')) return 'income-statement'
     if (path.includes('/fixed-assets')) return 'fixed-assets'
@@ -222,6 +223,7 @@ export function AppShell() {
             { key: 'trial-balance', label: '科目余额表', onClick: () => go('books/trial-balance') },
             { key: 'general-ledger', label: '总账', onClick: () => go('books/general-ledger') },
             { key: 'sub-ledger', label: '明细账', onClick: () => go('books/sub-ledger') },
+            { key: 'dimension-ledger', label: '辅助核算账', onClick: () => go('books/dimension-ledger') },
           ] },
           { key: 'reports-group', icon: <FileTextOutlined />, label: '报表', children: [
             { key: 'balance-sheet', label: '资产负债表', onClick: () => go('reports/balance-sheet') },

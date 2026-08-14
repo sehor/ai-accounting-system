@@ -163,6 +163,13 @@ public class LedgerController {
         return ledgerService.createDimensionType(user(request), ledgerId, body);
     }
 
+    @PatchMapping("/{ledgerId}/dimension-types/{typeId}")
+    public LedgerResponses.DimensionType updateDimensionType(
+            HttpServletRequest request, @PathVariable UUID ledgerId, @PathVariable UUID typeId,
+            @Valid @RequestBody LedgerRequests.DimensionTypePatch body) {
+        return ledgerService.updateDimensionType(user(request), ledgerId, typeId, body);
+    }
+
     @GetMapping("/{ledgerId}/dimension-types/{typeId}/values")
     public List<LedgerResponses.DimensionValue> listDimensionValues(HttpServletRequest request,
                                                                       @PathVariable UUID ledgerId,
@@ -177,6 +184,13 @@ public class LedgerController {
                                                                 @PathVariable UUID typeId,
                                                                 @Valid @RequestBody LedgerRequests.DimensionValueCreate body) {
         return ledgerService.createDimensionValue(user(request), ledgerId, typeId, body);
+    }
+
+    @PatchMapping("/{ledgerId}/dimension-types/{typeId}/values/{valueId}")
+    public LedgerResponses.DimensionValue updateDimensionValue(
+            HttpServletRequest request, @PathVariable UUID ledgerId, @PathVariable UUID typeId,
+            @PathVariable UUID valueId, @Valid @RequestBody LedgerRequests.DimensionValuePatch body) {
+        return ledgerService.updateDimensionValue(user(request), ledgerId, typeId, valueId, body);
     }
 
     @GetMapping("/{ledgerId}/opening-balances")

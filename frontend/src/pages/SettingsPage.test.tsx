@@ -3,7 +3,14 @@ import { App } from 'antd'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
-import { OPENING_BALANCE_CSV_HEADER, OpeningsTab, openingBalanceAmountPattern } from './SettingsPage'
+import { apiFetch } from '../api/client'
+import type { DimensionType, DimensionValue } from '../api/types'
+import { DimensionsTab, OPENING_BALANCE_CSV_HEADER, OpeningsTab, openingBalanceAmountPattern } from './SettingsPage'
+
+vi.mock('../api/client', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../api/client')>()
+  return { ...actual, apiFetch: vi.fn() }
+})
 
 Object.defineProperty(window, 'matchMedia', {
   writable: true,
@@ -59,8 +66,9 @@ function renderOpenings(onSave = vi.fn()) {
             rows={[{
               id: 'opening-1', ledgerId: 'ledger-1', periodId: period.id, accountId: account.id,
               currency: 'CNY', dimensionKey: '', debitOriginal: '0', creditOriginal: '0', exchangeRate: '1',
-              debitBase: '0', creditBase: '0', confirmed: false,
+              debitBase: '0', creditBase: '0', confirmed: false, dimensions: [],
             }]}
+            ledgerId="ledger-1" auth={{ localUserId: 'user-1' }}
             accounts={[account]} periods={[period]} onSave={onSave} saving={false}
             onImport={vi.fn()} importing={false} onConfirm={vi.fn()} confirming={false}
           />} /></Routes>
@@ -99,5 +107,33 @@ describe('OpeningsTab', () => {
     await waitFor(() => expect(onSave).toHaveBeenCalledWith([
       expect.objectContaining({ debitOriginal: '-25.50', creditOriginal: '0', exchangeRate: '1' }),
     ]))
+  })
+})
+
+describe('DimensionsTab', () => {
+  it('uses optimistic versions when disabling a dimension value', async () => {
+    vi.mocked(apiFetch).mockResolvedValue({})
+    const onChanged = vi.fn()
+    const types: DimensionType[] = [{
+      id: 'type-1', ledgerId: 'ledger-1', code: 'CUSTOMER', name: '客户', required: false,
+      status: 'ACTIVE', version: 3,
+    }]
+    const values: DimensionValue[] = [{
+      id: 'value-1', ledgerId: 'ledger-1', dimensionTypeId: 'type-1', code: 'C001', name: '甲客户',
+      status: 'ACTIVE', version: 7,
+    }]
+    render(<App><DimensionsTab
+      ledgerId="ledger-1" session={{ localUserId: 'user-1' }} types={types} values={values}
+      selectedTypeId="type-1" onSelect={vi.fn()} onChanged={onChanged}
+    /></App>)
+
+    fireEvent.click(screen.getAllByRole('button', { name: '停用' })[1])
+
+    await waitFor(() => expect(apiFetch).toHaveBeenCalledWith(
+      '/ledgers/ledger-1/dimension-types/type-1/values/value-1',
+      { localUserId: 'user-1' },
+      expect.objectContaining({ method: 'PATCH', body: JSON.stringify({ expectedVersion: 7, status: 'INACTIVE' }) }),
+    ))
+    await waitFor(() => expect(onChanged).toHaveBeenCalled())
   })
 })

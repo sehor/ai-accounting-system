@@ -20,6 +20,9 @@ public interface BalanceProjectionService {
     /** Clears the finalized marker when a closed period is reopened. */
     void markReopened(UUID ledgerId, UUID periodId);
 
+    /** Marks both account and auxiliary snapshots finalized after the period status change succeeds. */
+    void markFinalized(UUID ledgerId, UUID periodId);
+
     ProjectionStatus status(UUID ledgerId, String periodCode);
 
     record VoucherEvent(UUID ledgerId, UUID periodId, UUID voucherId, long version,

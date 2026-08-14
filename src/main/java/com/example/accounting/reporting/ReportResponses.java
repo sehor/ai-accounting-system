@@ -80,7 +80,62 @@ public final class ReportResponses {
         }
     }
 
-    public record FinanceQueryLine(String groupKey, BigDecimal amount) {
+    public record FinanceQueryLine(String groupKey, BigDecimal amount, String dimensionKey,
+                                   List<FinanceQueryDimension> dimensions, String currency,
+                                   String periodCode, String accountCode) {
+
+        public FinanceQueryLine {
+            dimensions = dimensions == null ? List.of() : List.copyOf(dimensions);
+        }
+
+        public FinanceQueryLine(String groupKey, BigDecimal amount) {
+            this(groupKey, amount, null, List.of(), null, null, null);
+        }
+    }
+
+    public record FinanceQueryDimension(UUID dimensionTypeId, UUID dimensionValueId,
+                                        String dimensionTypeCode, String dimensionTypeName,
+                                        String dimensionValueCode, String dimensionValueName) {
+    }
+
+    public record DimensionLedgerPage(String projectionStatus, List<String> warnings,
+                                      List<DimensionLedgerBalance> balances,
+                                      List<DimensionLedgerEntry> entries, Pagination pagination) {
+        public DimensionLedgerPage {
+            warnings = warnings == null ? List.of() : List.copyOf(warnings);
+            balances = balances == null ? List.of() : List.copyOf(balances);
+            entries = entries == null ? List.of() : List.copyOf(entries);
+        }
+    }
+
+    public record DimensionLedgerBalance(UUID combinationId, String dimensionKey, String combinationKind,
+                                         String groupKey, String currency,
+                                         List<FinanceQueryDimension> dimensions,
+                                         DimensionLedgerAmounts original,
+                                         DimensionLedgerAmounts base) {
+        public DimensionLedgerBalance {
+            dimensions = dimensions == null ? List.of() : List.copyOf(dimensions);
+        }
+    }
+
+    public record DimensionLedgerAmounts(BigDecimal openingDebit, BigDecimal openingCredit,
+                                         BigDecimal periodDebit, BigDecimal periodCredit,
+                                         BigDecimal closingDebit, BigDecimal closingCredit) {
+    }
+
+    public record DimensionLedgerEntry(UUID voucherId, String voucherNumber, LocalDate voucherDate,
+                                      int lineNo, UUID lineId, UUID accountId, String accountCode,
+                                      String accountName, UUID combinationId, String dimensionKey,
+                                      String combinationKind, String groupKey,
+                                      List<FinanceQueryDimension> dimensions,
+                                      String currency, String side,
+                                      BigDecimal originalDebit, BigDecimal originalCredit,
+                                      BigDecimal baseDebit, BigDecimal baseCredit,
+                                      BigDecimal runningOriginalDebit, BigDecimal runningOriginalCredit,
+                                      BigDecimal runningBaseDebit, BigDecimal runningBaseCredit) {
+        public DimensionLedgerEntry {
+            dimensions = dimensions == null ? List.of() : List.copyOf(dimensions);
+        }
     }
 
     public record LedgerProfile(String accountingStandardCode, String accountingStandardVersion,

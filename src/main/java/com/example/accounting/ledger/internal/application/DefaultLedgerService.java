@@ -18,6 +18,8 @@ import com.example.accounting.ledger.LedgerService;
 import com.example.accounting.ledger.MembershipStatus;
 import com.example.accounting.ledger.PeriodCloseGuard;
 import com.example.accounting.shared.balance.BalanceProjectionService;
+import com.example.accounting.shared.accounting.DimensionCombinationKey;
+import com.example.accounting.shared.accounting.DimensionCombinationStore;
 import com.example.accounting.ledger.internal.persistence.AccountManagementRepository;
 import com.example.accounting.ledger.internal.port.LedgerRepository;
 import com.example.accounting.shared.web.ApiProblemException;
@@ -68,6 +70,7 @@ public class DefaultLedgerService implements LedgerService {
     private final LocalSuperAgentPolicy localSuperAgent;
     private final PlatformAdminPolicy platformAdmin;
     private final BalanceProjectionService balanceProjection;
+    private final DimensionCombinationStore dimensionCombinations;
     private final ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
 
     @Autowired
@@ -76,7 +79,8 @@ public class DefaultLedgerService implements LedgerService {
                                 AccountingStandardCatalog standards, ObjectProvider<PeriodCloseGuard> periodCloseGuard,
                                 LocalSuperAgentPolicy localSuperAgent,
                                 PlatformAdminPolicy platformAdmin,
-                                BalanceProjectionService balanceProjection) {
+                                BalanceProjectionService balanceProjection,
+                                DimensionCombinationStore dimensionCombinations) {
         this.ledgers = ledgers;
         this.accounts = accounts;
         this.ledgerAccess = ledgerAccess;
@@ -86,6 +90,7 @@ public class DefaultLedgerService implements LedgerService {
         this.localSuperAgent = localSuperAgent;
         this.platformAdmin = platformAdmin;
         this.balanceProjection = balanceProjection;
+        this.dimensionCombinations = dimensionCombinations;
     }
 
     @Override
@@ -416,7 +421,36 @@ public class DefaultLedgerService implements LedgerService {
         UUID id = UUID.randomUUID();
         ledgers.createDimensionType(id, ledgerId, request.code().trim().toUpperCase(Locale.ROOT),
                 request.name().trim(), Boolean.TRUE.equals(request.required()));
-        return ledgers.findDimensionType(ledgerId, id).orElseThrow();
+        LedgerResponses.DimensionType created = ledgers.findDimensionType(ledgerId, id).orElseThrow();
+        ledgers.recordDimensionRevision(
+                ledgerId, "DIMENSION_TYPE", id, "CREATE", actorId, "null", json(created));
+        return created;
+    }
+
+    @Override
+    @Transactional
+    public LedgerResponses.DimensionType updateDimensionType(
+            UUID actorId, UUID ledgerId, UUID typeId, LedgerRequests.DimensionTypePatch request) {
+        requireRole(actorId, ledgerId, WRITE_ROLES);
+        LedgerResponses.DimensionType before = ledgers.findDimensionType(ledgerId, typeId).orElseThrow(() ->
+                problem(404, "DIMENSION_TYPE_NOT_FOUND", "Dimension type not found",
+                        "The dimension type is not available to this ledger"));
+        if (request.name() == null && request.status() == null && request.required() == null) {
+            throw problem(422, "DIMENSION_TYPE_PATCH_EMPTY", "Dimension type patch is empty",
+                    "At least one mutable dimension type field is required");
+        }
+        String name = request.name() == null ? before.name() : request.name().trim();
+        String status = request.status() == null ? before.status() : request.status();
+        boolean required = request.required() == null ? before.required() : request.required();
+        if (!ledgers.updateDimensionType(
+                ledgerId, typeId, name, status, required, request.expectedVersion())) {
+            throw problem(409, "DIMENSION_VERSION_CONFLICT", "Dimension version conflict",
+                    "The dimension type was changed by another request");
+        }
+        LedgerResponses.DimensionType after = ledgers.findDimensionType(ledgerId, typeId).orElseThrow();
+        ledgers.recordDimensionRevision(
+                ledgerId, "DIMENSION_TYPE", typeId, "UPDATE", actorId, json(before), json(after));
+        return after;
     }
 
     @Override
@@ -434,7 +468,37 @@ public class DefaultLedgerService implements LedgerService {
         requireDimensionType(actorId, ledgerId, typeId, true);
         UUID id = UUID.randomUUID();
         ledgers.createDimensionValue(id, ledgerId, typeId, request.code().trim(), request.name().trim());
-        return ledgers.findDimensionValue(ledgerId, id).orElseThrow();
+        LedgerResponses.DimensionValue created = ledgers.findDimensionValue(ledgerId, id).orElseThrow();
+        ledgers.recordDimensionRevision(
+                ledgerId, "DIMENSION_VALUE", id, "CREATE", actorId, "null", json(created));
+        return created;
+    }
+
+    @Override
+    @Transactional
+    public LedgerResponses.DimensionValue updateDimensionValue(
+            UUID actorId, UUID ledgerId, UUID typeId, UUID valueId,
+            LedgerRequests.DimensionValuePatch request) {
+        requireRole(actorId, ledgerId, WRITE_ROLES);
+        LedgerResponses.DimensionValue before = ledgers.findDimensionValue(ledgerId, valueId)
+                .filter(value -> value.dimensionTypeId().equals(typeId))
+                .orElseThrow(() -> problem(404, "DIMENSION_VALUE_NOT_FOUND", "Dimension value not found",
+                        "The dimension value is not available to this ledger and type"));
+        if (request.name() == null && request.status() == null) {
+            throw problem(422, "DIMENSION_VALUE_PATCH_EMPTY", "Dimension value patch is empty",
+                    "At least one mutable dimension value field is required");
+        }
+        String name = request.name() == null ? before.name() : request.name().trim();
+        String status = request.status() == null ? before.status() : request.status();
+        if (!ledgers.updateDimensionValue(
+                ledgerId, typeId, valueId, name, status, request.expectedVersion())) {
+            throw problem(409, "DIMENSION_VERSION_CONFLICT", "Dimension version conflict",
+                    "The dimension value was changed by another request");
+        }
+        LedgerResponses.DimensionValue after = ledgers.findDimensionValue(ledgerId, valueId).orElseThrow();
+        ledgers.recordDimensionRevision(
+                ledgerId, "DIMENSION_VALUE", valueId, "UPDATE", actorId, json(before), json(after));
+        return after;
     }
 
     @Override
@@ -458,17 +522,24 @@ public class DefaultLedgerService implements LedgerService {
         for (LedgerRequests.OpeningBalanceLine line : lines) {
             balanceProjection.requireOpenPeriod(ledgerId, line.periodId());
             validateOpeningBalanceLine(ledgerId, line);
+            DimensionCombinationStore.Resolved combination = resolveOpeningDimensions(ledgerId, line);
             BigDecimal debit = money(line.debitOriginal());
             BigDecimal credit = money(line.creditOriginal());
             BigDecimal rate = line.exchangeRate().setScale(8, RoundingMode.HALF_UP);
+            List<LedgerResponses.OpeningBalanceDimension> dimensions = combination.members().stream()
+                    .map(member -> new LedgerResponses.OpeningBalanceDimension(
+                            member.dimensionTypeId(), member.dimensionValueId(),
+                            member.dimensionTypeCode(), member.dimensionTypeName(),
+                            member.dimensionValueCode(), member.dimensionValueName()))
+                    .toList();
             LedgerResponses.OpeningBalance balance = new LedgerResponses.OpeningBalance(
                     UUID.randomUUID(), ledgerId, line.periodId(), line.accountId(), line.currency(),
-                    line.dimensionKey() == null ? "" : line.dimensionKey().trim(), debit, credit, rate,
+                    combination.dimensionKey(), debit, credit, rate,
                     debit.multiply(rate).setScale(2, RoundingMode.HALF_UP),
-                    credit.multiply(rate).setScale(2, RoundingMode.HALF_UP), false);
-            if (!ledgers.upsertOpeningBalance(balance)) {
-                throw confirmedOpeningBalance();
-            }
+                    credit.multiply(rate).setScale(2, RoundingMode.HALF_UP), false, dimensions);
+            UUID openingBalanceId = ledgers.upsertOpeningBalance(balance, combination.id())
+                    .orElseThrow(this::confirmedOpeningBalance);
+            ledgers.replaceOpeningBalanceDimensions(ledgerId, openingBalanceId, dimensions);
         }
         return ledgers.listOpeningBalances(ledgerId);
     }
@@ -507,9 +578,13 @@ public class DefaultLedgerService implements LedgerService {
         List<LedgerRequests.OpeningBalanceLine> lines = new ArrayList<>();
         try (BufferedReader reader = new BufferedReader(new InputStreamReader(input, StandardCharsets.UTF_8))) {
             String header = reader.readLine();
-            String expected = "periodCode,accountCode,currency,dimensionKey,debitOriginal,creditOriginal,exchangeRate";
-            if (!expected.equals(header)) {
-                throw csvProblem(1, "header", "expected " + expected);
+            String legacyHeader =
+                    "periodCode,accountCode,currency,dimensionKey,debitOriginal,creditOriginal,exchangeRate";
+            String structuredHeader =
+                    "periodCode,accountCode,currency,dimensionKey,dimensionValues,debitOriginal,creditOriginal,exchangeRate";
+            boolean structured = structuredHeader.equals(header);
+            if (!structured && !legacyHeader.equals(header)) {
+                throw csvProblem(1, "header", "expected " + legacyHeader + " or " + structuredHeader);
             }
             String row;
             int rowNumber = 1;
@@ -520,8 +595,9 @@ public class DefaultLedgerService implements LedgerService {
                 }
                 // ponytail: v1 accepts simple CSV cells; add a CSV parser when quoted commas are required.
                 String[] cells = row.split(",", -1);
-                if (cells.length != 7) {
-                    throw csvProblem(rowNumber, "row", "expected 7 columns");
+                int expectedColumns = structured ? 8 : 7;
+                if (cells.length != expectedColumns) {
+                    throw csvProblem(rowNumber, "row", "expected " + expectedColumns + " columns");
                 }
                 UUID period = lookupPeriod(ledgerId, cells[0].trim(), rowNumber);
                 UUID account = lookupAccount(ledgerId, cells[1].trim(), rowNumber);
@@ -529,10 +605,13 @@ public class DefaultLedgerService implements LedgerService {
                 if (!currency.matches("[A-Z]{3}")) {
                     throw csvProblem(rowNumber, "currency", "must be three uppercase letters");
                 }
+                int amountOffset = structured ? 5 : 4;
+                List<LedgerRequests.OpeningBalanceDimension> dimensions = structured
+                        ? openingDimensionsFromCsv(ledgerId, cells[4], rowNumber) : List.of();
                 lines.add(new LedgerRequests.OpeningBalanceLine(account, period, currency, cells[3].trim(),
-                        csvDecimal(cells[4], rowNumber, "debitOriginal"),
-                        csvDecimal(cells[5], rowNumber, "creditOriginal"),
-                        csvDecimal(cells[6], rowNumber, "exchangeRate")));
+                        csvDecimal(cells[amountOffset], rowNumber, "debitOriginal"),
+                        csvDecimal(cells[amountOffset + 1], rowNumber, "creditOriginal"),
+                        csvDecimal(cells[amountOffset + 2], rowNumber, "exchangeRate"), dimensions));
             }
         } catch (IOException exception) {
             throw problem(422, "OPENING_BALANCE_CSV_INVALID", "Invalid CSV", "The CSV could not be read");
@@ -648,7 +727,9 @@ public class DefaultLedgerService implements LedgerService {
             }
         }
         ledgers.updatePeriodStatus(ledgerId, periodId, nextStatus);
-        if ("OPEN".equals(nextStatus)) {
+        if ("CLOSED".equals(nextStatus)) {
+            balanceProjection.markFinalized(ledgerId, periodId);
+        } else if ("OPEN".equals(nextStatus)) {
             balanceProjection.markReopened(ledgerId, periodId);
         }
         ledgers.recordPeriodAction(ledgerId, periodId, action, reason, actorId);
@@ -658,7 +739,10 @@ public class DefaultLedgerService implements LedgerService {
 
     private void requireDimensionType(UUID actorId, UUID ledgerId, UUID typeId, boolean write) {
         requireRole(actorId, ledgerId, write ? WRITE_ROLES : VIEW_ROLES);
-        if (!ledgers.activeDimensionTypeExists(ledgerId, typeId)) {
+        boolean available = write
+                ? ledgers.activeDimensionTypeExists(ledgerId, typeId)
+                : ledgers.findDimensionType(ledgerId, typeId).isPresent();
+        if (!available) {
             throw problem(404, "DIMENSION_TYPE_NOT_FOUND", "Dimension type not found",
                     "The dimension type is not available to this ledger");
         }
@@ -680,6 +764,82 @@ public class DefaultLedgerService implements LedgerService {
             throw problem(422, "OPENING_BALANCE_PERIOD_INVALID", "Invalid opening balance period",
                     "Opening balances may only be recorded in the ledger's first accounting period");
         }
+    }
+
+    private List<LedgerRequests.OpeningBalanceDimension> openingDimensionsFromCsv(
+            UUID ledgerId, String raw, int rowNumber) {
+        if (raw == null || raw.isBlank()) {
+            return List.of();
+        }
+        Map<String, LedgerResponses.DimensionType> types = ledgers.listDimensionTypes(ledgerId).stream()
+                .filter(type -> "ACTIVE".equals(type.status()))
+                .collect(Collectors.toMap(LedgerResponses.DimensionType::code, Function.identity()));
+        List<LedgerRequests.OpeningBalanceDimension> result = new ArrayList<>();
+        Set<UUID> seenTypes = new java.util.HashSet<>();
+        for (String token : raw.trim().split("\\|", -1)) {
+            String[] pair = token.split("=", -1);
+            if (pair.length != 2 || pair[0].isBlank() || pair[1].isBlank()) {
+                throw csvProblem(rowNumber, "dimensionValues", "expected TYPE_CODE=VALUE_CODE entries");
+            }
+            LedgerResponses.DimensionType type = types.get(pair[0].trim());
+            if (type == null) {
+                throw csvProblem(rowNumber, "dimensionValues", "unknown or inactive type " + pair[0].trim());
+            }
+            LedgerResponses.DimensionValue value = ledgers.listDimensionValues(ledgerId, type.id()).stream()
+                    .filter(candidate -> "ACTIVE".equals(candidate.status()))
+                    .filter(candidate -> candidate.code().equals(pair[1].trim()))
+                    .findFirst().orElseThrow(() -> csvProblem(
+                            rowNumber, "dimensionValues", "unknown or inactive value " + pair[1].trim()));
+            if (!seenTypes.add(type.id())) {
+                throw csvProblem(rowNumber, "dimensionValues", "each dimension type may appear only once");
+            }
+            result.add(new LedgerRequests.OpeningBalanceDimension(type.id(), value.id()));
+        }
+        return List.copyOf(result);
+    }
+
+    private DimensionCombinationStore.Resolved resolveOpeningDimensions(
+            UUID ledgerId, LedgerRequests.OpeningBalanceLine line) {
+        List<LedgerRequests.OpeningBalanceDimension> requested = line.dimensions();
+        if (requested.isEmpty() && line.dimensionKey() != null && !line.dimensionKey().isBlank()) {
+            throw problem(422, "OPENING_BALANCE_DIMENSIONS_REQUIRED", "Structured dimensions are required",
+                    "A legacy dimensionKey cannot create a new opening balance; provide dimensions instead");
+        }
+        Set<UUID> actualTypes = requested.stream()
+                .map(LedgerRequests.OpeningBalanceDimension::dimensionTypeId)
+                .collect(Collectors.toSet());
+        if (actualTypes.size() != requested.size()) {
+            throw invalidOpeningDimensions("Each dimension type may appear only once");
+        }
+        LedgerResponses.Account account = accounts.find(ledgerId, line.accountId())
+                .orElseThrow(() -> invalidOpeningDimensions("The account is not available to this ledger"));
+        Set<UUID> allowedTypes = account.dimensionRequirements().stream()
+                .map(LedgerResponses.DimensionRequirement::dimensionTypeId)
+                .collect(Collectors.toSet());
+        boolean disallowed = actualTypes.stream().anyMatch(typeId -> !allowedTypes.contains(typeId));
+        boolean missingRequired = account.dimensionRequirements().stream()
+                .filter(LedgerResponses.DimensionRequirement::required)
+                .map(LedgerResponses.DimensionRequirement::dimensionTypeId)
+                .anyMatch(typeId -> !actualTypes.contains(typeId));
+        if (disallowed || missingRequired) {
+            throw invalidOpeningDimensions(
+                    "Dimensions must match the account's allowed and required dimension types");
+        }
+        List<DimensionCombinationKey.Dimension> dimensions = requested.stream()
+                .map(dimension -> new DimensionCombinationKey.Dimension(
+                        dimension.dimensionTypeId(), dimension.dimensionValueId()))
+                .toList();
+        try {
+            return dimensionCombinations.resolveActive(ledgerId, dimensions)
+                    .orElseThrow(() -> invalidOpeningDimensions(
+                            "Every dimension value must be active and belong to its ledger and type"));
+        } catch (IllegalArgumentException exception) {
+            throw invalidOpeningDimensions(exception.getMessage());
+        }
+    }
+
+    private ApiProblemException invalidOpeningDimensions(String detail) {
+        return problem(422, "INVALID_OPENING_BALANCE_DIMENSIONS", "Invalid opening balance dimensions", detail);
     }
 
     private void ensureNotRemovingLastOwner(

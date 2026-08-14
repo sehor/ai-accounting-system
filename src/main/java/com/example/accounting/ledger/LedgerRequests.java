@@ -116,7 +116,18 @@ public final class LedgerRequests {
     public record DimensionTypeCreate(@NotBlank String code, @NotBlank String name, Boolean required) {
     }
 
+    public record DimensionTypePatch(@NotNull Long expectedVersion,
+                                     @Size(min = 1, max = 200) String name,
+                                     @Pattern(regexp = "ACTIVE|INACTIVE") String status,
+                                     Boolean required) {
+    }
+
     public record DimensionValueCreate(@NotBlank String code, @NotBlank String name) {
+    }
+
+    public record DimensionValuePatch(@NotNull Long expectedVersion,
+                                      @Size(min = 1, max = 200) String name,
+                                      @Pattern(regexp = "ACTIVE|INACTIVE") String status) {
     }
 
     public record OpeningBalances(@NotEmpty List<@Valid OpeningBalanceLine> lines) {
@@ -128,6 +139,22 @@ public final class LedgerRequests {
                                      String dimensionKey,
                                      @NotNull BigDecimal debitOriginal,
                                      @NotNull BigDecimal creditOriginal,
-                                     @NotNull BigDecimal exchangeRate) {
+                                     @NotNull BigDecimal exchangeRate,
+                                     List<@Valid OpeningBalanceDimension> dimensions) {
+
+        public OpeningBalanceLine {
+            dimensions = dimensions == null ? List.of() : List.copyOf(dimensions);
+        }
+
+        public OpeningBalanceLine(UUID accountId, UUID periodId, String currency, String dimensionKey,
+                                  BigDecimal debitOriginal, BigDecimal creditOriginal,
+                                  BigDecimal exchangeRate) {
+            this(accountId, periodId, currency, dimensionKey, debitOriginal, creditOriginal,
+                    exchangeRate, List.of());
+        }
+    }
+
+    public record OpeningBalanceDimension(@NotNull UUID dimensionTypeId,
+                                          @NotNull UUID dimensionValueId) {
     }
 }

@@ -60,10 +60,16 @@ public interface LedgerService {
     LedgerResponses.DimensionType createDimensionType(UUID actorId, UUID ledgerId,
                                                        LedgerRequests.DimensionTypeCreate request);
 
+    LedgerResponses.DimensionType updateDimensionType(UUID actorId, UUID ledgerId, UUID typeId,
+                                                       LedgerRequests.DimensionTypePatch request);
+
     List<LedgerResponses.DimensionValue> listDimensionValues(UUID actorId, UUID ledgerId, UUID typeId);
 
     LedgerResponses.DimensionValue createDimensionValue(UUID actorId, UUID ledgerId, UUID typeId,
                                                          LedgerRequests.DimensionValueCreate request);
+
+    LedgerResponses.DimensionValue updateDimensionValue(UUID actorId, UUID ledgerId, UUID typeId, UUID valueId,
+                                                         LedgerRequests.DimensionValuePatch request);
 
     List<LedgerResponses.OpeningBalance> listOpeningBalances(UUID actorId, UUID ledgerId);
 

@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.example.accounting.identity.CurrentUserResolver;
 import com.example.accounting.ledger.LedgerRequests;
+import com.example.accounting.ledger.LedgerResponses;
 import com.example.accounting.ledger.LedgerService;
 import com.example.accounting.reporting.internal.port.BalanceProjectionRepository;
 import com.example.accounting.reporting.internal.port.BalanceRebuildRepository;
@@ -162,6 +163,112 @@ class RollingBalanceProjectionIntegrationTest {
     }
 
     @Test
+    void rebuildsAndRollsAuxiliaryBalancesByCombinationAndCurrency() {
+        UUID actorId = UUID.randomUUID();
+        UUID ledgerId = ledgers.create(new CurrentUserResolver.ResolvedUser(
+                        actorId, "dimension-projection", actorId.toString()),
+                new LedgerRequests.Create("dimension projection", "SME", "v1", "CNY",
+                        LocalDate.of(2026, 1, 1), false)).id();
+        UUID january = period(ledgerId, "2026-01");
+        UUID february = period(ledgerId, "2026-02");
+        LedgerResponses.DimensionType customer = customerType(actorId, ledgerId);
+        LedgerResponses.DimensionType project = projectType(actorId, ledgerId);
+        UUID controlled = ledgers.createAccount(actorId, ledgerId,
+                new LedgerRequests.AccountCreate("1410", "客户往来", "CURRENT_ASSET", "DEBIT", null,
+                        false, null, false, null, List.of(new LedgerRequests.DimensionRequirement(
+                                customer.id(), true), new LedgerRequests.DimensionRequirement(project.id(), true)))).id();
+        UUID capital = account(ledgerId, "3001");
+        LedgerResponses.DimensionValue customerA = ledgers.createDimensionValue(actorId, ledgerId,
+                customer.id(), new LedgerRequests.DimensionValueCreate("C-A", "客户 A"));
+        LedgerResponses.DimensionValue customerB = ledgers.createDimensionValue(actorId, ledgerId,
+                customer.id(), new LedgerRequests.DimensionValueCreate("C-B", "客户 B"));
+        LedgerResponses.DimensionValue projectA = ledgers.createDimensionValue(actorId, ledgerId,
+                project.id(), new LedgerRequests.DimensionValueCreate("P-A", "项目 A"));
+
+        VoucherResponses.Voucher usdVoucher = vouchers.create(actorId, ledgerId, new VoucherRequests.Create(
+                january, LocalDate.of(2026, 1, 10), "GENERAL", "dimension-usd", "customer A USD",
+                List.of(dimensionLine(controlled, "DEBIT", "USD", "10", "7", customerA, projectA),
+                        line(capital, "CREDIT", "70"))));
+        VoucherResponses.Voucher cnyVoucher = vouchers.create(actorId, ledgerId, new VoucherRequests.Create(
+                january, LocalDate.of(2026, 1, 11), "GENERAL", "dimension-cny", "customer B CNY",
+                List.of(dimensionLine(controlled, "DEBIT", "CNY", "20", "1", customerB, projectA),
+                        line(capital, "CREDIT", "20"))));
+        UUID customerACombination = combination(ledgerId, usdVoucher.id(), controlled);
+        UUID customerBCombination = combination(ledgerId, cnyVoucher.id(), controlled);
+
+        assertThatThrownBy(() -> reports.dimensionLedger(actorId, ledgerId,
+                new DimensionLedgerRequests.Query("2026-01", "2026-01", controlled, null, List.of(),
+                        List.of(), 1, 50)))
+                .isInstanceOf(ApiProblemException.class)
+                .extracting(error -> ((ApiProblemException) error).code())
+                .isEqualTo("BALANCE_PROJECTION_NOT_READY");
+
+        drainProjection();
+        assertDimensionBalance(ledgerId, "2026-01", controlled, customerACombination, "USD", "10", "70");
+        assertDimensionBalance(ledgerId, "2026-01", controlled, customerBCombination, "CNY", "20", "20");
+        assertDimensionBalance(ledgerId, "2026-02", controlled, customerACombination, "USD", "10", "70");
+        assertDimensionBalancesMatchAccount(ledgerId, "2026-01", controlled);
+
+        ReportResponses.DimensionLedgerPage fullLedger = reports.dimensionLedger(actorId, ledgerId,
+                new DimensionLedgerRequests.Query("2026-01", "2026-01", controlled, null, List.of(),
+                        List.of(customer.id()), 1, 1));
+        assertThat(fullLedger.projectionStatus()).isEqualTo("READY");
+        assertThat(fullLedger.balances()).hasSize(2);
+        assertThat(fullLedger.entries()).singleElement().satisfies(entry -> {
+            assertThat(entry.currency()).isEqualTo("USD");
+            assertThat(entry.runningOriginalDebit()).isEqualByComparingTo("10");
+            assertThat(entry.runningBaseDebit()).isEqualByComparingTo("70");
+            assertThat(entry.groupKey()).isEqualTo("C-A");
+        });
+        ReportResponses.DimensionLedgerPage secondPage = reports.dimensionLedger(actorId, ledgerId,
+                new DimensionLedgerRequests.Query("2026-01", "2026-01", controlled, null, List.of(),
+                        List.of(customer.id()), 2, 1));
+        assertThat(secondPage.pagination().totalItems()).isEqualTo(2);
+        assertThat(secondPage.entries()).singleElement().satisfies(entry -> {
+            assertThat(entry.currency()).isEqualTo("CNY");
+            assertThat(entry.runningOriginalDebit()).isEqualByComparingTo("20");
+            assertThat(entry.runningBaseDebit()).isEqualByComparingTo("20");
+        });
+        ReportResponses.DimensionLedgerPage emptyPage = reports.dimensionLedger(actorId, ledgerId,
+                new DimensionLedgerRequests.Query("2026-01", "2026-01", controlled, null, List.of(),
+                        List.of(customer.id()), 3, 1));
+        assertThat(emptyPage.entries()).isEmpty();
+        assertThat(emptyPage.pagination().totalItems()).isEqualTo(2);
+        assertThat(emptyPage.pagination().totalPages()).isEqualTo(2);
+        ReportResponses.DimensionLedgerPage filteredLedger = reports.dimensionLedger(actorId, ledgerId,
+                new DimensionLedgerRequests.Query("2026-01", "2026-01", controlled, "CNY",
+                        List.of(new DimensionLedgerRequests.DimensionValue(customer.id(), customerB.id()),
+                                new DimensionLedgerRequests.DimensionValue(project.id(), projectA.id())),
+                        List.of(customer.id()), 1, 50));
+        assertThat(filteredLedger.balances()).singleElement().satisfies(balance -> {
+            assertThat(balance.currency()).isEqualTo("CNY");
+            assertThat(balance.original().closingDebit()).isEqualByComparingTo("20");
+        });
+        jdbc.update("update dimension_combination set kind = 'LEGACY_UNMAPPED' where ledger_id = ? and id = ?",
+                ledgerId, customerBCombination);
+        assertThat(reports.dimensionLedger(actorId, ledgerId,
+                new DimensionLedgerRequests.Query("2026-01", "2026-01", controlled, "CNY", List.of(),
+                        List.of(), 1, 50)).warnings()).contains("LEGACY_UNMAPPED");
+
+        VoucherResponses.Voucher updated = vouchers.update(actorId, ledgerId, usdVoucher.id(),
+                new VoucherRequests.Update(usdVoucher.version(), january, usdVoucher.voucherDate(),
+                        usdVoucher.voucherType(), usdVoucher.voucherNumber(), "move to customer B",
+                        List.of(dimensionLine(controlled, "DEBIT", "USD", "10", "7", customerB, projectA),
+                                line(capital, "CREDIT", "70"))));
+        drainProjection();
+        assertThat(dimensionBalanceCount(ledgerId, "2026-01", controlled, customerACombination)).isZero();
+        assertDimensionBalance(ledgerId, "2026-01", controlled, customerBCombination, "USD", "10", "70");
+        assertDimensionBalancesMatchAccount(ledgerId, "2026-01", controlled);
+
+        vouchers.delete(actorId, ledgerId, updated.id());
+        drainProjection();
+        assertThat(dimensionBalanceCount(ledgerId, "2026-01", controlled, customerBCombination))
+                .isEqualTo(1);
+        assertDimensionBalance(ledgerId, "2026-02", controlled, customerBCombination, "CNY", "20", "20");
+        assertDimensionBalancesMatchAccount(ledgerId, "2026-01", controlled);
+    }
+
+    @Test
     void reportsAnOpeningBalanceOnItsSelectedNonNormalSide() {
         UUID actorId = UUID.randomUUID();
         UUID ledgerId = ledgers.create(new CurrentUserResolver.ResolvedUser(
@@ -228,6 +335,13 @@ class RollingBalanceProjectionIntegrationTest {
                 february, LocalDate.of(2021, 2, 11), "GENERAL", "2", "second child",
                 List.of(line(capital, "DEBIT", "7"), line(secondChild, "CREDIT", "7"))));
         drainProjection();
+
+        assertThatThrownBy(() -> reports.dimensionLedger(actorId, ledgerId,
+                new DimensionLedgerRequests.Query("2021-02", "2021-02", cashParent, null, List.of(),
+                        List.of(), 1, 50)))
+                .isInstanceOf(ApiProblemException.class)
+                .extracting(error -> ((ApiProblemException) error).code())
+                .isEqualTo("DIMENSION_LEDGER_LEAF_ACCOUNT_REQUIRED");
 
         ReportResponses.SubLedgerPage detail = reports.subLedgerBook(
                 actorId, ledgerId, new PeriodRange("2021-02", "2021-02"), cashParent, 1, 50);
@@ -299,6 +413,32 @@ class RollingBalanceProjectionIntegrationTest {
         return new VoucherRequests.Line(accountId, side, "CNY", new BigDecimal(amount), BigDecimal.ONE, "projection");
     }
 
+    private VoucherRequests.Line dimensionLine(UUID accountId, String side, String currency, String amount,
+                                               String rate, LedgerResponses.DimensionValue... dimensions) {
+        return new VoucherRequests.Line(accountId, side, currency, new BigDecimal(amount), new BigDecimal(rate),
+                "dimension projection", null, null, null,
+                java.util.Arrays.stream(dimensions)
+                        .map(dimension -> new VoucherRequests.Dimension(dimension.dimensionTypeId(), dimension.id()))
+                        .toList());
+    }
+
+    private LedgerResponses.DimensionType customerType(UUID actorId, UUID ledgerId) {
+        return ledgers.listDimensionTypes(actorId, ledgerId).stream()
+                .filter(type -> type.code().equals("CUSTOMER")).findFirst().orElseThrow();
+    }
+
+    private LedgerResponses.DimensionType projectType(UUID actorId, UUID ledgerId) {
+        return ledgers.listDimensionTypes(actorId, ledgerId).stream()
+                .filter(type -> type.code().equals("PROJECT")).findFirst().orElseThrow();
+    }
+
+    private UUID combination(UUID ledgerId, UUID voucherId, UUID accountId) {
+        return jdbc.queryForObject("""
+                select dimension_combination_id from voucher_line
+                where ledger_id = ? and voucher_id = ? and account_id = ?
+                """, UUID.class, ledgerId, voucherId, accountId);
+    }
+
     private UUID period(UUID ledgerId, String code) {
         return jdbc.queryForObject("""
                 select id from accounting_period where ledger_id = ? and period_code = ?
@@ -341,5 +481,42 @@ class RollingBalanceProjectionIntegrationTest {
         assertThat((BigDecimal) row.get("opening_credit_base")).isEqualByComparingTo(openingCredit);
         assertThat((BigDecimal) row.get("closing_debit_base")).isEqualByComparingTo(closingDebit);
         assertThat((BigDecimal) row.get("closing_credit_base")).isEqualByComparingTo(closingCredit);
+    }
+
+    private void assertDimensionBalance(UUID ledgerId, String periodCode, UUID accountId, UUID combinationId,
+                                        String currency, String closingOriginal, String closingBase) {
+        Map<String, Object> row = jdbc.queryForMap("""
+                select closing_debit_original, closing_debit_base
+                from dimension_period_balance b
+                join accounting_period p on p.ledger_id = b.ledger_id and p.id = b.period_id
+                where b.ledger_id = ? and p.period_code = ? and b.account_id = ?
+                  and b.dimension_combination_id = ? and b.currency = ?
+                """, ledgerId, periodCode, accountId, combinationId, currency);
+        assertThat((BigDecimal) row.get("closing_debit_original")).isEqualByComparingTo(closingOriginal);
+        assertThat((BigDecimal) row.get("closing_debit_base")).isEqualByComparingTo(closingBase);
+    }
+
+    private int dimensionBalanceCount(UUID ledgerId, String periodCode, UUID accountId, UUID combinationId) {
+        return jdbc.queryForObject("""
+                select count(*) from dimension_period_balance b
+                join accounting_period p on p.ledger_id = b.ledger_id and p.id = b.period_id
+                where b.ledger_id = ? and p.period_code = ? and b.account_id = ?
+                  and b.dimension_combination_id = ?
+                """, Integer.class, ledgerId, periodCode, accountId, combinationId);
+    }
+
+    private void assertDimensionBalancesMatchAccount(UUID ledgerId, String periodCode, UUID accountId) {
+        BigDecimal dimensionClosing = jdbc.queryForObject("""
+                select coalesce(sum(b.closing_debit_base - b.closing_credit_base), 0)
+                from dimension_period_balance b
+                join accounting_period p on p.ledger_id = b.ledger_id and p.id = b.period_id
+                where b.ledger_id = ? and p.period_code = ? and b.account_id = ?
+                """, BigDecimal.class, ledgerId, periodCode, accountId);
+        BigDecimal accountClosing = jdbc.queryForObject("""
+                select closing_debit_base - closing_credit_base from account_period_balance b
+                join accounting_period p on p.ledger_id = b.ledger_id and p.id = b.period_id
+                where b.ledger_id = ? and p.period_code = ? and b.account_id = ?
+                """, BigDecimal.class, ledgerId, periodCode, accountId);
+        assertThat(dimensionClosing).isEqualByComparingTo(accountClosing);
     }
 }

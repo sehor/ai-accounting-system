@@ -1,12 +1,12 @@
 import { Alert, App as AntApp, Button, Card, Checkbox, DatePicker, Empty, Form, Input, Modal, Select, Space, Spin, Table, Tag, Typography, Upload } from 'antd'
 import type { FormInstance } from 'antd'
 import { DeleteOutlined, DownloadOutlined, PlusOutlined, ReloadOutlined, UploadOutlined } from '@ant-design/icons'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
 import dayjs, { type Dayjs } from 'dayjs'
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { apiFetch, createIdempotencyKey, jsonBody, ApiError } from '../api/client'
-import type { Account, KingdeeImportResult, Period, Voucher } from '../api/types'
+import type { Account, DimensionType, DimensionValue, KingdeeImportResult, Period, Voucher } from '../api/types'
 import { useAuth } from '../auth/AuthProvider'
 import { useWorkspaceSearchParams } from '../components/workspaceSearch'
 import { clearWorkspaceTabDirty, setWorkspaceTabDirty } from '../components/workspaceDirty'
@@ -114,15 +114,69 @@ function VoucherAmountCell({ form, fieldName, side, onChange }: {
     }} />
 }
 
+function VoucherDimensionFields({ form, fieldName, accountsById, dimensionTypesById, dimensionValuesByType }: {
+  form: FormInstance<VoucherForm>
+  fieldName: number
+  accountsById: Map<string, Account>
+  dimensionTypesById: Map<string, DimensionType>
+  dimensionValuesByType: Map<string, DimensionValue[]>
+}) {
+  const accountId = Form.useWatch(['lines', fieldName, 'accountId'], form)
+  const requirements = accountsById.get(accountId)?.dimensionRequirements || []
+
+  if (requirements.length === 0) return <Typography.Text type="secondary">—</Typography.Text>
+
+  return <Space direction="vertical" size={4} style={{ width: '100%' }}>
+    {requirements.map((requirement) => {
+      const dimensionType = dimensionTypesById.get(requirement.dimensionTypeId)
+      const name = dimensionType?.name || requirement.name
+      const label = `${name}${requirement.required ? '（必填）' : ''}`
+      return <Form.Item
+        key={requirement.dimensionTypeId}
+        name={[fieldName, 'dimensionValues', requirement.dimensionTypeId]}
+        label={label}
+        required={requirement.required}
+        rules={requirement.required ? [{ required: true, message: `请选择${name}` }] : undefined}
+      >
+        <Select
+          allowClear
+          showSearch
+          optionFilterProp="label"
+          aria-label={`第 ${fieldName + 1} 条分录${label}`}
+          options={(dimensionValuesByType.get(requirement.dimensionTypeId) || [])
+            .filter((value) => value.status === 'ACTIVE')
+            .map((value) => ({ value: value.id, label: `${value.code} ${value.name}` }))}
+        />
+      </Form.Item>
+    })}
+  </Space>
+}
+
 export function VoucherEditorPage() {
   const { ledgerId = '', voucherId } = useParams(); const { session } = useAuth(); const client = useQueryClient(); const navigate = useNavigate(); const { modal, message } = AntApp.useApp(); const { closeTab } = useWorkspaceTabs(); const [form] = Form.useForm<VoucherForm>(); const [commentAction, setCommentAction] = useState<'approve' | 'reject' | null>(null); const [pendingAction, setPendingAction] = useState<string | null>(null)
   const [savedVoucher, setSavedVoucher] = useState<Voucher | null>(null)
   const tabId = voucherId === 'new' ? 'voucher-new' : `voucher-${voucherId}`; const [dirty, setDirty] = useState(false)
   const accounts = useQuery({ queryKey: ['accounts', ledgerId], queryFn: () => apiFetch<Account[]>(`/ledgers/${ledgerId}/accounts`, session!), enabled: Boolean(session && ledgerId) })
+  const dimensionTypes = useQuery({ queryKey: ['dimension-types', ledgerId], queryFn: () => apiFetch<DimensionType[]>(`/ledgers/${ledgerId}/dimension-types`, session!), enabled: Boolean(session && ledgerId) })
   const periods = useQuery({ queryKey: ['periods', ledgerId], queryFn: () => apiFetch<Period[]>(`/ledgers/${ledgerId}/periods`, session!), enabled: Boolean(session && ledgerId) })
   const voucher = useQuery({ queryKey: ['voucher', ledgerId, voucherId], queryFn: () => apiFetch<Voucher>(`/ledgers/${ledgerId}/vouchers/${voucherId}`, session!), enabled: Boolean(session && ledgerId && voucherId && voucherId !== 'new') })
   const watchedLines = Form.useWatch('lines', form)
   const lines = watchedLines ?? emptyLines
+  const accountsById = useMemo(() => new Map((accounts.data || []).map((account) => [account.id, account])), [accounts.data])
+  const dimensionTypesById = useMemo(() => new Map((dimensionTypes.data || []).map((type) => [type.id, type])), [dimensionTypes.data])
+  const requiredDimensionTypeIds = useMemo(() => Array.from(new Set(lines.flatMap((line) => (
+    accountsById.get(line.accountId || '')?.dimensionRequirements.map((requirement) => requirement.dimensionTypeId) || []
+  )))), [accountsById, lines])
+  const dimensionValueQueries = useQueries({
+    queries: requiredDimensionTypeIds.map((dimensionTypeId) => ({
+      queryKey: ['dimension-values', ledgerId, dimensionTypeId],
+      queryFn: () => apiFetch<DimensionValue[]>(`/ledgers/${ledgerId}/dimension-types/${dimensionTypeId}/values`, session!),
+      enabled: Boolean(session && ledgerId),
+    })),
+  })
+  const dimensionValuesByType = new Map(requiredDimensionTypeIds.map((dimensionTypeId, index) => (
+    [dimensionTypeId, dimensionValueQueries[index]?.data || []]
+  )))
   const totals = useMemo(() => voucherTotals(lines), [lines])
   const hasDebitAmount = lines.some((line) => line.side === 'DEBIT' && Boolean(line.originalAmount) && Number(line.originalAmount) !== 0)
   const hasCreditAmount = lines.some((line) => line.side === 'CREDIT' && Boolean(line.originalAmount) && Number(line.originalAmount) !== 0)
@@ -197,19 +251,26 @@ export function VoucherEditorPage() {
         </div>
       </div>
       <Form.List name="lines">{(fields, { add, remove }) => <>
-        <Table className="voucher-entry-table" bordered size="middle" pagination={false} scroll={{ x: 900 }} rowKey="key" dataSource={fields}
+        <Table className="voucher-entry-table" bordered size="middle" pagination={false} scroll={{ x: 1180 }} rowKey="key" dataSource={fields}
           locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无分录" /> }}
           columns={[
             { title: '操作', width: 118, align: 'center', render: (_, field) => <Space size={0} className="voucher-line-actions"><Button type="link" icon={<PlusOutlined />} onClick={() => add({ side: 'DEBIT', currency: 'CNY', originalAmount: '', exchangeRate: '1' }, field.name)}>插入</Button><Button type="text" danger icon={<DeleteOutlined />} aria-label={`删除第 ${field.name + 1} 条分录`} onClick={() => remove(field.name)} /></Space> },
             { title: '摘要', width: 240, render: (_, field) => <><Form.Item name={[field.name, 'side']} hidden><Input /></Form.Item><Form.Item name={[field.name, 'currency']} hidden><Input /></Form.Item><Form.Item name={[field.name, 'exchangeRate']} hidden><Input /></Form.Item><Form.Item name={[field.name, 'originalAmount']} hidden><Input /></Form.Item><Form.Item name={[field.name, 'summary']}><Input aria-label={`第 ${field.name + 1} 条分录摘要`} /></Form.Item></> },
-            { title: '会计科目', width: 330, render: (_, field) => <Form.Item name={[field.name, 'accountId']}><Select showSearch optionFilterProp="label" aria-label={`第 ${field.name + 1} 条分录会计科目`} options={(accounts.data || []).filter((account) => account.status === 'ACTIVE' && account.isLeaf).map((account) => ({ value: account.id, label: `${account.code} ${account.name}` }))} /></Form.Item> },
+            { title: '会计科目', width: 330, render: (_, field) => <Form.Item name={[field.name, 'accountId']}><Select showSearch optionFilterProp="label" aria-label={`第 ${field.name + 1} 条分录会计科目`} onChange={(accountId) => {
+              const allowedDimensionTypeIds = new Set(accountsById.get(accountId)?.dimensionRequirements.map((requirement) => requirement.dimensionTypeId) || [])
+              const currentDimensionValues = form.getFieldValue(['lines', field.name, 'dimensionValues']) || {}
+              form.setFieldValue(['lines', field.name, 'dimensionValues'], Object.fromEntries(
+                Object.entries(currentDimensionValues).filter(([dimensionTypeId]) => allowedDimensionTypeIds.has(dimensionTypeId)),
+              ))
+            }} options={(accounts.data || []).filter((account) => account.status === 'ACTIVE' && account.isLeaf).map((account) => ({ value: account.id, label: `${account.code} ${account.name}` }))} /></Form.Item> },
+            { title: '辅助核算', width: 280, render: (_, field) => <VoucherDimensionFields form={form} fieldName={field.name} accountsById={accountsById} dimensionTypesById={dimensionTypesById} dimensionValuesByType={dimensionValuesByType} /> },
             { title: '借方金额', width: 150, align: 'right', className: 'voucher-amount-column voucher-debit-column', render: (_, field) => <VoucherAmountCell form={form} fieldName={field.name} side="DEBIT" onChange={() => setDirty(true)} /> },
             { title: '贷方金额', width: 150, align: 'right', className: 'voucher-amount-column voucher-credit-column', render: (_, field) => <VoucherAmountCell form={form} fieldName={field.name} side="CREDIT" onChange={() => setDirty(true)} /> },
           ]}
           summary={() => <Table.Summary fixed><Table.Summary.Row className="voucher-total-row">
-            <Table.Summary.Cell index={0} colSpan={3}><span>合计（本位币）</span></Table.Summary.Cell>
-            <Table.Summary.Cell index={3} className="voucher-total-amount">{hasDebitAmount ? totals.debit.toFixed(2) : ''}</Table.Summary.Cell>
-            <Table.Summary.Cell index={4} className="voucher-total-amount">{hasCreditAmount ? totals.credit.toFixed(2) : ''}</Table.Summary.Cell>
+            <Table.Summary.Cell index={0} colSpan={4}><span>合计（本位币）</span></Table.Summary.Cell>
+            <Table.Summary.Cell index={4} className="voucher-total-amount">{hasDebitAmount ? totals.debit.toFixed(2) : ''}</Table.Summary.Cell>
+            <Table.Summary.Cell index={5} className="voucher-total-amount">{hasCreditAmount ? totals.credit.toFixed(2) : ''}</Table.Summary.Cell>
           </Table.Summary.Row></Table.Summary>}
         />
         <Button className="voucher-add-line" icon={<PlusOutlined />} onClick={() => add({ side: 'DEBIT', currency: 'CNY', originalAmount: '', exchangeRate: '1' })}>新增分录</Button>

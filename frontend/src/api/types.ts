@@ -143,6 +143,7 @@ export interface DimensionType {
   name: string
   required: boolean
   status: string
+  version: number
 }
 
 export interface DimensionValue {
@@ -152,6 +153,16 @@ export interface DimensionValue {
   code: string
   name: string
   status: string
+  version: number
+}
+
+export interface OpeningBalanceDimension {
+  dimensionTypeId: string
+  dimensionValueId: string
+  dimensionTypeCode: string
+  dimensionTypeName: string
+  dimensionValueCode: string
+  dimensionValueName: string
 }
 
 export interface OpeningBalance {
@@ -167,6 +178,7 @@ export interface OpeningBalance {
   debitBase: string
   creditBase: string
   confirmed: boolean
+  dimensions: OpeningBalanceDimension[]
 }
 
 export interface VoucherLine {
@@ -462,6 +474,69 @@ export interface SubLedgerPage {
   periodCredit: string
   endingDirection: 'DEBIT' | 'CREDIT'
   endingBalance: string
+  pagination: Pagination
+}
+
+export interface FinanceQueryDimension {
+  dimensionTypeId: string
+  dimensionValueId: string
+  dimensionTypeCode: string
+  dimensionTypeName: string
+  dimensionValueCode: string
+  dimensionValueName: string
+}
+
+export interface DimensionLedgerAmounts {
+  openingDebit: string
+  openingCredit: string
+  periodDebit: string
+  periodCredit: string
+  closingDebit: string
+  closingCredit: string
+}
+
+export interface DimensionLedgerBalance {
+  combinationId: string
+  dimensionKey: string
+  combinationKind: 'STRUCTURED' | 'LEGACY_UNMAPPED'
+  groupKey: string | null
+  currency: string
+  dimensions: FinanceQueryDimension[]
+  original: DimensionLedgerAmounts
+  base: DimensionLedgerAmounts
+}
+
+export interface DimensionLedgerEntry {
+  voucherId: string
+  voucherNumber: string
+  voucherDate: string
+  lineNo: number
+  lineId: string
+  accountId: string
+  accountCode: string
+  accountName: string
+  combinationId: string
+  dimensionKey: string
+  combinationKind: 'STRUCTURED' | 'LEGACY_UNMAPPED'
+  groupKey: string | null
+  dimensions: FinanceQueryDimension[]
+  currency: string
+  side: 'DEBIT' | 'CREDIT'
+  originalDebit: string
+  originalCredit: string
+  baseDebit: string
+  baseCredit: string
+  runningOriginalDebit: string
+  runningOriginalCredit: string
+  runningBaseDebit: string
+  runningBaseCredit: string
+}
+
+export interface DimensionLedgerPage {
+  projectionStatus: 'READY'
+  warnings: string[]
+  balances: DimensionLedgerBalance[]
+  entries: DimensionLedgerEntry[]
   pagination: Pagination
 }
 

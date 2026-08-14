@@ -20,6 +20,8 @@ public interface BalanceProjectionRepository {
 
     void markReopened(UUID ledgerId, UUID periodId);
 
+    void markFinalized(UUID ledgerId, UUID periodId);
+
     BalanceProjectionService.ProjectionStatus status(UUID ledgerId, String periodCode);
 
     BalanceProjectionService.ProjectionStatus status(UUID ledgerId, PeriodRange range);

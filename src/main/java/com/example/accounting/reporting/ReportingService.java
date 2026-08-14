@@ -42,4 +42,7 @@ public interface ReportingService {
 
     List<ReportResponses.FinanceQueryLine> financeQuery(UUID actorId, UUID ledgerId,
                                                         FinanceQueryRequests.Query request);
+
+    ReportResponses.DimensionLedgerPage dimensionLedger(UUID actorId, UUID ledgerId,
+                                                         DimensionLedgerRequests.Query request);
 }

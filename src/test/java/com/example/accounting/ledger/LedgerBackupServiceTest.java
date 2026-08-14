@@ -39,8 +39,9 @@ import org.springframework.transaction.annotation.Transactional;
 class LedgerBackupServiceTest {
 
     private static final List<String> BUSINESS_TABLES = List.of(
-            "cash_flow_item", "dimension_type", "dimension_value", "ledger_account",
-            "ledger_account_dimension", "accounting_period", "opening_balance", "voucher",
+            "cash_flow_item", "dimension_type", "dimension_value", "dimension_combination",
+            "dimension_combination_member", "ledger_account",
+            "ledger_account_dimension", "accounting_period", "opening_balance", "opening_balance_dimension", "voucher",
             "voucher_line", "voucher_line_dimension", "voucher_approval", "period_action_audit",
             "report_formula_snapshot", "audit_revision", "document", "document_extraction",
             "agent_tool_audit", "accounting_experience", "fixed_asset_category", "fixed_asset",
@@ -163,6 +164,131 @@ class LedgerBackupServiceTest {
     }
 
     @Test
+    void restoresVersionTwoBackupsAndBackfillsDimensionPointers() throws Exception {
+        CurrentUserResolver.ResolvedUser owner = user(UUID.randomUUID());
+        UUID sourceId = ledgers.create(owner, createRequest("V2账套")).id();
+        UUID periodId = ledgers.periodId(sourceId, "2026-01");
+        ledgers.replaceOpeningBalances(owner.id(), sourceId, List.of(
+                new LedgerRequests.OpeningBalanceLine(
+                        ledgers.accountId(sourceId, "1001"), periodId, "CNY", "",
+                        new BigDecimal("10"), BigDecimal.ZERO, BigDecimal.ONE),
+                new LedgerRequests.OpeningBalanceLine(
+                        ledgers.accountId(sourceId, "3001"), periodId, "CNY", "",
+                        BigDecimal.ZERO, new BigDecimal("10"), BigDecimal.ONE)));
+        vouchers.create(owner.id(), sourceId, new VoucherRequests.Create(
+                ledgers.periodId(sourceId, "2026-01"), LocalDate.of(2026, 1, 15),
+                "GENERAL", "V2", "legacy dimensions", List.of(
+                new VoucherRequests.Line(ledgers.accountId(sourceId, "1001"), "DEBIT", "CNY",
+                        new BigDecimal("10"), BigDecimal.ONE, "debit"),
+                new VoucherRequests.Line(ledgers.accountId(sourceId, "3001"), "CREDIT", "CNY",
+                        new BigDecimal("10"), BigDecimal.ONE, "credit"))));
+        byte[] versionTwo = downgrade(backups.backup(owner.id(), sourceId), 2);
+
+        LedgerResponses.Ledger restored = backups.restore(
+                owner, null, versionTwo.length, new ByteArrayInputStream(versionTwo));
+
+        assertThat(jdbc.queryForObject("""
+                select count(*) from voucher_line
+                where ledger_id = ? and dimension_combination_id is null
+                """, Integer.class, restored.id())).isZero();
+        assertThat(count("dimension_combination", restored.id())).isGreaterThan(0);
+        assertThat(jdbc.queryForObject("""
+                select count(*) from opening_balance balance
+                join dimension_combination combination
+                  on combination.ledger_id = balance.ledger_id
+                 and combination.id = balance.dimension_combination_id
+                where balance.ledger_id = ?
+                  and combination.kind = 'STRUCTURED' and combination.canonical_key = 'v1;'
+                """, Integer.class, restored.id())).isEqualTo(2);
+        assertThat(jdbc.queryForObject("""
+                select count(*) from dimension_combination
+                where ledger_id = ? and canonical_key = 'legacy-v1;' || md5('v1;')
+                """, Integer.class, restored.id())).isZero();
+    }
+
+    @Test
+    void restoresVersionThreeStructuredCombinationIdentityUsingRemappedMembers() {
+        CurrentUserResolver.ResolvedUser owner = user(UUID.randomUUID());
+        UUID sourceId = ledgers.create(owner, createRequest("V3 structured dimensions")).id();
+        LedgerResponses.DimensionType sourceType = ledgers.listDimensionTypes(owner.id(), sourceId).stream()
+                .filter(type -> type.code().equals("CUSTOMER")).findFirst().orElseThrow();
+        LedgerResponses.DimensionValue sourceValue = ledgers.createDimensionValue(
+                owner.id(), sourceId, sourceType.id(),
+                new LedgerRequests.DimensionValueCreate("RESTORE-C001", "Restore customer"));
+        LedgerResponses.Account sourceReceivable = ledgers.createAccount(owner.id(), sourceId,
+                new LedgerRequests.AccountCreate(
+                        "1197", "Restore receivable", "CURRENT_ASSET", "DEBIT", null,
+                        false, null, false, null,
+                        List.of(new LedgerRequests.DimensionRequirement(sourceType.id(), true))));
+        UUID sourcePeriodId = ledgers.periodId(sourceId, "2026-01");
+        ledgers.replaceOpeningBalances(owner.id(), sourceId, List.of(
+                new LedgerRequests.OpeningBalanceLine(
+                        sourceReceivable.id(), sourcePeriodId, "CNY", null,
+                        new BigDecimal("25.00"), BigDecimal.ZERO, BigDecimal.ONE,
+                        List.of(new LedgerRequests.OpeningBalanceDimension(
+                                sourceType.id(), sourceValue.id()))),
+                new LedgerRequests.OpeningBalanceLine(
+                        ledgers.accountId(sourceId, "3001"), sourcePeriodId, "CNY", "",
+                        BigDecimal.ZERO, new BigDecimal("25.00"), BigDecimal.ONE)));
+
+        byte[] archive = backups.backup(owner.id(), sourceId);
+        LedgerResponses.Ledger restored = backups.restore(
+                owner, null, archive.length, new ByteArrayInputStream(archive));
+
+        LedgerResponses.DimensionType restoredType = ledgers.listDimensionTypes(owner.id(), restored.id()).stream()
+                .filter(type -> type.code().equals("CUSTOMER")).findFirst().orElseThrow();
+        LedgerResponses.DimensionValue restoredValue = ledgers
+                .listDimensionValues(owner.id(), restored.id(), restoredType.id()).stream()
+                .filter(value -> value.code().equals("RESTORE-C001")).findFirst().orElseThrow();
+        UUID restoredReceivableId = ledgers.accountId(restored.id(), "1197");
+        UUID restoredPeriodId = ledgers.periodId(restored.id(), "2026-01");
+        String expectedCanonical = "v1;" + restoredType.id() + "=" + restoredValue.id() + ";";
+        Map<String, Object> restoredCombination = jdbc.queryForMap("""
+                select combination.id, combination.canonical_key, combination.dimension_key
+                from dimension_combination combination
+                join dimension_combination_member member
+                  on member.ledger_id = combination.ledger_id
+                 and member.combination_id = combination.id
+                where combination.ledger_id = ?
+                  and member.dimension_type_id = ? and member.dimension_value_id = ?
+                """, restored.id(), restoredType.id(), restoredValue.id());
+        UUID restoredCombinationId = (UUID) restoredCombination.get("id");
+        assertThat(restoredCombination.get("canonical_key")).isEqualTo(expectedCanonical);
+        assertThat(restoredCombination.get("dimension_key"))
+                .isEqualTo(jdbc.queryForObject("select md5(?)", String.class, expectedCanonical));
+        assertThat(restoredCombination.get("canonical_key").toString())
+                .doesNotContain(sourceType.id().toString(), sourceValue.id().toString());
+        assertThat(jdbc.queryForObject("""
+                select count(*)
+                from opening_balance balance
+                join opening_balance_dimension relation
+                  on relation.ledger_id = balance.ledger_id
+                 and relation.opening_balance_id = balance.id
+                where balance.ledger_id = ? and balance.account_id = ?
+                  and balance.dimension_combination_id = ?
+                  and relation.dimension_type_id = ? and relation.dimension_value_id = ?
+                """, Integer.class, restored.id(), restoredReceivableId, restoredCombinationId,
+                restoredType.id(), restoredValue.id())).isEqualTo(1);
+
+        int combinationCount = count("dimension_combination", restored.id());
+        ledgers.replaceOpeningBalances(owner.id(), restored.id(), List.of(
+                new LedgerRequests.OpeningBalanceLine(
+                        restoredReceivableId, restoredPeriodId, "CNY", null,
+                        new BigDecimal("30.00"), BigDecimal.ZERO, BigDecimal.ONE,
+                        List.of(new LedgerRequests.OpeningBalanceDimension(
+                                restoredType.id(), restoredValue.id()))),
+                new LedgerRequests.OpeningBalanceLine(
+                        ledgers.accountId(restored.id(), "3001"), restoredPeriodId, "CNY", "",
+                        BigDecimal.ZERO, new BigDecimal("30.00"), BigDecimal.ONE)));
+
+        assertThat(count("dimension_combination", restored.id())).isEqualTo(combinationCount);
+        assertThat(jdbc.queryForObject("""
+                select dimension_combination_id from opening_balance
+                where ledger_id = ? and account_id = ?
+                """, UUID.class, restored.id(), restoredReceivableId)).isEqualTo(restoredCombinationId);
+    }
+
+    @Test
     void rejectsZipEntriesThatEscapeTheArchiveRoot() throws Exception {
         byte[] archive;
         try (ByteArrayOutputStream output = new ByteArrayOutputStream();
@@ -192,6 +318,10 @@ class LedgerBackupServiceTest {
     }
 
     private byte[] downgradeToVersionOne(byte[] archive) throws Exception {
+        return downgrade(archive, 1);
+    }
+
+    private byte[] downgrade(byte[] archive, int version) throws Exception {
         Map<String, byte[]> entries = new LinkedHashMap<>();
         try (ZipInputStream zip = new ZipInputStream(new ByteArrayInputStream(archive))) {
             ZipEntry entry;
@@ -201,12 +331,35 @@ class LedgerBackupServiceTest {
         }
         ObjectMapper mapper = new ObjectMapper().findAndRegisterModules();
         ObjectNode data = (ObjectNode) mapper.readTree(entries.get("data.json"));
-        ((ObjectNode) data.path("tables")).remove("accounting_experience");
-        data.path("tables").path("agent_tool_audit").forEach(
-                row -> ((ObjectNode) row).remove("duration_ms"));
+        ObjectNode tables = (ObjectNode) data.path("tables");
+        if (version == 1) {
+            tables.remove("accounting_experience");
+        }
+        Map<String, String> combinationCanonicalKeys = new LinkedHashMap<>();
+        tables.path("dimension_combination").forEach(row -> combinationCanonicalKeys.put(
+                row.path("id").asText(), row.path("canonical_key").asText()));
+        tables.path("opening_balance").forEach(row -> {
+            String canonical = combinationCanonicalKeys.get(row.path("dimension_combination_id").asText());
+            if ("v1;".equals(canonical)) {
+                ((ObjectNode) row).put("dimension_key", "");
+            } else if (canonical != null && canonical.startsWith("legacy-v1;")) {
+                ((ObjectNode) row).put("dimension_key", canonical.substring("legacy-v1;".length()));
+            }
+        });
+        tables.remove("dimension_combination");
+        tables.remove("dimension_combination_member");
+        tables.remove("opening_balance_dimension");
+        tables.path("opening_balance").forEach(
+                row -> ((ObjectNode) row).remove("dimension_combination_id"));
+        tables.path("voucher_line").forEach(
+                row -> ((ObjectNode) row).remove("dimension_combination_id"));
+        if (version == 1) {
+            data.path("tables").path("agent_tool_audit").forEach(
+                    row -> ((ObjectNode) row).remove("duration_ms"));
+        }
         byte[] dataBytes = mapper.writeValueAsBytes(data);
         ObjectNode manifest = (ObjectNode) mapper.readTree(entries.get("manifest.json"));
-        manifest.put("version", 1);
+        manifest.put("version", version);
         manifest.put("dataSha256", HexFormat.of().formatHex(
                 MessageDigest.getInstance("SHA-256").digest(dataBytes)));
         entries.put("data.json", dataBytes);

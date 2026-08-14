@@ -308,6 +308,58 @@ describe('VoucherListPage', () => {
 })
 
 describe('VoucherEditorPage', () => {
+  const dimensionAccount = {
+    id: 'account-dimension', ledgerId: 'ledger-1', code: '6602.01', name: '研发费用', category: 'EXPENSE',
+    normalBalance: 'DEBIT', status: 'ACTIVE', parentId: null, level: 2, isLeaf: true, isTemplate: false,
+    hasBusinessUsage: false, coreLocked: false, legacyCode: false, version: 0, cashFlowRequired: false,
+    defaultCashFlowItemId: null, quantityEnabled: false, unitName: null, createdAt: null,
+    dimensionRequirements: [{ dimensionTypeId: 'dimension-department', code: 'DEPARTMENT', name: '部门', required: true }],
+  }
+  const plainAccount = {
+    ...dimensionAccount,
+    id: 'account-plain', code: '1002', name: '银行存款', category: 'CURRENT_ASSET',
+    dimensionRequirements: [],
+  }
+  const mockDimensionEditorApi = () => {
+    vi.mocked(apiFetch).mockImplementation((path, _session, options) => {
+      if (path.endsWith('/periods')) return Promise.resolve([{
+        id: 'period-open', ledgerId: 'ledger-1', periodCode: '2026-08',
+        startDate: '2026-08-01', endDate: '2026-08-31', status: 'OPEN',
+      }])
+      if (path.endsWith('/accounts')) return Promise.resolve([dimensionAccount, plainAccount])
+      if (path.endsWith('/dimension-types')) return Promise.resolve([{
+        id: 'dimension-department', ledgerId: 'ledger-1', code: 'DEPARTMENT', name: '部门', required: true, status: 'ACTIVE',
+      }])
+      if (path.endsWith('/dimension-types/dimension-department/values')) return Promise.resolve([
+        { id: 'department-rd', ledgerId: 'ledger-1', dimensionTypeId: 'dimension-department', code: 'RD', name: '研发部', status: 'ACTIVE' },
+        { id: 'department-old', ledgerId: 'ledger-1', dimensionTypeId: 'dimension-department', code: 'OLD', name: '停用部门', status: 'INACTIVE' },
+      ])
+      if (path.endsWith('/vouchers') && options?.method === 'POST') return Promise.resolve({
+        id: 'voucher-created', ledgerId: 'ledger-1', periodId: 'period-open', voucherDate: '2026-08-14',
+        voucherType: '记', voucherNumber: '1', summary: null, status: 'POSTED', approvalRequired: false, version: 0, lines: [],
+      })
+      return Promise.resolve([])
+    })
+  }
+  const renderDimensionEditor = () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    render(
+      <QueryClientProvider client={queryClient}>
+        <App>
+          <MemoryRouter initialEntries={['/ledgers/ledger-1/vouchers/new']}>
+            <Routes><Route path="/ledgers/:ledgerId/vouchers/:voucherId" element={<VoucherEditorPage />} /></Routes>
+          </MemoryRouter>
+        </App>
+      </QueryClientProvider>,
+    )
+  }
+  const chooseSelectOption = async (label: string, optionName: string) => {
+    fireEvent.mouseDown(screen.getByRole('combobox', { name: label }))
+    await screen.findAllByText(optionName)
+    const openDropdowns = Array.from(document.querySelectorAll<HTMLElement>('.ant-select-dropdown:not(.ant-select-dropdown-hidden)'))
+    fireEvent.click(within(openDropdowns.at(-1)!).getByText(optionName))
+  }
+
   it('leaves the voucher number to the server for a new voucher', async () => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
 
@@ -425,6 +477,45 @@ describe('VoucherEditorPage', () => {
     expect(dateBelongsToPeriod(period, dayjs('2026-06-01'))).toBe(true)
     expect(dateBelongsToPeriod(period, dayjs('2026-06-30'))).toBe(true)
     expect(dateBelongsToPeriod(period, dayjs('2026-07-01'))).toBe(false)
+  })
+
+  it('renders required dimensions and submits the selected active value', async () => {
+    mockDimensionEditorApi()
+    renderDimensionEditor()
+
+    await chooseSelectOption('第 1 条分录会计科目', '6602.01 研发费用')
+    await chooseSelectOption('第 2 条分录会计科目', '1002 银行存款')
+    expect(await screen.findByRole('combobox', { name: '第 1 条分录部门（必填）' })).toBeInTheDocument()
+
+    fireEvent.change(screen.getByLabelText('第 1 条分录借方金额'), { target: { value: '100' } })
+    fireEvent.change(screen.getByLabelText('第 2 条分录贷方金额'), { target: { value: '100' } })
+    fireEvent.click(screen.getByRole('button', { name: '保存并记账' }))
+    expect(await screen.findByText('请选择部门')).toBeInTheDocument()
+    expect(vi.mocked(apiFetch).mock.calls.some(([, , options]) => options?.method === 'POST')).toBe(false)
+
+    await chooseSelectOption('第 1 条分录部门（必填）', 'RD 研发部')
+    fireEvent.click(screen.getByRole('button', { name: '保存并记账' }))
+
+    await waitFor(() => expect(vi.mocked(apiFetch).mock.calls.some(([, , options]) => options?.method === 'POST')).toBe(true))
+    const createCall = vi.mocked(apiFetch).mock.calls.find(([, , options]) => options?.method === 'POST')!
+    expect(JSON.parse(String(createCall[2]?.body)).lines[0].dimensions).toEqual([{
+      dimensionTypeId: 'dimension-department', dimensionValueId: 'department-rd',
+    }])
+  }, 10_000)
+
+  it('clears obsolete dimension values when the account changes', async () => {
+    mockDimensionEditorApi()
+    renderDimensionEditor()
+
+    await chooseSelectOption('第 1 条分录会计科目', '6602.01 研发费用')
+    await chooseSelectOption('第 1 条分录部门（必填）', 'RD 研发部')
+    await chooseSelectOption('第 1 条分录会计科目', '1002 银行存款')
+    await waitFor(() => expect(screen.queryByRole('combobox', { name: '第 1 条分录部门（必填）' })).not.toBeInTheDocument())
+    fireEvent.click(screen.getByRole('button', { name: '保存并记账' }))
+
+    await waitFor(() => expect(vi.mocked(apiFetch).mock.calls.some(([, , options]) => options?.method === 'POST')).toBe(true))
+    const createCall = vi.mocked(apiFetch).mock.calls.find(([, , options]) => options?.method === 'POST')!
+    expect(JSON.parse(String(createCall[2]?.body)).lines[0].dimensions).toEqual([])
   })
 
   it('groups debit and credit amounts into adjacent voucher columns', async () => {

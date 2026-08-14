@@ -5,6 +5,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.Pattern;
 import java.util.List;
+import java.util.UUID;
 
 public final class FinanceQueryRequests {
 
@@ -15,9 +16,31 @@ public final class FinanceQueryRequests {
                         String periodFrom,
                         String periodTo,
                         @NotEmpty List<@Pattern(regexp = "ACCOUNT|MONTH|CURRENCY|DIMENSION") String> groupBy,
-                        @Valid Filters filters) {
+                        @Valid Filters filters,
+                        List<UUID> dimensionGroupTypeIds) {
+
+        public Query {
+            dimensionGroupTypeIds = dimensionGroupTypeIds == null ? List.of() : List.copyOf(dimensionGroupTypeIds);
+        }
+
+        public Query(String metric, String periodFrom, String periodTo, List<String> groupBy, Filters filters) {
+            this(metric, periodFrom, periodTo, groupBy, filters, List.of());
+        }
     }
 
-    public record Filters(List<String> accountCodes, @Pattern(regexp = "[A-Z]{3}") String currency) {
+    public record Filters(List<String> accountCodes, @Pattern(regexp = "[A-Z]{3}") String currency,
+                          List<@Valid DimensionValue> dimensionValues) {
+
+        public Filters {
+            accountCodes = accountCodes == null ? List.of() : List.copyOf(accountCodes);
+            dimensionValues = dimensionValues == null ? List.of() : List.copyOf(dimensionValues);
+        }
+
+        public Filters(List<String> accountCodes, String currency) {
+            this(accountCodes, currency, List.of());
+        }
+    }
+
+    public record DimensionValue(UUID dimensionTypeId, UUID dimensionValueId) {
     }
 }

@@ -152,9 +152,11 @@ public class BalanceSnapshotRebuilder {
             """;
 
     private final JdbcTemplate jdbc;
+    private final DimensionBalanceSnapshotRebuilder dimensionSnapshots;
 
-    public BalanceSnapshotRebuilder(JdbcTemplate jdbc) {
+    public BalanceSnapshotRebuilder(JdbcTemplate jdbc, DimensionBalanceSnapshotRebuilder dimensionSnapshots) {
         this.jdbc = jdbc;
+        this.dimensionSnapshots = dimensionSnapshots;
     }
 
     public int rebuildAll(UUID ledgerId) {
@@ -172,6 +174,8 @@ public class BalanceSnapshotRebuilder {
                   and source.ledger_id = b.ledger_id and source.id = ?
                   and target.period_code >= source.period_code
                 """, ledgerId, sourcePeriodId);
-        return jdbc.update(REBUILD_SQL, ledgerId, sourcePeriodId);
+        int rebuilt = jdbc.update(REBUILD_SQL, ledgerId, sourcePeriodId);
+        dimensionSnapshots.rebuildFrom(ledgerId, sourcePeriodId);
+        return rebuilt;
     }
 }

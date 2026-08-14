@@ -172,6 +172,7 @@ public class JdbcBalanceProjectionRepository implements BalanceProjectionReposit
                 ledgerId, periodId, ledgerId, periodId,
                 ledgerId, periodId, periodId, periodId, ledgerId,
                 ledgerId, ledgerId, ledgerId, periodId);
+        differences += dimensionDifferences(ledgerId, periodId);
         if (differences > 0) {
             throw new BalanceProjectionException("BALANCE_RECONCILIATION_FAILED",
                     "The balance projection does not reconcile to voucher and opening balance facts");
@@ -182,6 +183,22 @@ public class JdbcBalanceProjectionRepository implements BalanceProjectionReposit
     public void markReopened(UUID ledgerId, UUID periodId) {
         jdbc.update("""
                 update account_period_balance set finalized_at = null, updated_at = now()
+                where ledger_id = ? and period_id = ?
+                """, ledgerId, periodId);
+        jdbc.update("""
+                update dimension_period_balance set finalized_at = null, updated_at = now()
+                where ledger_id = ? and period_id = ?
+                """, ledgerId, periodId);
+    }
+
+    @Override
+    public void markFinalized(UUID ledgerId, UUID periodId) {
+        jdbc.update("""
+                update account_period_balance set finalized_at = now(), updated_at = now()
+                where ledger_id = ? and period_id = ?
+                """, ledgerId, periodId);
+        jdbc.update("""
+                update dimension_period_balance set finalized_at = now(), updated_at = now()
                 where ledger_id = ? and period_id = ?
                 """, ledgerId, periodId);
     }
@@ -430,6 +447,144 @@ public class JdbcBalanceProjectionRepository implements BalanceProjectionReposit
                 rs.getString("name"), rs.getString("category"), openingDebit, openingCredit,
                 debit, credit, closingDebit, closingCredit, debit, credit,
                 closingDebit.subtract(closingCredit));
+    }
+
+    private long dimensionDifferences(UUID ledgerId, UUID periodId) {
+        return jdbc.queryForObject("""
+                with period_info as (
+                    select p.id, row_number() over (order by p.period_code) period_number,
+                        lag(p.id) over (order by p.period_code) previous_period_id
+                    from accounting_period p where p.ledger_id = ?
+                ), selected as (
+                    select * from period_info where id = ?
+                ), leaves as (
+                    select a.id from ledger_account a
+                    where a.ledger_id = ? and not exists (
+                        select 1 from ledger_account child
+                        where child.ledger_id = a.ledger_id and child.parent_id = a.id)
+                ), account_rows as (
+                    select b.* from account_period_balance b
+                    where b.ledger_id = ? and b.period_id = ? and b.account_id in (select id from leaves)
+                ), dimension_rows as (
+                    select b.* from dimension_period_balance b
+                    where b.ledger_id = ? and b.period_id = ?
+                ), account_parity as (
+                    select coalesce(a.account_id, d.account_id) account_id
+                    from account_rows a full join (
+                        select account_id,
+                            sum(opening_debit_base) opening_debit_base,
+                            sum(opening_credit_base) opening_credit_base,
+                            sum(period_debit_base) period_debit_base,
+                            sum(period_credit_base) period_credit_base,
+                            sum(operating_debit_base) operating_debit_base,
+                            sum(operating_credit_base) operating_credit_base,
+                            sum(closing_debit_base) closing_debit_base,
+                            sum(closing_credit_base) closing_credit_base
+                        from dimension_rows group by account_id
+                    ) d on d.account_id = a.account_id
+                    where coalesce(a.opening_debit_base, 0) <> coalesce(d.opening_debit_base, 0)
+                       or coalesce(a.opening_credit_base, 0) <> coalesce(d.opening_credit_base, 0)
+                       or coalesce(a.period_debit_base, 0) <> coalesce(d.period_debit_base, 0)
+                       or coalesce(a.period_credit_base, 0) <> coalesce(d.period_credit_base, 0)
+                       or coalesce(a.operating_debit_base, 0) <> coalesce(d.operating_debit_base, 0)
+                       or coalesce(a.operating_credit_base, 0) <> coalesce(d.operating_credit_base, 0)
+                       or coalesce(a.closing_debit_base, 0) <> coalesce(d.closing_debit_base, 0)
+                       or coalesce(a.closing_credit_base, 0) <> coalesce(d.closing_credit_base, 0)
+                ), voucher_lines as (
+                    select vl.account_id, vl.currency, vl.side, vl.original_amount, vl.base_amount,
+                        v.accounting_role, coalesce(vl.dimension_combination_id, fallback.id) combination_id
+                    from voucher v
+                    join voucher_line vl on vl.ledger_id = v.ledger_id and vl.voucher_id = v.id
+                    left join lateral (
+                        select combination.id from dimension_combination combination
+                        where combination.ledger_id = vl.ledger_id
+                          and combination.canonical_key = 'v1;' || coalesce((
+                              select string_agg(
+                                  member.dimension_type_id::text || '=' || member.dimension_value_id::text,
+                                  ';' order by member.dimension_type_id::text) || ';'
+                              from voucher_line_dimension member
+                              where member.ledger_id = vl.ledger_id and member.voucher_line_id = vl.id
+                          ), '')
+                    ) fallback on vl.dimension_combination_id is null
+                    where v.ledger_id = ? and v.period_id = ? and v.status = 'POSTED' and v.deleted_at is null
+                      and coalesce(vl.dimension_combination_id, fallback.id) is not null
+                ), facts as (
+                    select account_id, combination_id, currency,
+                        sum(case when side = 'DEBIT' then original_amount else 0 end) debit_original,
+                        sum(case when side = 'CREDIT' then original_amount else 0 end) credit_original,
+                        sum(case when side = 'DEBIT' then base_amount else 0 end) debit_base,
+                        sum(case when side = 'CREDIT' then base_amount else 0 end) credit_base,
+                        sum(case when accounting_role = 'OPERATING' and side = 'DEBIT' then base_amount else 0 end)
+                            operating_debit_base,
+                        sum(case when accounting_role = 'OPERATING' and side = 'CREDIT' then base_amount else 0 end)
+                            operating_credit_base
+                    from voucher_lines group by account_id, combination_id, currency
+                ), fact_differences as (
+                    select coalesce(f.account_id, d.account_id) account_id
+                    from facts f full join dimension_rows d
+                      on d.account_id = f.account_id and d.dimension_combination_id = f.combination_id
+                     and d.currency = f.currency
+                    where coalesce(f.debit_original, 0) <> coalesce(d.period_debit_original, 0)
+                       or coalesce(f.credit_original, 0) <> coalesce(d.period_credit_original, 0)
+                       or coalesce(f.debit_base, 0) <> coalesce(d.period_debit_base, 0)
+                       or coalesce(f.credit_base, 0) <> coalesce(d.period_credit_base, 0)
+                       or coalesce(f.operating_debit_base, 0) <> coalesce(d.operating_debit_base, 0)
+                       or coalesce(f.operating_credit_base, 0) <> coalesce(d.operating_credit_base, 0)
+                ), opening_lines as (
+                    select ob.account_id, ob.currency, ob.debit_original, ob.credit_original, ob.debit_base,
+                        ob.credit_base, coalesce(ob.dimension_combination_id, fallback.id) combination_id
+                    from opening_balance ob
+                    left join lateral (
+                        select combination.id from dimension_combination combination
+                        where combination.ledger_id = ob.ledger_id
+                          and combination.canonical_key = case when ob.dimension_key = '' then 'v1;'
+                              else 'legacy-v1;' || ob.dimension_key end
+                    ) fallback on ob.dimension_combination_id is null
+                    where ob.ledger_id = ? and ob.confirmed
+                      and coalesce(ob.dimension_combination_id, fallback.id) is not null
+                ), expected_opening as (
+                    select previous.account_id, previous.dimension_combination_id, previous.currency,
+                        previous.closing_debit_original opening_debit_original,
+                        previous.closing_credit_original opening_credit_original,
+                        previous.closing_debit_base opening_debit_base,
+                        previous.closing_credit_base opening_credit_base
+                    from dimension_period_balance previous join selected s on s.previous_period_id = previous.period_id
+                    where previous.ledger_id = ?
+
+                    union all
+
+                    select opening.account_id, opening.combination_id, opening.currency,
+                        sum(opening.debit_original), sum(opening.credit_original),
+                        sum(opening.debit_base), sum(opening.credit_base)
+                    from opening_lines opening cross join selected s
+                    where s.period_number = 1
+                    group by opening.account_id, opening.combination_id, opening.currency
+                ), continuity_differences as (
+                    select coalesce(expected.account_id, current.account_id) account_id
+                    from expected_opening expected full join dimension_rows current
+                      on current.account_id = expected.account_id
+                     and current.dimension_combination_id = expected.dimension_combination_id
+                     and current.currency = expected.currency
+                    where coalesce(current.opening_debit_original, 0) <> coalesce(expected.opening_debit_original, 0)
+                       or coalesce(current.opening_credit_original, 0) <> coalesce(expected.opening_credit_original, 0)
+                       or coalesce(current.opening_debit_base, 0) <> coalesce(expected.opening_debit_base, 0)
+                       or coalesce(current.opening_credit_base, 0) <> coalesce(expected.opening_credit_base, 0)
+                ), equation_differences as (
+                    select account_id from dimension_rows
+                    where closing_debit_original <> opening_debit_original + period_debit_original
+                       or closing_credit_original <> opening_credit_original + period_credit_original
+                       or closing_debit_base <> opening_debit_base + period_debit_base
+                       or closing_credit_base <> opening_credit_base + period_credit_base
+                )
+                select (select count(*) from account_parity)
+                     + (select count(*) from fact_differences)
+                     + (select count(*) from continuity_differences)
+                     + (select count(*) from equation_differences)
+                """, Long.class,
+                ledgerId, periodId, ledgerId,
+                ledgerId, periodId, ledgerId, periodId,
+                ledgerId, periodId,
+                ledgerId, ledgerId);
     }
 
     private Long append(UUID ledgerId, UUID periodId, String aggregateType, UUID aggregateId,

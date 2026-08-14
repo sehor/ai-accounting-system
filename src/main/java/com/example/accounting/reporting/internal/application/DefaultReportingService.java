@@ -4,6 +4,7 @@ import com.example.accounting.ledger.LedgerAccessService;
 import com.example.accounting.ledger.LedgerRole;
 import com.example.accounting.ledger.AccountingStandardCatalog;
 import com.example.accounting.reporting.FinanceQueryRequests;
+import com.example.accounting.reporting.DimensionLedgerRequests;
 import com.example.accounting.reporting.ReportResponses;
 import com.example.accounting.reporting.StatutoryReportResponses;
 import com.example.accounting.reporting.ReportingService;
@@ -14,7 +15,13 @@ import com.fasterxml.jackson.databind.JsonNode;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.time.YearMonth;
+import java.time.temporal.ChronoUnit;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -27,6 +34,9 @@ public class DefaultReportingService implements ReportingService {
 
     private static final Set<LedgerRole> VIEW_ROLES = Set.of(
             LedgerRole.OWNER, LedgerRole.EDITOR, LedgerRole.REVIEWER, LedgerRole.VIEWER, LedgerRole.AGENT);
+    private static final int MAX_DIMENSION_QUERY_ROWS = 10_000;
+    private static final int MAX_DIMENSION_LEDGER_PERIODS = 36;
+    private static final String UNASSIGNED = "UNASSIGNED";
 
     private final LedgerAccessService ledgerAccess;
     private final ReportingRepository reports;
@@ -277,10 +287,8 @@ public class DefaultReportingService implements ReportingService {
         PeriodRange range = PeriodRange.normalize(null, request.periodFrom(), request.periodTo());
         validateRange(ledgerId, range);
         String baseCurrency = reports.baseCurrency(ledgerId);
-        if (request.filters() != null && request.filters().currency() != null
-                && !request.filters().currency().equals(baseCurrency)) {
-            throw problem(422, "FINANCE_QUERY_CURRENCY_UNSUPPORTED", "Unsupported finance query currency",
-                    "v0.1 reports are stored in the ledger base currency");
+        if (requiresDimensionProjection(request)) {
+            return dimensionFinanceQuery(ledgerId, range, request);
         }
         if (request.groupBy().contains("MONTH")) {
             List<ReportResponses.FinanceQueryLine> monthly = new ArrayList<>();
@@ -327,10 +335,160 @@ public class DefaultReportingService implements ReportingService {
                 .toList();
     }
 
+    private boolean requiresDimensionProjection(FinanceQueryRequests.Query request) {
+        return request.groupBy().contains("DIMENSION") || request.groupBy().contains("CURRENCY")
+                || (request.filters() != null && !request.filters().dimensionValues().isEmpty())
+                || (request.filters() != null && request.filters().currency() != null);
+    }
+
+    private List<ReportResponses.FinanceQueryLine> dimensionFinanceQuery(
+            UUID ledgerId, PeriodRange range, FinanceQueryRequests.Query request) {
+        Map<UUID, ReportingRepository.DimensionTypeInfo> groupTypes = validateDimensionQuery(ledgerId, request);
+        if (!reports.dimensionProjectionReady(ledgerId, range)) {
+            throw problem(409, "BALANCE_PROJECTION_NOT_READY", "Balance projection not ready",
+                    "The auxiliary balance projection has pending or failed events");
+        }
+        FinanceQueryRequests.Filters filters = request.filters();
+        List<String> accountCodes = filters == null ? List.of() : filters.accountCodes();
+        String currency = filters == null ? null : filters.currency();
+        List<ReportingRepository.DimensionLedgerFilter> dimensionFilters = filters == null ? List.of()
+                : filters.dimensionValues().stream()
+                .map(value -> new ReportingRepository.DimensionLedgerFilter(
+                        value.dimensionTypeId(), value.dimensionValueId()))
+                .toList();
+        List<ReportingRepository.DimensionBalanceRow> rows = reports.dimensionBalances(
+                ledgerId, range, accountCodes, currency, dimensionFilters,
+                "BALANCE".equals(request.metric()), MAX_DIMENSION_QUERY_ROWS + 1);
+        if (rows.size() > MAX_DIMENSION_QUERY_ROWS) {
+            throw problem(422, "FINANCE_QUERY_TOO_BROAD", "Finance query is too broad",
+                    "Narrow the period, account, currency, or dimension filters");
+        }
+        List<ReportingRepository.DimensionBalanceRow> selected = rows.stream()
+                .filter(row -> "BALANCE".equals(request.metric()) ? row.periodCode().equals(range.periodTo()) : true)
+                .filter(row -> matchesAccountFilter(request, row.accountCode()))
+                .filter(row -> matchesCurrencyFilter(request, row.currency()))
+                .filter(row -> matchesDimensionFilters(request, row.dimensions()))
+                .toList();
+        if (selected.isEmpty()) {
+            return List.of();
+        }
+        Map<String, FinanceAggregate> aggregates = new LinkedHashMap<>();
+        for (ReportingRepository.DimensionBalanceRow row : selected) {
+            List<ReportResponses.FinanceQueryDimension> groupedDimensions = groupedDimensions(
+                    request, row.dimensions(), groupTypes);
+            String groupKey = dimensionGroupKey(request.groupBy(), row, groupedDimensions);
+            aggregates.computeIfAbsent(groupKey, ignored -> new FinanceAggregate(groupedDimensions))
+                    .add(row, dimensionMetric(request.metric(), row));
+        }
+        return aggregates.entrySet().stream().sorted(Map.Entry.comparingByKey()).map(entry -> {
+            FinanceAggregate aggregate = entry.getValue();
+            return new ReportResponses.FinanceQueryLine(entry.getKey(), aggregate.amount,
+                    aggregate.singleOrNull(aggregate.dimensionKeys), aggregate.dimensions,
+                    aggregate.singleOrNull(aggregate.currencies), aggregate.singleOrNull(aggregate.periodCodes),
+                    aggregate.singleOrNull(aggregate.accountCodes));
+        }).toList();
+    }
+
+    private Map<UUID, ReportingRepository.DimensionTypeInfo> validateDimensionQuery(
+            UUID ledgerId, FinanceQueryRequests.Query request) {
+        List<UUID> groupTypes = request.dimensionGroupTypeIds();
+        if (request.groupBy().contains("DIMENSION") && (groupTypes.isEmpty() || groupTypes.size() > 4)) {
+            throw problem(422, "FINANCE_QUERY_DIMENSION_GROUP_INVALID", "Invalid dimension group",
+                    "DIMENSION grouping requires one to four dimension types");
+        }
+        if (new HashSet<>(groupTypes).size() != groupTypes.size()) {
+            throw problem(422, "FINANCE_QUERY_DIMENSION_GROUP_INVALID", "Invalid dimension group",
+                    "Dimension group types must not repeat");
+        }
+        Map<UUID, ReportingRepository.DimensionTypeInfo> types = new HashMap<>();
+        for (UUID typeId : groupTypes) {
+            ReportingRepository.DimensionTypeInfo type = typeId == null ? null : reports.dimensionType(ledgerId, typeId);
+            if (type == null) {
+                throw problem(422, "FINANCE_QUERY_DIMENSION_TYPE_INVALID", "Invalid dimension type",
+                        "A dimension group type is not available to this ledger");
+            }
+            types.put(typeId, type);
+        }
+        List<FinanceQueryRequests.DimensionValue> filters = request.filters() == null
+                ? List.of() : request.filters().dimensionValues();
+        if (filters.size() > 16) {
+            throw problem(422, "FINANCE_QUERY_DIMENSION_FILTER_INVALID", "Invalid dimension filter",
+                    "At most sixteen dimension values may be filtered");
+        }
+        Set<UUID> filterTypes = new HashSet<>();
+        for (FinanceQueryRequests.DimensionValue filter : filters) {
+            if (filter == null || filter.dimensionTypeId() == null || filter.dimensionValueId() == null
+                    || !filterTypes.add(filter.dimensionTypeId())
+                    || !reports.dimensionValueExists(ledgerId, filter.dimensionTypeId(), filter.dimensionValueId())) {
+                throw problem(422, "FINANCE_QUERY_DIMENSION_FILTER_INVALID", "Invalid dimension filter",
+                        "Each dimension filter must reference one value of one ledger dimension type");
+            }
+        }
+        return types;
+    }
+
+    private boolean matchesAccountFilter(FinanceQueryRequests.Query request, String accountCode) {
+        return request.filters() == null || request.filters().accountCodes().isEmpty()
+                || request.filters().accountCodes().contains(accountCode);
+    }
+
+    private boolean matchesCurrencyFilter(FinanceQueryRequests.Query request, String currency) {
+        return request.filters() == null || request.filters().currency() == null
+                || request.filters().currency().equals(currency);
+    }
+
+    private boolean matchesDimensionFilters(FinanceQueryRequests.Query request,
+                                            List<ReportResponses.FinanceQueryDimension> dimensions) {
+        if (request.filters() == null || request.filters().dimensionValues().isEmpty()) {
+            return true;
+        }
+        Map<UUID, UUID> valuesByType = dimensions.stream().collect(Collectors.toMap(
+                ReportResponses.FinanceQueryDimension::dimensionTypeId,
+                ReportResponses.FinanceQueryDimension::dimensionValueId));
+        return request.filters().dimensionValues().stream().allMatch(filter ->
+                filter.dimensionValueId().equals(valuesByType.get(filter.dimensionTypeId())));
+    }
+
+    private List<ReportResponses.FinanceQueryDimension> groupedDimensions(
+            FinanceQueryRequests.Query request, List<ReportResponses.FinanceQueryDimension> dimensions,
+            Map<UUID, ReportingRepository.DimensionTypeInfo> groupTypes) {
+        if (!request.groupBy().contains("DIMENSION")) {
+            return List.of();
+        }
+        Map<UUID, ReportResponses.FinanceQueryDimension> dimensionsByType = dimensions.stream().collect(
+                Collectors.toMap(ReportResponses.FinanceQueryDimension::dimensionTypeId, dimension -> dimension));
+        return request.dimensionGroupTypeIds().stream().map(typeId -> dimensionsByType.getOrDefault(typeId,
+                new ReportResponses.FinanceQueryDimension(typeId, null, groupTypes.get(typeId).code(),
+                        groupTypes.get(typeId).name(), UNASSIGNED, "Unassigned"))).toList();
+    }
+
+    private String dimensionGroupKey(List<String> groups, ReportingRepository.DimensionBalanceRow row,
+                                     List<ReportResponses.FinanceQueryDimension> dimensions) {
+        return groups.stream().map(group -> switch (group) {
+            case "ACCOUNT" -> row.accountCode();
+            case "MONTH" -> row.periodCode();
+            case "CURRENCY" -> row.currency();
+            case "DIMENSION" -> dimensions.stream().map(dimension -> dimension.dimensionValueId() == null
+                    ? UNASSIGNED : dimension.dimensionValueCode()).collect(Collectors.joining(","));
+            default -> throw problem(422, "FINANCE_QUERY_INVALID", "Invalid finance query",
+                    "The group is not in the whitelist");
+        }).collect(Collectors.joining("|"));
+    }
+
+    private BigDecimal dimensionMetric(String metric, ReportingRepository.DimensionBalanceRow row) {
+        return switch (metric) {
+            case "DEBIT" -> row.periodDebitBase();
+            case "CREDIT" -> row.periodCreditBase();
+            case "NET" -> row.periodDebitBase().subtract(row.periodCreditBase());
+            case "BALANCE" -> row.closingDebitBase().subtract(row.closingCreditBase());
+            default -> throw problem(422, "FINANCE_QUERY_INVALID", "Invalid finance query",
+                    "The metric is not in the whitelist");
+        };
+    }
+
     private boolean matchesAccountFilter(
             FinanceQueryRequests.Query request, ReportResponses.TrialBalanceLine line) {
-        return request.filters() == null || request.filters().accountCodes() == null
-                || request.filters().accountCodes().isEmpty()
+        return request.filters() == null || request.filters().accountCodes().isEmpty()
                 || request.filters().accountCodes().contains(line.code());
     }
 
@@ -352,6 +510,149 @@ public class DefaultReportingService implements ReportingService {
             default -> throw problem(422, "FINANCE_QUERY_INVALID", "Invalid finance query",
                     "The group is not in the whitelist");
         }).collect(Collectors.joining("|"));
+    }
+
+    private static final class FinanceAggregate {
+        private BigDecimal amount = BigDecimal.ZERO;
+        private final List<ReportResponses.FinanceQueryDimension> dimensions;
+        private final Set<String> dimensionKeys = new HashSet<>();
+        private final Set<String> currencies = new HashSet<>();
+        private final Set<String> periodCodes = new HashSet<>();
+        private final Set<String> accountCodes = new HashSet<>();
+
+        private FinanceAggregate(List<ReportResponses.FinanceQueryDimension> dimensions) {
+            this.dimensions = List.copyOf(dimensions);
+        }
+
+        private void add(ReportingRepository.DimensionBalanceRow row, BigDecimal increment) {
+            amount = amount.add(increment);
+            dimensionKeys.add(row.dimensionKey());
+            currencies.add(row.currency());
+            periodCodes.add(row.periodCode());
+            accountCodes.add(row.accountCode());
+        }
+
+        private String singleOrNull(Set<String> values) {
+            return values.size() == 1 ? values.iterator().next() : null;
+        }
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public ReportResponses.DimensionLedgerPage dimensionLedger(
+            UUID actorId, UUID ledgerId, DimensionLedgerRequests.Query request) {
+        requireView(actorId, ledgerId);
+        PeriodRange range = new PeriodRange(request.periodFrom(), request.periodTo());
+        validateRange(ledgerId, range);
+        validateDimensionLedgerRequest(ledgerId, request, range);
+        if (!reports.accountExists(ledgerId, request.accountId())) {
+            throw problem(404, "ACCOUNT_NOT_FOUND", "Account not found",
+                    "The account is not available to this ledger");
+        }
+        if (!reports.leafAccount(ledgerId, request.accountId())) {
+            throw problem(422, "DIMENSION_LEDGER_LEAF_ACCOUNT_REQUIRED", "Leaf account required",
+                    "Dimension ledger balances are available only for leaf accounts");
+        }
+        if (!reports.dimensionProjectionReady(ledgerId, range)) {
+            throw problem(409, "BALANCE_PROJECTION_NOT_READY", "Balance projection not ready",
+                    "The auxiliary balance projection has pending or failed events");
+        }
+        List<ReportingRepository.DimensionLedgerFilter> filters = request.dimensionValues().stream()
+                .map(ReportingRepository.DimensionLedgerFilter::from).toList();
+        List<ReportingRepository.DimensionLedgerBalanceRow> balanceRows = reports.dimensionLedgerBalances(
+                ledgerId, range, request.accountId(), request.currency(), filters);
+        ReportingRepository.DimensionLedgerEntryPage entryPage = reports.dimensionLedgerEntries(
+                ledgerId, range, request.accountId(), request.currency(), filters, request.page(), request.pageSize());
+        Map<UUID, ReportingRepository.DimensionTypeInfo> groups = dimensionLedgerGroupTypes(
+                ledgerId, request.groupDimensionTypeIds());
+        List<String> warnings = balanceRows.stream().filter(row -> "LEGACY_UNMAPPED".equals(row.combinationKind()))
+                .map(ignored -> "LEGACY_UNMAPPED").distinct().toList();
+        List<ReportResponses.DimensionLedgerBalance> balances = balanceRows.stream().map(row ->
+                new ReportResponses.DimensionLedgerBalance(row.combinationId(), row.dimensionKey(),
+                        row.combinationKind(), dimensionLedgerGroupKey(request.groupDimensionTypeIds(), groups,
+                        row.dimensions()), row.currency(), row.dimensions(), ledgerAmounts(row, true),
+                        ledgerAmounts(row, false))).toList();
+        List<ReportResponses.DimensionLedgerEntry> entries = entryPage.entries().stream().map(row -> {
+            return new ReportResponses.DimensionLedgerEntry(row.voucherId(), row.voucherNumber(), row.voucherDate(),
+                    row.lineNo(), row.lineId(), row.accountId(), row.accountCode(), row.accountName(),
+                    row.combinationId(), row.dimensionKey(), row.combinationKind(),
+                    dimensionLedgerGroupKey(request.groupDimensionTypeIds(), groups, row.dimensions()), row.dimensions(),
+                    row.currency(), row.side(), row.originalDebit(), row.originalCredit(), row.baseDebit(),
+                    row.baseCredit(), row.runningOriginalDebit(), row.runningOriginalCredit(),
+                    row.runningBaseDebit(), row.runningBaseCredit());
+        }).toList();
+        return new ReportResponses.DimensionLedgerPage("READY", warnings, balances, entries,
+                new ReportResponses.Pagination(request.page(), request.pageSize(), entryPage.totalItems(),
+                        entryPage.totalItems() == 0 ? 0
+                                : (int) ((entryPage.totalItems() + request.pageSize() - 1) / request.pageSize())));
+    }
+
+    private void validateDimensionLedgerRequest(UUID ledgerId, DimensionLedgerRequests.Query request,
+                                                PeriodRange range) {
+        long periods = ChronoUnit.MONTHS.between(YearMonth.parse(range.periodFrom()), YearMonth.parse(range.periodTo())) + 1;
+        if (periods > MAX_DIMENSION_LEDGER_PERIODS) {
+            throw problem(422, "DIMENSION_LEDGER_PERIOD_RANGE_TOO_LARGE", "Period range is too large",
+                    "Dimension ledger queries may span at most thirty-six periods");
+        }
+        if (request.page() < 1 || request.pageSize() < 1 || request.pageSize() > 200) {
+            throw problem(400, "PAGINATION_INVALID", "Invalid pagination",
+                    "page must be positive and pageSize must be between 1 and 200");
+        }
+        if (request.dimensionValues().size() > 16) {
+            throw problem(422, "DIMENSION_LEDGER_FILTER_INVALID", "Invalid dimension filter",
+                    "At most sixteen dimension values may be filtered");
+        }
+        Set<UUID> filterTypes = new HashSet<>();
+        for (DimensionLedgerRequests.DimensionValue value : request.dimensionValues()) {
+            if (value == null || value.dimensionTypeId() == null || value.dimensionValueId() == null
+                    || !filterTypes.add(value.dimensionTypeId())
+                    || !reports.dimensionValueExists(ledgerId, value.dimensionTypeId(), value.dimensionValueId())) {
+                throw problem(422, "DIMENSION_LEDGER_FILTER_INVALID", "Invalid dimension filter",
+                        "Each filter must reference one value of one ledger dimension type");
+            }
+        }
+        dimensionLedgerGroupTypes(ledgerId, request.groupDimensionTypeIds());
+    }
+
+    private Map<UUID, ReportingRepository.DimensionTypeInfo> dimensionLedgerGroupTypes(
+            UUID ledgerId, List<UUID> groupTypeIds) {
+        if (groupTypeIds.size() > 4 || new HashSet<>(groupTypeIds).size() != groupTypeIds.size()) {
+            throw problem(422, "DIMENSION_LEDGER_GROUP_INVALID", "Invalid dimension group",
+                    "At most four distinct ledger dimension types may group the response");
+        }
+        Map<UUID, ReportingRepository.DimensionTypeInfo> types = new LinkedHashMap<>();
+        for (UUID typeId : groupTypeIds) {
+            ReportingRepository.DimensionTypeInfo type = typeId == null ? null : reports.dimensionType(ledgerId, typeId);
+            if (type == null) {
+                throw problem(422, "DIMENSION_LEDGER_GROUP_INVALID", "Invalid dimension group",
+                        "A group dimension type is not available to this ledger");
+            }
+            types.put(typeId, type);
+        }
+        return types;
+    }
+
+    private String dimensionLedgerGroupKey(List<UUID> groupTypeIds,
+                                           Map<UUID, ReportingRepository.DimensionTypeInfo> types,
+                                           List<ReportResponses.FinanceQueryDimension> dimensions) {
+        if (groupTypeIds.isEmpty()) {
+            return null;
+        }
+        Map<UUID, ReportResponses.FinanceQueryDimension> byType = dimensions.stream().collect(Collectors.toMap(
+                ReportResponses.FinanceQueryDimension::dimensionTypeId, dimension -> dimension));
+        return groupTypeIds.stream().map(typeId -> {
+            ReportResponses.FinanceQueryDimension dimension = byType.get(typeId);
+            return dimension == null ? UNASSIGNED : dimension.dimensionValueCode();
+        }).collect(Collectors.joining("|"));
+    }
+
+    private ReportResponses.DimensionLedgerAmounts ledgerAmounts(
+            ReportingRepository.DimensionLedgerBalanceRow row, boolean original) {
+        return original ? new ReportResponses.DimensionLedgerAmounts(row.openingDebitOriginal(),
+                row.openingCreditOriginal(), row.periodDebitOriginal(), row.periodCreditOriginal(),
+                row.closingDebitOriginal(), row.closingCreditOriginal())
+                : new ReportResponses.DimensionLedgerAmounts(row.openingDebitBase(), row.openingCreditBase(),
+                row.periodDebitBase(), row.periodCreditBase(), row.closingDebitBase(), row.closingCreditBase());
     }
 
     private void requireView(UUID actorId, UUID ledgerId) {

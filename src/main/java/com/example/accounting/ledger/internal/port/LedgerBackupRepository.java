@@ -22,4 +22,8 @@ public interface LedgerBackupRepository {
     Map<String, String> columns(String table);
 
     void insertRow(String table, LinkedHashMap<String, Object> values, Set<String> jsonColumns);
+
+    void backfillLegacyDimensionCombinations(UUID ledgerId);
+
+    void normalizeRestoredDimensionCombinations(UUID ledgerId);
 }

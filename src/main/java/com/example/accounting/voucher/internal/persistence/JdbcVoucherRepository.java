@@ -195,13 +195,14 @@ public class JdbcVoucherRepository implements VoucherRepository {
     public void createLine(UUID lineId, UUID ledgerId, UUID voucherId, int lineNo, UUID accountId, String side,
                            String currency, BigDecimal originalAmount, BigDecimal exchangeRate,
                            BigDecimal baseAmount, String summary, UUID cashFlowItemId,
-                           BigDecimal quantity, BigDecimal unitPrice) {
+                           BigDecimal quantity, BigDecimal unitPrice, UUID dimensionCombinationId) {
         jdbcTemplate.update("""
                 insert into voucher_line (id, ledger_id, voucher_id, line_no, account_id, side, currency,
-                    original_amount, exchange_rate, base_amount, summary, cash_flow_item_id, quantity, unit_price)
-                values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    original_amount, exchange_rate, base_amount, summary, cash_flow_item_id, quantity, unit_price,
+                    dimension_combination_id)
+                values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, lineId, ledgerId, voucherId, lineNo, accountId, side, currency, originalAmount, exchangeRate,
-                baseAmount, summary, cashFlowItemId, quantity, unitPrice);
+                baseAmount, summary, cashFlowItemId, quantity, unitPrice, dimensionCombinationId);
     }
 
     @Override

@@ -51,7 +51,8 @@ public interface VoucherRepository {
 
     void createLine(UUID lineId, UUID ledgerId, UUID voucherId, int lineNo, UUID accountId, String side,
                     String currency, BigDecimal originalAmount, BigDecimal exchangeRate, BigDecimal baseAmount,
-                    String summary, UUID cashFlowItemId, BigDecimal quantity, BigDecimal unitPrice);
+                    String summary, UUID cashFlowItemId, BigDecimal quantity, BigDecimal unitPrice,
+                    UUID dimensionCombinationId);
 
     void createLineDimensions(UUID lineId, UUID ledgerId, List<VoucherRequests.Dimension> dimensions);
 
