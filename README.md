@@ -30,6 +30,33 @@ Spring 集成测试和余额基准测试默认使用 `jdbc:postgresql://127.0.0.
 
 健康检查：`GET http://127.0.0.1:8080/actuator/health`。
 
+### 后端热更新
+
+`pom.xml` 已加入 `spring-boot-devtools`。使用 `.\mvnw.cmd spring-boot:run` 或 `.\start-backend.ps1` 启动后：
+
+```powershell
+.\mvnw.cmd -q -DskipTests compile
+```
+
+编译完成后，devtools 会检测到 `target/classes` 变化并自动重启后端，不需要手动重启服务。生产打包时该依赖会被 Spring Boot Maven 插件默认排除，不会进入最终 jar。
+
+### 快速启动或重启本地服务
+
+```powershell
+.\start-backend.ps1
+.\start-frontend.ps1
+```
+
+脚本会只停止分别占用 `8080` 和 `5173` 端口的进程，再启动对应服务并等待可用。运行日志写入 `artifacts/dev-logs/`。
+
+需要同时保留正常 `8080` 后端，并额外启动一个连接测试数据库的测试后端时，使用：
+
+```powershell
+.\start-backend-test.ps1
+```
+
+该脚本会在 `18080` 端口启动测试后端，并连接 `ai-accounting-test`。正常后端继续运行在 `8080`，测试请求直接调用 `http://127.0.0.1:18080` 验证，不需要每次用 `mvn test` 另起一套测试上下文。
+
 数据库集成测试直接连接配置的本机 PostgreSQL。
 
 ## 第一版 API

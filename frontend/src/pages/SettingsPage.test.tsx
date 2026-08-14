@@ -38,10 +38,10 @@ afterEach(() => {
 })
 
 const account = {
-  id: 'account-1', ledgerId: 'ledger-1', code: '1001', name: '库存现金', category: 'ASSET',
+  id: 'account-1', ledgerId: 'ledger-1', code: '1001', name: '库存现金', category: 'CURRENT_ASSET',
   normalBalance: 'DEBIT', status: 'ACTIVE', parentId: null, level: 1, isLeaf: true, isTemplate: true,
   hasBusinessUsage: false, coreLocked: false, legacyCode: false, version: 0, cashFlowRequired: false,
-  defaultCashFlowItemId: null, quantityEnabled: false, unitName: null, dimensionRequirements: [],
+  defaultCashFlowItemId: null, quantityEnabled: false, unitName: null, dimensionRequirements: [], createdAt: null,
 }
 
 const period = {

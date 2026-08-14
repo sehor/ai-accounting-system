@@ -30,7 +30,7 @@ class AccountManagementIntegrationTest {
                 LocalDate.of(2026, 1, 1), false)).id();
 
         List<LedgerResponses.Account> initial = ledgers.listAccounts(owner, ledgerId);
-        assertThat(initial).hasSize(15).allMatch(LedgerResponses.Account::isTemplate);
+        assertThat(initial).hasSize(17).allMatch(LedgerResponses.Account::isTemplate);
         assertThat(ledgers.listCashFlowItems(owner, ledgerId)).hasSize(3);
         assertThat(ledgers.listDimensionTypes(owner, ledgerId)).hasSize(5);
 
@@ -38,7 +38,7 @@ class AccountManagementIntegrationTest {
                 .filter(account -> account.code().equals("1002")).findFirst().orElseThrow();
         LedgerResponses.Account child = ledgers.createAccount(owner, ledgerId,
                 new LedgerRequests.AccountCreate(
-                        "100201", "基本户", "ASSET", "DEBIT", bank.id(),
+                        "100201", "基本户", "CURRENT_ASSET", "DEBIT", bank.id(),
                         false, null, false, null, List.of()));
         assertThat(child.parentId()).isEqualTo(bank.id());
         assertThat(child.level()).isEqualTo(2);

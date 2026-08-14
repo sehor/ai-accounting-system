@@ -174,7 +174,9 @@ function SubLedgerPageView() {
     enabled: Boolean(session && ledgerId),
   })
   const firstAsset = accounts.data?.find((account) =>
-    account.status === 'ACTIVE' && account.category === 'ASSET' && account.parentId === null,
+    account.status === 'ACTIVE'
+      && (account.category === 'CURRENT_ASSET' || account.category === 'NON_CURRENT_ASSET')
+      && account.parentId === null,
   )?.id
   useEffect(() => {
     if (accountId || !firstAsset) return

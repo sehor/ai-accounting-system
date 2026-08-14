@@ -67,7 +67,7 @@ class AccountExchangeIntegrationTest {
         exchange.decideAll(owner, ledgerId, preview.id(), preview.rows().stream()
                 .map(row -> new AccountExchangeService.RowDecision(row.rowNo(),
                         new AccountExchangeService.Decision(
-                                row.targetAccountId() == null ? "CREATE" : "MAP", row.targetAccountId(), null)))
+                                row.targetAccountId() == null ? "CREATE" : "UPDATE", row.targetAccountId(), null)))
                 .toList());
         exchange.commit(owner, ledgerId, preview.id());
 
@@ -77,13 +77,53 @@ class AccountExchangeIntegrationTest {
         assertThat(accounts).filteredOn(account -> account.code().equals("10020001"))
                 .singleElement().satisfies(account -> {
                     assertThat(account.parentId()).isEqualTo(parentId);
-                    assertThat(account.category()).isEqualTo("ASSET");
-                    assertThat(account.normalBalance()).isEqualTo("DEBIT");
+                    assertThat(account.category()).isEqualTo("CURRENT_ASSET");
+                    assertThat(account.normalBalance()).isEqualTo("CREDIT");
                 });
     }
 
     @Test
-    void exportsPreviewsAndMapsAStandardWorkbookWithoutChangingAccounts() throws Exception {
+    void rejectsDuplicateNamesWithinTheSameParentAndRollsBack() throws Exception {
+        UUID owner = UUID.randomUUID();
+        UUID ledgerId = ledgers.create(user(owner), new LedgerRequests.Create(
+                "account-name-unique", "SME", "2011-17", "CNY",
+                LocalDate.of(2026, 1, 1), false)).id();
+        byte[] workbook;
+        try (var source = new HSSFWorkbook(); var output = new ByteArrayOutputStream()) {
+            var sheet = source.createSheet("科目列表");
+            var header = sheet.createRow(0);
+            List.of("编码", "名称", "类别", "余额方向")
+                    .forEach(value -> header.createCell(header.getLastCellNum() < 0 ? 0 : header.getLastCellNum())
+                            .setCellValue(value));
+            var first = sheet.createRow(1);
+            first.createCell(0).setCellValue("1998");
+            first.createCell(1).setCellValue("重复名称");
+            first.createCell(2).setCellValue("流动资产");
+            first.createCell(3).setCellValue("借");
+            var second = sheet.createRow(2);
+            second.createCell(0).setCellValue("1999");
+            second.createCell(1).setCellValue("重复名称");
+            second.createCell(2).setCellValue("流动资产");
+            second.createCell(3).setCellValue("借");
+            source.write(output);
+            workbook = output.toByteArray();
+        }
+
+        AccountExchangeService.Preview preview = exchange.preview(owner, ledgerId,
+                AccountExchangeService.Format.KINGDEE, "duplicate-name.xls", workbook.length,
+                new ByteArrayInputStream(workbook));
+        exchange.decideAll(owner, ledgerId, preview.id(), preview.rows().stream()
+                .map(row -> new AccountExchangeService.RowDecision(row.rowNo(),
+                        new AccountExchangeService.Decision("CREATE", null, null)))
+                .toList());
+
+        assertThatThrownBy(() -> exchange.commit(owner, ledgerId, preview.id()))
+                .isInstanceOfSatisfying(ApiProblemException.class,
+                        exception -> assertThat(exception.code()).isEqualTo("ACCOUNT_NAME_CONFLICT"));
+    }
+
+    @Test
+    void exportsPreviewsAndOverwritesAStandardWorkbookWithoutChangingAccounts() throws Exception {
         UUID owner = UUID.randomUUID();
         UUID ledgerId = ledgers.create(user(owner), new LedgerRequests.Create(
                 "account-exchange", "SME", "2011-17", "CNY",
@@ -100,16 +140,16 @@ class AccountExchangeIntegrationTest {
         AccountExchangeService.Preview preview = exchange.preview(
                 owner, ledgerId, AccountExchangeService.Format.STANDARD,
                 "accounts.xlsx", exported.length, new ByteArrayInputStream(exported));
-        assertThat(preview.rows()).hasSize(15);
-        assertThat(preview.rows()).allMatch(row -> "MAP".equals(row.action())
+        assertThat(preview.rows()).hasSize(18);
+        assertThat(preview.rows()).allMatch(row -> "UPDATE".equals(row.action())
                 && row.targetAccountId() != null && row.issues().isEmpty());
         exchange.decideAll(owner, ledgerId, preview.id(), preview.rows().stream()
                 .map(row -> new AccountExchangeService.RowDecision(row.rowNo(),
-                        new AccountExchangeService.Decision("MAP", row.targetAccountId(), null)))
+                        new AccountExchangeService.Decision("UPDATE", row.targetAccountId(), null)))
                 .toList());
         AccountExchangeService.Preview committed = exchange.commit(owner, ledgerId, preview.id());
         assertThat(committed.status()).isEqualTo("COMMITTED");
-        assertThat(ledgers.listAccounts(owner, ledgerId)).hasSize(15);
+        assertThat(ledgers.listAccounts(owner, ledgerId)).hasSize(18);
     }
 
     @Test
@@ -128,19 +168,23 @@ class AccountExchangeIntegrationTest {
         jdbc.update("update ledger_account set created_at = ? where ledger_id = ?",
                 startInclusive.minusDays(1), ledgerId);
         LedgerResponses.Account parent = ledgers.createAccount(owner, ledgerId,
-                new LedgerRequests.AccountCreate("1998", "期间外父科目", "ASSET", "DEBIT"));
+                new LedgerRequests.AccountCreate("1998", "期间外父科目", "CURRENT_ASSET", "DEBIT"));
         jdbc.update("update ledger_account set created_at = ? where ledger_id = ? and id = ?",
                 startInclusive.minusDays(1), ledgerId, parent.id());
         ledgers.createAccount(owner, ledgerId,
                 new LedgerRequests.AccountCreate(
-                        "199801", "期间内子科目", "ASSET", "DEBIT", parent.id(),
+                        "199801", "期间内子科目", "CURRENT_ASSET", "DEBIT", parent.id(),
                         false, null, false, null, List.of()));
         ledgers.createAccount(owner, ledgerId,
-                new LedgerRequests.AccountCreate("1997", "期间外科目", "ASSET", "DEBIT"));
+                new LedgerRequests.AccountCreate("1997", "期间外科目", "CURRENT_ASSET", "DEBIT"));
         jdbc.update("update ledger_account set created_at = ? where ledger_id = ? and code = ?",
                 startInclusive, ledgerId, "199801");
         jdbc.update("update ledger_account set created_at = ? where ledger_id = ? and code = ?",
                 endExclusive, ledgerId, "1997");
+        assertThat(ledgers.listAccounts(owner, ledgerId)).anySatisfy(account -> {
+            assertThat(account.code()).isEqualTo("199801");
+            assertThat(account.createdAt()).isEqualTo(startInclusive);
+        });
 
         byte[] exported = exchange.export(
                 owner, ledgerId, AccountExchangeService.Format.STANDARD, period.id());
@@ -160,7 +204,7 @@ class AccountExchangeIntegrationTest {
             var sheet = workbook.getSheetAt(0);
             assertThat(sheet.getLastRowNum()).isEqualTo(1);
             assertThat(sheet.getRow(1).getCell(0).getStringCellValue()).isEqualTo("199801");
-            assertThat(sheet.getRow(1).getCell(2).getStringCellValue()).isEqualTo("1998");
+            assertThat(sheet.getRow(1).getCell(2).getStringCellValue()).isEqualTo("流动资产");
         }
 
         UUID otherLedgerId = ledgers.create(user(owner), new LedgerRequests.Create(
@@ -262,7 +306,7 @@ class AccountExchangeIntegrationTest {
         UUID operating = ledgers.listCashFlowItems(owner, source).stream()
                 .filter(item -> item.code().equals("OPERATING")).findFirst().orElseThrow().id();
         ledgers.createAccount(owner, source, new LedgerRequests.AccountCreate(
-                "100101", "区域现金", "ASSET", "DEBIT", null, true, operating,
+                "100101", "区域现金", "CURRENT_ASSET", "DEBIT", null, true, operating,
                 false, null, List.of(new LedgerRequests.DimensionRequirement(region.id(), true))));
         byte[] exported = exchange.export(owner, source, AccountExchangeService.Format.STANDARD);
 
@@ -273,7 +317,7 @@ class AccountExchangeIntegrationTest {
                 new ByteArrayInputStream(exported));
         for (AccountExchangeService.PreviewRow row : preview.rows()) {
             exchange.decide(owner, target, preview.id(), row.rowNo(),
-                    new AccountExchangeService.Decision(row.targetAccountId() == null ? "CREATE" : "MAP",
+                    new AccountExchangeService.Decision(row.targetAccountId() == null ? "CREATE" : "UPDATE",
                             row.targetAccountId(), null));
         }
         exchange.commit(owner, target, preview.id());

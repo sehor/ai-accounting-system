@@ -6,6 +6,7 @@ import com.example.accounting.ledger.MembershipStatus;
 import com.example.accounting.ledger.internal.port.LedgerRepository;
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -162,7 +163,7 @@ public class JdbcLedgerRepository implements LedgerRepository {
     @Override
     public List<LedgerResponses.Account> listAccounts(UUID ledgerId) {
         return jdbc.query("""
-                select id, ledger_id, code, name, category, normal_balance, status
+                select id, ledger_id, code, name, category, normal_balance, status, created_at
                 from ledger_account where ledger_id = ? order by code
                 """, (rs, rowNum) -> mapAccount(rs), ledgerId);
     }
@@ -170,7 +171,7 @@ public class JdbcLedgerRepository implements LedgerRepository {
     @Override
     public Optional<LedgerResponses.Account> findAccount(UUID ledgerId, String code) {
         return Optional.ofNullable(jdbc.query("""
-                select id, ledger_id, code, name, category, normal_balance, status
+                select id, ledger_id, code, name, category, normal_balance, status, created_at
                 from ledger_account where ledger_id = ? and code = ?
                 """, rs -> rs.next() ? mapAccount(rs) : null, ledgerId, code));
     }
@@ -415,7 +416,8 @@ public class JdbcLedgerRepository implements LedgerRepository {
     private LedgerResponses.Account mapAccount(java.sql.ResultSet rs) throws java.sql.SQLException {
         return new LedgerResponses.Account(rs.getObject("id", UUID.class),
                 rs.getObject("ledger_id", UUID.class), rs.getString("code"), rs.getString("name"),
-                rs.getString("category"), rs.getString("normal_balance"), rs.getString("status"));
+                rs.getString("category"), rs.getString("normal_balance"), rs.getString("status"),
+                rs.getObject("created_at", OffsetDateTime.class));
     }
 
     private LedgerResponses.Member mapMember(java.sql.ResultSet rs) throws java.sql.SQLException {

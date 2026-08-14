@@ -25,6 +25,7 @@ public class AccountManagementRepository {
             select a.id, a.ledger_id, a.code, a.name, a.category, a.normal_balance, a.status,
                 a.parent_id, a.level, a.is_template, a.legacy_code, a.version,
                 a.cash_flow_required, a.default_cash_flow_item_id, a.quantity_enabled, a.unit_name,
+                a.created_at,
                 not exists (
                     select 1 from ledger_account child
                     where child.ledger_id = a.ledger_id and child.parent_id = a.id) leaf,
@@ -257,6 +258,39 @@ public class AccountManagementRepository {
                 """, Boolean.class, ledgerId, accountId));
     }
 
+    public boolean hasNonZeroBalance(UUID ledgerId, UUID accountId) {
+        return Boolean.TRUE.equals(jdbc.queryForObject("""
+                with recursive account_scope as (
+                    select id from ledger_account
+                    where ledger_id = ? and id = ?
+                    union all
+                    select child.id
+                    from ledger_account child
+                    join account_scope parent on parent.id = child.parent_id
+                    where child.ledger_id = ?
+                ),
+                amounts as (
+                    select ob.debit_base debit, ob.credit_base credit
+                    from opening_balance ob
+                    where ob.ledger_id = ?
+                      and ob.account_id in (select id from account_scope)
+                    union all
+                    select
+                        case when vl.side = 'DEBIT' then vl.base_amount else 0 end debit,
+                        case when vl.side = 'CREDIT' then vl.base_amount else 0 end credit
+                    from voucher_line vl
+                    where vl.ledger_id = ?
+                      and vl.account_id in (select id from account_scope)
+                )
+                select exists (
+                    select 1
+                    from (select coalesce(sum(debit), 0) debit, coalesce(sum(credit), 0) credit
+                          from amounts) totals
+                    where totals.debit <> totals.credit
+                )
+                """, Boolean.class, ledgerId, accountId, ledgerId, ledgerId, ledgerId));
+    }
+
     public Optional<String> findConfigurationReference(UUID ledgerId, UUID accountId) {
         return Optional.ofNullable(jdbc.query("""
                 select reference from (
@@ -307,7 +341,7 @@ public class AccountManagementRepository {
                 ledgerId, accountId, ledgerId, accountId, ledgerId, accountId, ledgerId, accountId,
                 ledgerId, accountId, ledgerId, accountId, ledgerId, accountId,
                 ledgerId, accountId, ledgerId, accountId, ledgerId, accountId, ledgerId, accountId,
-                ledgerId, accountId, ledgerId, accountId, ledgerId, accountId));
+                ledgerId, accountId, ledgerId, accountId));
     }
 
     public boolean hasActiveDescendants(UUID ledgerId, UUID accountId) {
@@ -564,7 +598,8 @@ public class AccountManagementRepository {
                 rs.getBoolean("core_locked"), rs.getBoolean("legacy_code"), rs.getLong("version"),
                 rs.getBoolean("cash_flow_required"),
                 rs.getObject("default_cash_flow_item_id", UUID.class),
-                rs.getBoolean("quantity_enabled"), rs.getString("unit_name"), dimensions);
+                rs.getBoolean("quantity_enabled"), rs.getString("unit_name"), dimensions,
+                rs.getObject("created_at", OffsetDateTime.class));
     }
 
     private LedgerResponses.Account copyWithDimensions(
@@ -574,7 +609,8 @@ public class AccountManagementRepository {
                 account.normalBalance(), account.status(), account.parentId(), account.level(),
                 account.isLeaf(), account.isTemplate(), account.hasBusinessUsage(), account.coreLocked(),
                 account.legacyCode(), account.version(), account.cashFlowRequired(),
-                account.defaultCashFlowItemId(), account.quantityEnabled(), account.unitName(), dimensions);
+                account.defaultCashFlowItemId(), account.quantityEnabled(), account.unitName(), dimensions,
+                account.createdAt());
     }
 
     private void bumpLedgerVersion(UUID ledgerId) {

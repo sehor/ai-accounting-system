@@ -54,6 +54,27 @@ public class JdbcReportingRepository implements ReportingRepository {
     @Override
     public List<ReportResponses.TrialBalanceLine> trialBalance(
             UUID ledgerId, PeriodRange range, boolean includeParents) {
+        return readTrialBalance(ledgerId, range, includeParents);
+    }
+
+    @Override
+    public List<ReportResponses.TrialBalanceLine> incomeStatementTrialBalance(
+            UUID ledgerId, PeriodRange range, boolean includeParents) {
+        if (projection == null) {
+            throw new IllegalStateException("Balance projection is not configured");
+        }
+        BalanceProjectionService.ProjectionStatus status = projection.status(ledgerId, range);
+        if (!status.fresh()) {
+            throw new IllegalStateException("Balance projection is not ready");
+        }
+        BalanceReadMetadata.set("projection", status.projectedAt() == null
+                ? (status.lastEnqueuedAt() == null ? OffsetDateTime.now() : status.lastEnqueuedAt())
+                : status.projectedAt(), lagMs(status));
+        return projection.operatingTrialBalance(ledgerId, range, includeParents);
+    }
+
+    private List<ReportResponses.TrialBalanceLine> readTrialBalance(
+            UUID ledgerId, PeriodRange range, boolean includeParents) {
         if (useProjection(ledgerId, range)) {
             return projection.trialBalance(ledgerId, range, includeParents);
         }
@@ -125,6 +146,27 @@ public class JdbcReportingRepository implements ReportingRepository {
                 """, (rs, row) -> trialBalanceLine(rs), ledgerId, ledgerId,
                 ledgerId, ledgerId, range.periodFrom(), ledgerId, range.periodFrom(), range.periodTo(),
                 ledgerId, includeParents);
+    }
+
+    @Override
+    public boolean statutoryProjectionReady(UUID ledgerId, PeriodRange range) {
+        return projection != null && projection.status(ledgerId, range).fresh();
+    }
+
+    @Override
+    public List<ReportResponses.TrialBalanceLine> statutoryTrialBalance(
+            UUID ledgerId, PeriodRange range, boolean includeParents) {
+        if (projection == null) {
+            throw new IllegalStateException("Balance projection is not configured");
+        }
+        BalanceProjectionService.ProjectionStatus status = projection.status(ledgerId, range);
+        if (!status.fresh()) {
+            throw new IllegalStateException("Balance projection is not ready");
+        }
+        BalanceReadMetadata.set("projection", status.projectedAt() == null
+                ? (status.lastEnqueuedAt() == null ? OffsetDateTime.now() : status.lastEnqueuedAt())
+                : status.projectedAt(), lagMs(status));
+        return projection.trialBalance(ledgerId, range, includeParents);
     }
 
     @Override
@@ -364,12 +406,6 @@ public class JdbcReportingRepository implements ReportingRepository {
     }
 
     private BalancePosition position(String normalBalance, BigDecimal debit, BigDecimal credit) {
-        if (credit.compareTo(BigDecimal.ZERO) == 0 && debit.compareTo(BigDecimal.ZERO) != 0) {
-            return new BalancePosition("DEBIT", debit, debit, credit);
-        }
-        if (debit.compareTo(BigDecimal.ZERO) == 0 && credit.compareTo(BigDecimal.ZERO) != 0) {
-            return new BalancePosition("CREDIT", credit, debit, credit);
-        }
         return new BalancePosition(normalBalance, normalAmount(normalBalance, debit, credit), debit, credit);
     }
 
@@ -393,6 +429,27 @@ public class JdbcReportingRepository implements ReportingRepository {
     @Override
     public String baseCurrency(UUID ledgerId) {
         return jdbc.queryForObject("select base_currency from ledger where id = ?", String.class, ledgerId);
+    }
+
+    @Override
+    public ReportResponses.LedgerProfile ledgerProfile(UUID ledgerId) {
+        return jdbc.queryForObject("""
+                select accounting_standard_code, accounting_standard_version, base_currency
+                from ledger where id = ?
+                """, (rs, rowNum) -> new ReportResponses.LedgerProfile(
+                rs.getString("accounting_standard_code"),
+                rs.getString("accounting_standard_version"),
+                rs.getString("base_currency")), ledgerId);
+    }
+
+    @Override
+    public String firstPeriodOfYear(UUID ledgerId, String periodCode) {
+        String year = periodCode.substring(0, 4);
+        return jdbc.query("""
+                select min(period_code) from accounting_period
+                where ledger_id = ? and period_code like ? and period_code <= ?
+                """, rs -> rs.next() ? rs.getString(1) : null,
+                ledgerId, year + "-%", periodCode);
     }
 
     private boolean useProjection(UUID ledgerId, String periodCode) {

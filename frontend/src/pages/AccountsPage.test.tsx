@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { App } from 'antd'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
@@ -9,6 +9,10 @@ vi.mock('../api/client', () => ({
   apiFetch: vi.fn((path: string) => {
     if (path.endsWith('/accounts')) return Promise.resolve([])
     if (path.endsWith('/role')) return Promise.resolve({ role: 'OWNER' })
+    if (path.endsWith('/periods')) return Promise.resolve([{
+      id: 'period-2026-08', ledgerId: 'ledger-1', periodCode: '2026-08',
+      startDate: '2026-08-01', endDate: '2026-08-31', status: 'OPEN', hasVouchers: false,
+    }])
     return Promise.resolve([])
   }),
   jsonBody: vi.fn((value) => value),
@@ -55,8 +59,15 @@ describe('AccountsPage', () => {
       </QueryClientProvider>,
     )
 
-    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('?category=ASSET'))
-    screen.getByRole('tab', { name: '负债' }).click()
-    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('?category=LIABILITY'))
+    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('?category=CURRENT_ASSET'))
+    fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Created at' }))
+    fireEvent.click(await screen.findByText('2026-08（2026-08-01 ~ 2026-08-31）'))
+    expect(screen.getByRole('combobox', { name: 'Created at' }).closest('.ant-select'))
+      .toHaveTextContent('2026-08')
+
+    screen.getByRole('tab', { name: '流动负债' }).click()
+    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('?category=CURRENT_LIABILITY'))
+    expect(screen.getByRole('combobox', { name: 'Created at' }).closest('.ant-select'))
+      .toHaveTextContent('2026-08')
   })
 })

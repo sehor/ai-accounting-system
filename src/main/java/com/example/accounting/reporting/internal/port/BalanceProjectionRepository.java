@@ -30,6 +30,9 @@ public interface BalanceProjectionRepository {
 
     List<ReportResponses.TrialBalanceLine> trialBalance(UUID ledgerId, PeriodRange range, boolean includeParents);
 
+    List<ReportResponses.TrialBalanceLine> operatingTrialBalance(
+            UUID ledgerId, PeriodRange range, boolean includeParents);
+
     BigDecimal openingBalance(UUID ledgerId, String periodCode, UUID accountId);
 
     boolean applyPendingBatch(int maxEvents, int maxEventLines);

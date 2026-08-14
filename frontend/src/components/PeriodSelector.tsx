@@ -15,13 +15,13 @@ export function selectDefaultPeriod(periods: Period[], currentMonth = dayjs().fo
     || periods.at(-1)?.periodCode
 }
 
-export function usePeriodFilter(ledgerId: string) {
+export function usePeriodFilter(ledgerId: string, active = true) {
   const { session } = useAuth()
   const [search, setSearch] = useWorkspaceSearchParams()
   const periods = useQuery({
     queryKey: ['periods', ledgerId],
     queryFn: () => apiFetch<Period[]>(`/ledgers/${ledgerId}/periods`, session!),
-    enabled: Boolean(session && ledgerId),
+    enabled: Boolean(active && session && ledgerId),
   })
   const requested = search.get('periodCode') || undefined
   const hasDateRange = Boolean(search.get('startDate') || search.get('endDate'))
@@ -32,13 +32,13 @@ export function usePeriodFilter(ledgerId: string) {
   }, [hasDateRange, periods.data, requested])
 
   useEffect(() => {
-    if (!periodCode || requested === periodCode) return
+    if (!active || !periodCode || requested === periodCode) return
     const next = new URLSearchParams(search)
     next.set('periodCode', periodCode)
     next.delete('offset')
     next.delete('page')
     setSearch(next, { replace: true })
-  }, [periodCode, requested, search, setSearch])
+  }, [active, periodCode, requested, search, setSearch])
 
   const setPeriodCode = (value: string) => {
     const next = new URLSearchParams(search)
@@ -53,13 +53,13 @@ export function usePeriodFilter(ledgerId: string) {
   return { periods, periodCode, setPeriodCode }
 }
 
-export function usePeriodRangeFilter(ledgerId: string) {
+export function usePeriodRangeFilter(ledgerId: string, active = true) {
   const { session } = useAuth()
   const [search, setSearch] = useWorkspaceSearchParams()
   const periods = useQuery({
     queryKey: ['periods', ledgerId],
     queryFn: () => apiFetch<Period[]>(`/ledgers/${ledgerId}/periods`, session!),
-    enabled: Boolean(session && ledgerId),
+    enabled: Boolean(active && session && ledgerId),
   })
   const codes = useMemo(() => (periods.data || []).map((period) => period.periodCode), [periods.data])
   const legacy = search.get('periodCode') || undefined
@@ -71,21 +71,23 @@ export function usePeriodRangeFilter(ledgerId: string) {
   const periodTo = periodFrom && validTo && validTo >= periodFrom ? validTo : periodFrom
 
   useEffect(() => {
-    if (!periodFrom || !periodTo
+    if (!active || !periodFrom || !periodTo
       || (!legacy && search.get('periodFrom') === periodFrom && search.get('periodTo') === periodTo)) return
     const next = new URLSearchParams(search)
     next.delete('periodCode')
     next.set('periodFrom', periodFrom)
     next.set('periodTo', periodTo)
+    next.delete('offset')
     next.delete('page')
     setSearch(next, { replace: true })
-  }, [legacy, periodFrom, periodTo, search, setSearch])
+  }, [active, legacy, periodFrom, periodTo, search, setSearch])
 
   const setPeriodRange = (from: string, to: string) => {
     const next = new URLSearchParams(search)
     next.delete('periodCode')
     next.set('periodFrom', from)
     next.set('periodTo', to >= from ? to : from)
+    next.delete('offset')
     next.delete('page')
     setSearch(next)
   }
@@ -103,13 +105,16 @@ export function PeriodRangeSelector({
   onChange: (periodFrom: string, periodTo: string) => void
   onRefresh: () => void
 }) {
-  const options = periods.map((period) => ({ value: period.periodCode, label: period.periodCode }))
+  const options = periods.map((period) => ({
+    value: period.periodCode,
+    label: `${period.periodCode.slice(0, 4)}年第${Number(period.periodCode.slice(5))}期`,
+  }))
   return <Space className="period-selector" size={8} wrap>
     <Typography.Text>会计期间</Typography.Text>
-    <Select aria-label="起始会计期间" value={periodFrom} loading={loading} options={options}
+    <Select aria-label="起始会计期间" value={periodFrom} loading={loading} placeholder="起始期间" options={options}
       onChange={(value) => onChange(value, periodTo && periodTo >= value ? periodTo : value)} />
     <Typography.Text>至</Typography.Text>
-    <Select aria-label="结束会计期间" value={periodTo} loading={loading}
+    <Select aria-label="结束会计期间" value={periodTo} loading={loading} placeholder="结束期间"
       options={options.filter((option) => !periodFrom || option.value >= periodFrom)}
       onChange={(value) => periodFrom && onChange(periodFrom, value)} />
     <Button aria-label="刷新当前期间范围数据" icon={<ReloadOutlined />} loading={refreshing}

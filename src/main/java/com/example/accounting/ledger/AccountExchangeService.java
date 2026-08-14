@@ -181,13 +181,23 @@ public class AccountExchangeService {
                 if (duplicateCodes.contains(account.code())) {
                     issues.add("ERROR:DUPLICATE_CODE");
                 }
-                LedgerResponses.Account target = existingAccounts.get(account.code());
+                LedgerResponses.Account sameCodeTarget = existingAccounts.get(account.code());
                 AccountAiMapper.Suggestion aiSuggestion = ai.suggestions().get(rowNo);
-                if (target == null && aiSuggestion != null) {
+                LedgerResponses.Account target = sameCodeTarget;
+                String suggestedAction;
+                if (target != null) {
+                    suggestedAction = "UPDATE";
+                    if (target.hasBusinessUsage()
+                            || (!target.isLeaf() && accounts.hasNonZeroBalance(ledgerId, target.id()))) {
+                        issues.add("ERROR:ACCOUNT_OVERWRITE_FORBIDDEN");
+                    }
+                } else if (aiSuggestion != null) {
                     target = existingById.get(aiSuggestion.targetAccountId());
                     issues.add("AI:SUGGESTED:" + aiSuggestion.reason());
+                    suggestedAction = "MAP";
+                } else {
+                    suggestedAction = "CREATE";
                 }
-                String suggestedAction = target == null ? "CREATE" : "MAP";
                 BigDecimal confidence = aiSuggestion != null
                         ? aiSuggestion.confidence()
                         : target == null ? new BigDecimal("0.9000") : BigDecimal.ONE;
@@ -325,6 +335,10 @@ public class AccountExchangeService {
                         "Every row must be valid and explicitly confirmed before commit");
             }
         }
+        AccountCodeRule rule = accounts.codeRule(ledgerId);
+        Map<String, LedgerResponses.Account> existingByCode = existingAccountsByCode(actorId, ledgerId);
+        validateOverwriteRules(ledgerId, rows, existingByCode);
+        validateImportNames(actorId, ledgerId, rows);
         Map<String, UUID> dimensionIds = ledgers.listDimensionTypes(actorId, ledgerId).stream()
                 .collect(Collectors.toMap(LedgerResponses.DimensionType::code, LedgerResponses.DimensionType::id));
         for (CommitRow row : rows) {
@@ -341,7 +355,6 @@ public class AccountExchangeService {
         }
         Map<String, UUID> cashFlowIds = accounts.cashFlowItems(ledgerId).stream()
                 .collect(Collectors.toMap(LedgerResponses.CashFlowItem::code, LedgerResponses.CashFlowItem::id));
-        AccountCodeRule rule = accounts.codeRule(ledgerId);
         List<CommitRow> orderedRows = rows.stream()
                 .sorted(java.util.Comparator.comparingInt(row ->
                         Math.max(0, rule.levelOf(row.account().values().get("code")))))
@@ -356,8 +369,13 @@ public class AccountExchangeService {
                         throw problem(409, "ACCOUNT_IMPORT_STALE", "Account import is stale",
                                 "A target account changed after preview");
                     }
-                    ledgers.updateAccount(actorId, ledgerId, target.id(),
-                            row.account().patchRequest(target.version(), dimensionIds, cashFlowIds));
+                    if (java.util.Objects.equals(target.code(), row.account().values().get("code"))) {
+                        ledgers.overwriteAccount(actorId, ledgerId, target.id(),
+                                row.account().patchRequest(target.version(), dimensionIds, cashFlowIds));
+                    } else {
+                        ledgers.updateAccount(actorId, ledgerId, target.id(),
+                                row.account().patchRequest(target.version(), dimensionIds, cashFlowIds));
+                    }
                 }
                 case "MAP", "SKIP" -> {
                     // Explicitly resolved without mutating master data.
@@ -375,21 +393,21 @@ public class AccountExchangeService {
             List<LedgerResponses.Account> accountRows, List<LedgerResponses.DimensionType> dimensions) {
         try (Workbook workbook = new XSSFWorkbook(); ByteArrayOutputStream output = new ByteArrayOutputStream()) {
             CellStyle header = headerStyle(workbook);
-            Map<UUID, String> codes = accountCodesForExport(ledger.id(), accountRows);
             if (format == Format.KINGDEE) {
-                Sheet sheet = workbook.createSheet("科目");
-                writeHeaders(sheet, KINGDEE_HEADERS, header);
+                Sheet sheet = workbook.createSheet("科目列表");
+                CellStyle nativeHeader = nativeKingdeeHeaderStyle(workbook);
+                CellStyle nativeBody = nativeKingdeeBodyStyle(workbook);
+                writeNativeKingdeeHeaders(sheet, nativeHeader);
                 int rowNo = 1;
                 for (LedgerResponses.Account account : accountRows) {
                     Row row = sheet.createRow(rowNo++);
                     values(row, List.of(account.code(), account.name(),
-                            nullable(codes.get(account.parentId())), account.category(),
-                            account.normalBalance(), account.status(),
-                            Boolean.toString(account.cashFlowRequired()),
-                            Boolean.toString(account.quantityEnabled()), nullable(account.unitName())));
+                            nativeKingdeeCategory(account), nativeKingdeeBalance(account.normalBalance())),
+                            nativeBody);
                 }
-                autosize(sheet, KINGDEE_HEADERS.size());
+                sizeNativeKingdeeSheet(sheet);
             } else {
+                Map<UUID, String> codes = accountCodesForExport(ledger.id(), accountRows);
                 metadata(workbook, ledger, rule, header);
                 accountsSheet(workbook, accountRows, codes, header);
                 dimensionSheets(workbook, dimensions, accountRows, header);
@@ -525,8 +543,7 @@ public class AccountExchangeService {
                     if (parent != null && !parent.issues().contains("ERROR:INVALID_CATEGORY")
                             && !parent.issues().contains("ERROR:INVALID_NORMAL_BALANCE")) {
                         row.cleaned().put("category", parent.cleaned().get("category"));
-                        row.cleaned().put("normalBalance", parent.cleaned().get("normalBalance"));
-                        row.issues().removeAll(List.of("ERROR:INVALID_CATEGORY", "ERROR:INVALID_NORMAL_BALANCE"));
+                        row.issues().remove("ERROR:INVALID_CATEGORY");
                     }
                 });
             }
@@ -543,12 +560,19 @@ public class AccountExchangeService {
 
     private ParsedAccount nativeKingdee(List<String> headers, List<String> cells, AccountCodeRule rule) {
         String category = switch (clean(cells.get(2))) {
-            case "流动资产", "非流动资产" -> "ASSET";
-            case "流动负债", "非流动负债" -> "LIABILITY";
+            case "流动资产" -> "CURRENT_ASSET";
+            case "非流动资产" -> "NON_CURRENT_ASSET";
+            case "流动负债" -> "CURRENT_LIABILITY";
+            case "非流动负债" -> "NON_CURRENT_LIABILITY";
             case "所有者权益" -> "EQUITY";
             case "成本" -> "COST";
-            case "营业收入", "其他收益" -> "REVENUE";
-            case "营业成本及税金", "其他损失", "期间费用", "所得税", "以前年度损益调整" -> "EXPENSE";
+            case "营业收入" -> "OPERATING_REVENUE";
+            case "其他收益" -> "OTHER_INCOME";
+            case "营业成本及税金" -> "OPERATING_COST_AND_TAX";
+            case "其他损失" -> "OTHER_EXPENSE";
+            case "期间费用" -> "PERIOD_EXPENSE";
+            case "所得税" -> "INCOME_TAX";
+            case "以前年度损益调整" -> "PRIOR_YEAR_ADJUSTMENT";
             default -> "";
         };
         String normal = switch (clean(cells.get(3))) {
@@ -600,7 +624,7 @@ public class AccountExchangeService {
         if (name.isBlank()) {
             issues.add("ERROR:NAME_REQUIRED");
         }
-        if (!Set.of("ASSET", "LIABILITY", "EQUITY", "COST", "REVENUE", "EXPENSE").contains(category)) {
+        if (!AccountCategory.isValid(category)) {
             issues.add("ERROR:INVALID_CATEGORY");
         }
         if (!Set.of("DEBIT", "CREDIT").contains(normal)) {
@@ -746,9 +770,72 @@ public class AccountExchangeService {
         return style;
     }
 
+    private void writeNativeKingdeeHeaders(Sheet sheet, CellStyle style) {
+        Row row = sheet.createRow(0);
+        row.setHeightInPoints(22);
+        for (int index = 0; index < NATIVE_KINGDEE_HEADERS.size(); index++) {
+            Cell cell = row.createCell(index);
+            cell.setCellValue(NATIVE_KINGDEE_HEADERS.get(index));
+            cell.setCellStyle(style);
+        }
+        sheet.createFreezePane(0, 1);
+    }
+
+    private CellStyle nativeKingdeeHeaderStyle(Workbook workbook) {
+        CellStyle style = nativeKingdeeBodyStyle(workbook);
+        Font font = workbook.createFont();
+        font.setBold(true);
+        font.setColor(IndexedColors.BLACK.getIndex());
+        style.setFont(font);
+        style.setFillForegroundColor(IndexedColors.GREY_25_PERCENT.getIndex());
+        style.setFillPattern(FillPatternType.SOLID_FOREGROUND);
+        style.setAlignment(org.apache.poi.ss.usermodel.HorizontalAlignment.CENTER);
+        style.setVerticalAlignment(org.apache.poi.ss.usermodel.VerticalAlignment.CENTER);
+        return style;
+    }
+
+    private CellStyle nativeKingdeeBodyStyle(Workbook workbook) {
+        CellStyle style = workbook.createCellStyle();
+        style.setBorderTop(org.apache.poi.ss.usermodel.BorderStyle.THIN);
+        style.setBorderBottom(org.apache.poi.ss.usermodel.BorderStyle.THIN);
+        style.setBorderLeft(org.apache.poi.ss.usermodel.BorderStyle.THIN);
+        style.setBorderRight(org.apache.poi.ss.usermodel.BorderStyle.THIN);
+        style.setVerticalAlignment(org.apache.poi.ss.usermodel.VerticalAlignment.CENTER);
+        return style;
+    }
+
+    private String nativeKingdeeCategory(LedgerResponses.Account account) {
+        AccountCategory category = AccountCategory.fromCode(account.category());
+        return category == null ? account.category() : category.label();
+    }
+
+    private String nativeKingdeeBalance(String normalBalance) {
+        return switch (normalBalance) {
+            case "DEBIT" -> "借";
+            case "CREDIT" -> "贷";
+            default -> normalBalance;
+        };
+    }
+
+    private void sizeNativeKingdeeSheet(Sheet sheet) {
+        sheet.setDefaultRowHeightInPoints(18);
+        sheet.setColumnWidth(0, 18 * 256);
+        sheet.setColumnWidth(1, 22 * 256);
+        sheet.setColumnWidth(2, 18 * 256);
+        sheet.setColumnWidth(3, 18 * 256);
+    }
+
     private void values(Row row, List<String> values) {
         for (int index = 0; index < values.size(); index++) {
             row.createCell(index).setCellValue(safeCell(values.get(index)));
+        }
+    }
+
+    private void values(Row row, List<String> values, CellStyle style) {
+        for (int index = 0; index < values.size(); index++) {
+            Cell cell = row.createCell(index);
+            cell.setCellValue(safeCell(values.get(index)));
+            cell.setCellStyle(style);
         }
     }
 
@@ -849,6 +936,81 @@ public class AccountExchangeService {
             });
         } catch (JsonProcessingException exception) {
             throw workbookProblem("Saved import issues are invalid");
+        }
+    }
+
+    private Map<String, LedgerResponses.Account> existingAccountsByCode(UUID actorId, UUID ledgerId) {
+        return ledgers.listAccounts(actorId, ledgerId).stream()
+                .collect(Collectors.toMap(LedgerResponses.Account::code, account -> account));
+    }
+
+    private void validateOverwriteRules(
+            UUID ledgerId, List<CommitRow> rows, Map<String, LedgerResponses.Account> existingByCode) {
+        for (CommitRow row : rows) {
+            String code = row.account().values().get("code");
+            LedgerResponses.Account sameCode = existingByCode.get(code);
+            if (sameCode == null) {
+                continue;
+            }
+            if (!"UPDATE".equals(row.action())) {
+                throw problem(409, "ACCOUNT_IMPORT_OVERWRITE_REQUIRED",
+                        "Account import must overwrite an existing code",
+                        "Account code " + code + " already exists and must be overwritten");
+            }
+            if (row.targetAccountId() == null || !row.targetAccountId().equals(sameCode.id())) {
+                throw problem(409, "ACCOUNT_IMPORT_OVERWRITE_REQUIRED",
+                        "Account import target is invalid",
+                        "Account code " + code + " must be overwritten with its existing account");
+            }
+            if (sameCode.hasBusinessUsage()
+                    || (!sameCode.isLeaf() && accounts.hasNonZeroBalance(ledgerId, sameCode.id()))) {
+                throw problem(409, "ACCOUNT_OVERWRITE_FORBIDDEN", "Account cannot be overwritten",
+                        "Account " + code + " has business usage or a non-zero balance");
+            }
+        }
+    }
+
+    private void validateImportNames(
+            UUID actorId, UUID ledgerId, List<CommitRow> rows) {
+        List<LedgerResponses.Account> existing = ledgers.listAccounts(actorId, ledgerId);
+        Map<UUID, String> codeById = existing.stream()
+                .collect(Collectors.toMap(LedgerResponses.Account::id, LedgerResponses.Account::code));
+        Map<String, String> nameByCode = new LinkedHashMap<>();
+        Map<String, String> parentByCode = new LinkedHashMap<>();
+        for (LedgerResponses.Account account : existing) {
+            String parentCode = account.parentId() == null
+                    ? "" : codeById.getOrDefault(account.parentId(), "");
+            nameByCode.put(account.code(), account.name());
+            parentByCode.put(account.code(), parentCode);
+        }
+        for (CommitRow row : rows) {
+            String code = row.account().values().get("code");
+            if ("CREATE".equals(row.action())) {
+                nameByCode.put(code, row.account().values().get("name"));
+                parentByCode.put(code, row.account().values().getOrDefault("parentCode", ""));
+            } else if ("UPDATE".equals(row.action())) {
+                if (row.targetAccountId() != null) {
+                    String oldCode = codeById.get(row.targetAccountId());
+                    if (oldCode != null && !oldCode.equals(code)) {
+                        nameByCode.remove(oldCode);
+                        parentByCode.remove(oldCode);
+                    }
+                }
+                nameByCode.put(code, row.account().values().get("name"));
+                parentByCode.put(code, row.account().values().getOrDefault("parentCode", ""));
+            }
+        }
+        Map<String, String> firstByKey = new HashMap<>();
+        for (Map.Entry<String, String> entry : nameByCode.entrySet()) {
+            String code = entry.getKey();
+            String parentCode = parentByCode.getOrDefault(code, "");
+            String key = parentCode + "\u0000" + entry.getValue();
+            String previous = firstByKey.putIfAbsent(key, code);
+            if (previous != null) {
+                throw problem(409, "ACCOUNT_NAME_CONFLICT", "Account name conflict",
+                        "Accounts with the same parent must have unique names: "
+                                + previous + " and " + code);
+            }
         }
     }
 

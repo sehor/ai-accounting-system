@@ -13,6 +13,16 @@ Rules:
 
 ## Verification
 
-- Default verification must stay scoped to the change: run only directly relevant test files/cases and lint only changed files.
+### Backend (Java)
+
+- Prefer verifying against an already running backend at `http://127.0.0.1:8080`. Do not start a second Spring Boot test context or run `mvn test` just to verify a small code change.
+- To apply and verify backend changes while a service is running:
+  1. Run `.\mvnw.cmd -q -DskipTests compile`. `spring-boot-devtools` watches `target/classes` and restarts the running backend automatically.
+  2. Call the affected HTTP endpoint(s) on `localhost:8080`.
+- When a test database is needed, run `.\start-backend-test.ps1`. By default it starts a second backend on `18080` using `ai-accounting-test` and leaves the normal `8080` backend running. Use `.\start-backend-test.ps1 -Port 8080` only when a single service with the test database is wanted.
+- Run a Java test class only when HTTP verification is insufficient or the user explicitly asks for a JUnit test.
+
+### Frontend
+
 - Do not run repository-wide `pnpm test`, `pnpm lint`, `pnpm typecheck`, or `pnpm build` unless the user explicitly approves it for the current task.
 - If no targeted verification exists, report that limitation and ask before running a broader check.

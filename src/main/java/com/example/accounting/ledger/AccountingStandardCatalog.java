@@ -48,6 +48,11 @@ public class AccountingStandardCatalog {
         return Optional.ofNullable(packages.get(code + "/" + version));
     }
 
+    public Optional<AccountingStandard.Formula> formula(String code, String version, String formulaCode) {
+        return find(code, version).flatMap(standard -> standard.formulas().stream()
+                .filter(formula -> formulaCode.equals(formula.code())).findFirst());
+    }
+
     private AccountingStandard.Package read(ObjectMapper objectMapper, String resource) {
         try (InputStream input = new ClassPathResource(resource).getInputStream()) {
             return objectMapper.readValue(input, AccountingStandard.Package.class);
@@ -69,6 +74,10 @@ public class AccountingStandardCatalog {
             throw new IllegalStateException("duplicate account code in " + standard.key());
         }
         for (AccountingStandard.Account account : standard.accounts()) {
+            if (!AccountCategory.isValid(account.category())) {
+                throw new IllegalStateException("invalid account category in " + standard.key()
+                        + ": " + account.code() + "/" + account.category());
+            }
             int level = standard.accountCodeRule().levelOf(account.code());
             if (level == 0 || (level == 1 && account.parentCode() != null)
                     || (level > 1 && !codes.contains(account.parentCode()))

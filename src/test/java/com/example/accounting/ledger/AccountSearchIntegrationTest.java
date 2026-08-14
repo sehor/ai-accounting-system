@@ -27,7 +27,7 @@ class AccountSearchIntegrationTest {
                         LocalDate.of(2026, 1, 1), false)).id();
         LedgerResponses.Account child = ledgers.createAccount(ownerId, ledgerId,
                 new LedgerRequests.AccountCreate(
-                        "100201", "建设银行存款", "ASSET", "DEBIT"));
+                        "100201", "建设银行存款", "CURRENT_ASSET", "DEBIT"));
 
         var exactParent = ledgers.searchAccounts(
                 ownerId, ledgerId, "1002", LedgerRequests.AccountMatchMode.EXACT, 10);

@@ -68,7 +68,7 @@ public final class LedgerRequests {
     public record AccountCreate(
             @NotBlank @Pattern(regexp = "[A-Za-z0-9._-]{1,32}") String code,
             @NotBlank @Size(max = 200) String name,
-            @NotBlank @Pattern(regexp = "ASSET|LIABILITY|EQUITY|COST|REVENUE|EXPENSE") String category,
+            @NotBlank @Pattern(regexp = "CURRENT_ASSET|NON_CURRENT_ASSET|CURRENT_LIABILITY|NON_CURRENT_LIABILITY|EQUITY|COST|OPERATING_REVENUE|OTHER_INCOME|OPERATING_COST_AND_TAX|OTHER_EXPENSE|PERIOD_EXPENSE|INCOME_TAX|PRIOR_YEAR_ADJUSTMENT") String category,
             @NotBlank @Pattern(regexp = "DEBIT|CREDIT") String normalBalance,
             UUID parentId,
             Boolean cashFlowRequired,
@@ -87,7 +87,7 @@ public final class LedgerRequests {
             @Size(max = 32) String code,
             @Size(max = 200) String name,
             UUID parentId,
-            @Pattern(regexp = "ASSET|LIABILITY|EQUITY|COST|REVENUE|EXPENSE") String category,
+            @Pattern(regexp = "CURRENT_ASSET|NON_CURRENT_ASSET|CURRENT_LIABILITY|NON_CURRENT_LIABILITY|EQUITY|COST|OPERATING_REVENUE|OTHER_INCOME|OPERATING_COST_AND_TAX|OTHER_EXPENSE|PERIOD_EXPENSE|INCOME_TAX|PRIOR_YEAR_ADJUSTMENT") String category,
             @Pattern(regexp = "DEBIT|CREDIT") String normalBalance,
             @Pattern(regexp = "ACTIVE|INACTIVE") String status,
             Boolean cashFlowRequired,

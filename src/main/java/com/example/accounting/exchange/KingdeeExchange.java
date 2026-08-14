@@ -82,11 +82,21 @@ public class KingdeeExchange {
 
     @Transactional(readOnly = true)
     public byte[] exportKingdee(UUID actorId, UUID ledgerId, boolean mergeEntries) {
+        return exportKingdee(actorId, ledgerId, mergeEntries, null, null);
+    }
+
+    @Transactional(readOnly = true)
+    public byte[] exportKingdee(UUID actorId, UUID ledgerId, boolean mergeEntries,
+                                LocalDate startDate, LocalDate endDate) {
         Map<UUID, LedgerResponses.Account> accounts = ledgers.listAccounts(actorId, ledgerId).stream()
                 .collect(Collectors.toMap(LedgerResponses.Account::id, account -> account));
         List<VoucherResponses.Voucher> all = new ArrayList<>();
+        VoucherRequests.Search range = startDate == null && endDate == null
+                ? null : new VoucherRequests.Search(null, startDate, endDate, null);
         for (int offset = 0; ; offset += 500) {
-            List<VoucherResponses.Voucher> page = vouchers.list(actorId, ledgerId, 500, offset);
+            List<VoucherResponses.Voucher> page = range == null
+                    ? vouchers.list(actorId, ledgerId, 500, offset)
+                    : vouchers.list(actorId, ledgerId, range, 500, offset);
             all.addAll(page);
             if (page.size() < 500) {
                 break;

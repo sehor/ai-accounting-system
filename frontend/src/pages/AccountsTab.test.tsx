@@ -3,6 +3,7 @@ import { App } from 'antd'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { apiFetch } from '../api/client'
+import type { Account } from '../api/types'
 import { AccountsTab } from './AccountsTab'
 
 vi.mock('../api/client', () => ({
@@ -28,6 +29,15 @@ Object.defineProperty(window, 'matchMedia', {
   })),
 })
 
+function account(id: string, name: string, createdAt: string, overrides: Partial<Account> = {}): Account {
+  return {
+    id, ledgerId: 'ledger-1', code: id, name, category: 'CURRENT_ASSET', normalBalance: 'DEBIT', status: 'ACTIVE',
+    parentId: null, level: 1, isLeaf: true, isTemplate: false, hasBusinessUsage: false, coreLocked: false,
+    legacyCode: false, version: 0, cashFlowRequired: false, defaultCashFlowItemId: null,
+    quantityEnabled: false, unitName: null, dimensionRequirements: [], createdAt, ...overrides,
+  }
+}
+
 describe('AccountsTab account form', () => {
   it('does not warn when reopening the account form', async () => {
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
@@ -45,7 +55,7 @@ describe('AccountsTab account form', () => {
             periods={[]}
             loading={false}
             writable
-            category="ASSET"
+            category="CURRENT_ASSET"
             onChanged={() => {}}
           />
         </App>
@@ -61,6 +71,51 @@ describe('AccountsTab account form', () => {
     expect(consoleOutput).not.toContain('Instance created by useForm is not connected')
     consoleError.mockRestore()
     consoleWarn.mockRestore()
+  })
+
+  it('filters already loaded accounts by created at without another request', async () => {
+    const originalGetComputedStyle = window.getComputedStyle
+    vi.spyOn(window, 'getComputedStyle').mockImplementation((element) => originalGetComputedStyle(element))
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <App>
+          <AccountsTab
+            ledgerId="ledger-1"
+            session={{ localUserId: 'user-1', localUserName: 'admin' }}
+            accounts={[
+              account('1001', 'March account', '2026-03-15T10:00:00+08:00'),
+              account('1002', 'April account', '2026-04-01T10:00:00+08:00'),
+              account('1003', 'Earlier parent', '2026-02-01T10:00:00+08:00', { isLeaf: false }),
+              account('100301', 'March child', '2026-03-20T10:00:00+08:00', {
+                parentId: '1003', level: 2,
+              }),
+            ]}
+            dimensionTypes={[]}
+            periods={[{
+              id: 'period-1', ledgerId: 'ledger-1', periodCode: '2026-03',
+              startDate: '2026-03-01', endDate: '2026-03-31', status: 'OPEN',
+            }]}
+            loading={false}
+            writable
+            category="CURRENT_ASSET"
+            onChanged={() => {}}
+          />
+        </App>
+      </QueryClientProvider>,
+    )
+
+    await waitFor(() => expect(apiFetch).toHaveBeenCalled())
+    const requestsBeforeFiltering = vi.mocked(apiFetch).mock.calls.length
+    fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Created at' }))
+    fireEvent.click(await screen.findByText(/2026-03/))
+
+    expect(screen.getByText('March account')).toBeInTheDocument()
+    expect(screen.getByText('Earlier parent')).toBeInTheDocument()
+    expect(screen.getByText('March child')).toBeInTheDocument()
+    expect(screen.queryByText('April account')).not.toBeInTheDocument()
+    expect(apiFetch).toHaveBeenCalledTimes(requestsBeforeFiltering)
   })
 
   it('adds and clears the account creation period export filter', async () => {
@@ -95,14 +150,14 @@ describe('AccountsTab account form', () => {
             }]}
             loading={false}
             writable
-            category="ASSET"
+            category="CURRENT_ASSET"
             onChanged={() => {}}
           />
         </App>
       </QueryClientProvider>,
     )
 
-    fireEvent.mouseDown(screen.getByRole('combobox', { name: '创建期间' }))
+    fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Created at' }))
     fireEvent.click(await screen.findByText(/2026-03（2026-03-01/))
     fireEvent.click(screen.getByRole('button', { name: /导出$/ }))
     await waitFor(() => expect(apiFetch).toHaveBeenCalledWith(

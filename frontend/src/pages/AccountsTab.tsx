@@ -6,7 +6,29 @@ import { apiFetch, ApiError, jsonBody, type ApiAuth } from '../api/client'
 import type { Account, AccountImportPreview, CashFlowItem, DimensionType, Period } from '../api/types'
 
 type AccountTree = Account & { children?: AccountTree[] }
-export type AccountCategoryTab = 'ASSET' | 'LIABILITY' | 'EQUITY' | 'COST' | 'PROFIT_LOSS'
+export type AccountCategoryTab =
+  | 'CURRENT_ASSET' | 'NON_CURRENT_ASSET'
+  | 'CURRENT_LIABILITY' | 'NON_CURRENT_LIABILITY'
+  | 'EQUITY' | 'COST'
+  | 'OPERATING_REVENUE' | 'OTHER_INCOME'
+  | 'OPERATING_COST_AND_TAX' | 'OTHER_EXPENSE' | 'PERIOD_EXPENSE'
+  | 'INCOME_TAX' | 'PRIOR_YEAR_ADJUSTMENT'
+
+export const ACCOUNT_CATEGORY_LABELS: Record<AccountCategoryTab, string> = {
+  CURRENT_ASSET: '流动资产',
+  NON_CURRENT_ASSET: '非流动资产',
+  CURRENT_LIABILITY: '流动负债',
+  NON_CURRENT_LIABILITY: '非流动负债',
+  EQUITY: '所有者权益',
+  COST: '成本',
+  OPERATING_REVENUE: '营业收入',
+  OTHER_INCOME: '其他收益',
+  OPERATING_COST_AND_TAX: '营业成本及税金',
+  OTHER_EXPENSE: '其他损失',
+  PERIOD_EXPENSE: '期间费用',
+  INCOME_TAX: '所得税',
+  PRIOR_YEAR_ADJUSTMENT: '以前年度损益调整',
+}
 type AccountForm = {
   code: string
   name: string
@@ -65,12 +87,14 @@ export function AccountsTab({ ledgerId, session, accounts, dimensionTypes, perio
     queryKey: ['cash-flow-items', ledgerId],
     queryFn: () => apiFetch<CashFlowItem[]>(`/ledgers/${ledgerId}/cash-flow-items`, session),
   })
+  const createdAtPeriod = periods.find((period) => period.id === createdInPeriodId)
   const tree = useMemo(() => filterTree(
     buildTree(accounts.filter((account) => matchesCategory(account, category))),
-    (account) => (!status || account.status === status) &&
+    (account) => (!createdAtPeriod || wasCreatedInPeriod(account.createdAt, createdAtPeriod)) &&
+      (!status || account.status === status) &&
       (!search.trim() || `${account.code} ${account.name}`.toLowerCase().includes(search.trim().toLowerCase())),
-  ), [accounts, category, search, status])
-  const filtering = Boolean(status || search.trim())
+  ), [accounts, category, createdAtPeriod, search, status])
+  const filtering = Boolean(createdAtPeriod || status || search.trim())
   const visibleExpandedKeys = filtering ? expandedKeysFor(tree) : expandedRowKeys
 
   const save = useMutation({
@@ -197,8 +221,10 @@ export function AccountsTab({ ledgerId, session, accounts, dimensionTypes, perio
         {writable && <Button type="primary" icon={<PlusOutlined />} onClick={() => openCreate(null)}>新增一级科目</Button>}
         <Select value={format} onChange={setFormat} style={{ width: 120 }}
           options={[{ value: 'STANDARD', label: '标准格式' }, { value: 'KINGDEE', label: '金蝶格式' }]} />
-        <span>创建期间</span>
-        <Select allowClear aria-label="创建期间" placeholder="全部期间" value={createdInPeriodId}
+        <Tooltip title="仅导出在所选会计期间创建的科目">
+          <span>Created at</span>
+        </Tooltip>
+        <Select allowClear aria-label="Created at" placeholder="全部期间" value={createdInPeriodId}
           onChange={setCreatedInPeriodId} style={{ width: 230 }}
           options={periods.map((period) => ({
             value: period.id,
@@ -234,7 +260,8 @@ export function AccountsTab({ ledgerId, session, accounts, dimensionTypes, perio
         { title: '编码', dataIndex: 'code', render: (value, account) =>
           <Space>{value}{account.legacyCode && <Tag color="warning">遗留</Tag>}</Space> },
         { title: '名称', dataIndex: 'name' },
-        { title: '类别 / 余额方向', render: (_, account) => `${account.category} / ${account.normalBalance}` },
+        { title: '类别 / 余额方向', render: (_, account) =>
+          `${ACCOUNT_CATEGORY_LABELS[account.category as AccountCategoryTab] || account.category} / ${account.normalBalance === 'CREDIT' ? '贷' : '借'}` },
         { title: '控制', render: (_, account) => <Space wrap>
           {account.cashFlowRequired && <Tag>现金流</Tag>}
           {account.quantityEnabled && <Tag>数量：{account.unitName}</Tag>}
@@ -273,11 +300,11 @@ export function AccountsTab({ ledgerId, session, accounts, dimensionTypes, perio
         <Space style={{ width: '100%' }} align="start">
           <Form.Item name="category" label="类别" rules={[{ required: true }]}>
             <Select disabled={Boolean(parent || editing?.parentId || editing?.coreLocked || editing?.isTemplate)}
-              style={{ width: 180 }} options={['ASSET', 'LIABILITY', 'EQUITY', 'COST', 'REVENUE', 'EXPENSE']
-                .map((value) => ({ value, label: value }))} />
+              style={{ width: 180 }} options={Object.entries(ACCOUNT_CATEGORY_LABELS)
+                .map(([value, label]) => ({ value, label }))} />
           </Form.Item>
           <Form.Item name="normalBalance" label="余额方向" rules={[{ required: true }]}>
-            <Select disabled={Boolean(parent || editing?.parentId || editing?.coreLocked || editing?.isTemplate)}
+            <Select disabled={Boolean(editing)}
               style={{ width: 150 }} options={[{ value: 'DEBIT', label: '借' }, { value: 'CREDIT', label: '贷' }]} />
           </Form.Item>
         </Space>
@@ -349,9 +376,15 @@ function buildTree(accounts: Account[]): AccountTree[] {
 }
 
 function matchesCategory(account: Account, category: AccountCategoryTab) {
-  return category === 'PROFIT_LOSS'
-    ? account.category === 'REVENUE' || account.category === 'EXPENSE'
-    : account.category === category
+  return account.category === category
+}
+
+function wasCreatedInPeriod(createdAt: string | null, period: Period) {
+  if (!createdAt) return false
+  const timestamp = Date.parse(createdAt)
+  const start = Date.parse(`${period.startDate}T00:00:00+08:00`)
+  const end = Date.parse(`${period.endDate}T00:00:00+08:00`) + 24 * 60 * 60 * 1000
+  return Number.isFinite(timestamp) && timestamp >= start && timestamp < end
 }
 
 function filterTree(nodes: AccountTree[], matches: (account: Account) => boolean): AccountTree[] {

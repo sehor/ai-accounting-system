@@ -34,6 +34,9 @@ public interface LedgerService {
     LedgerResponses.Account updateAccount(
             UUID actorId, UUID ledgerId, UUID accountId, LedgerRequests.AccountPatch request);
 
+    LedgerResponses.Account overwriteAccount(
+            UUID actorId, UUID ledgerId, UUID accountId, LedgerRequests.AccountPatch request);
+
     void deleteAccount(UUID actorId, UUID ledgerId, UUID accountId, long expectedVersion);
 
     AccountCodeRule updateAccountCodeRule(

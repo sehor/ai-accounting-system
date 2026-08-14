@@ -62,6 +62,7 @@ export interface Account {
   quantityEnabled: boolean
   unitName: string | null
   dimensionRequirements: AccountDimensionRequirement[]
+  createdAt: string | null
 }
 
 export interface AccountDimensionRequirement {
@@ -216,7 +217,7 @@ export interface FixedAssetCategory {
   assetAccountId: string
   accumulatedDepreciationAccountId: string
   depreciationExpenseAccountId: string
-  impairmentAccountId: string
+  impairmentAccountId: string | null
   clearingAccountId: string
   disposalGainAccountId: string
   disposalLossAccountId: string
@@ -242,8 +243,8 @@ export interface FixedAsset {
   openingAccumulatedDepreciation: string
   openingDepreciatedMonths: number
   impairmentAmount: string
-  monthlyDepreciation: string
-  periodDepreciation: string
+  currentDepreciation: string
+  currentAccumulatedDepreciation: string
   endingAccumulatedDepreciation: string
   openingNetValue: string
   endingNetValue: string
@@ -252,7 +253,7 @@ export interface FixedAsset {
   assetAccountId: string
   accumulatedDepreciationAccountId: string
   depreciationExpenseAccountId: string
-  impairmentAccountId: string
+  impairmentAccountId: string | null
   clearingAccountId: string
   disposalGainAccountId: string
   disposalLossAccountId: string
@@ -262,13 +263,41 @@ export interface FixedAsset {
 }
 
 export interface FixedAssetPage { data: FixedAsset[]; page: number; pageSize: number; totalItems: number; totalPages: number }
-export interface FixedAssetPreviewLine { assetId: string; code: string; name: string; amount: string; status: string; detail: string | null }
+export interface FixedAssetPreviewLine { assetId: string; assetCode: string; assetName: string; amount: string; status: string; detail: string | null }
 export interface FixedAssetPreview {
   periodId: string; periodCode: string; totalAmount: string; eligibleCount: number; completedCount: number; pendingCount: number
   readyToClose: boolean; blockers: string[]; lines: FixedAssetPreviewLine[]
 }
 export interface FixedAssetRun { id: string; periodId: string; runType: string; status: string; voucherId: string; totalAmount: string; inputFingerprint: string; createdAt: string }
 export interface FixedAssetDisposal { id: string; assetId: string; periodId: string; depreciationVoucherId: string | null; transferVoucherId: string; settlementVoucherId: string; carryingAmount: string; gainOrLoss: string }
+
+export type PeriodClosingStepType = 'DEPRECIATION' | 'EXPENSE_TRANSFER' | 'REVENUE_TRANSFER' | 'YEAR_END_PROFIT_TRANSFER'
+export type PeriodClosingStepStatus = 'NOT_REQUIRED' | 'PENDING' | 'GENERATED' | 'STALE' | 'BLOCKED'
+export interface PeriodClosingBlocker { code: string; title: string; detail: string }
+export interface PeriodClosingStep {
+  step: PeriodClosingStepType
+  status: PeriodClosingStepStatus
+  amount: string
+  voucherId: string | null
+  inputFingerprint: string | null
+  blockers: PeriodClosingBlocker[]
+  updatedAt: string
+}
+export interface PeriodClosingTrialBalance {
+  openingDebit: string; openingCredit: string; periodDebit: string; periodCredit: string
+  closingDebit: string; closingCredit: string
+  openingDifference: string; periodDifference: string; closingDifference: string
+  balanced: boolean
+}
+export interface PeriodClosingStatus {
+  ledgerId: string; periodId: string; periodCode: string
+  steps: PeriodClosingStep[]; blockers: PeriodClosingBlocker[]
+  trialBalance: PeriodClosingTrialBalance; canClose: boolean
+}
+export interface PeriodClosingSettings {
+  ledgerId: string; profitAccountId: string | null; retainedEarningsAccountId: string | null
+  defaultProfitAccountId: string | null; defaultRetainedEarningsAccountId: string | null; version: number
+}
 
 export interface VoucherRevision {
   id: string
@@ -327,6 +356,41 @@ export interface StatementLine {
 export interface Statement {
   totalLines: number
   lines: StatementLine[]
+}
+
+export interface StatutoryLine {
+  key: string
+  lineNo: number
+  name: string
+  indent: number
+  rowType: string
+  primaryAmount: string | number
+  comparativeAmount: string | number
+}
+
+export interface StatutoryGroup {
+  key: string
+  title: string
+  lines: StatutoryLine[]
+}
+
+export interface StatutoryCheck {
+  key: string
+  name: string
+  passed: boolean
+  difference: string | number
+}
+
+export interface StatutoryStatement {
+  reportType: string
+  templateCode: string
+  standardCode: string
+  standardVersion: string
+  periodCode: string
+  primaryColumn: string
+  comparativeColumn: string
+  groups: StatutoryGroup[]
+  checks: StatutoryCheck[]
 }
 
 export interface LedgerLine {
