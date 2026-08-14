@@ -110,7 +110,7 @@ public class JdbcPeriodClosingRepository implements PeriodClosingRepository {
                 left join voucher_line vl on vl.ledger_id = a.ledger_id and vl.account_id = a.id
                 left join voucher v on v.ledger_id = vl.ledger_id and v.id = vl.voucher_id
                     and v.period_id = ? and v.status = 'POSTED' and v.deleted_at is null
-                    and (v.source_type is null or v.source_type <> 'PERIOD_CLOSING')
+                    and v.accounting_role = 'OPERATING'
                 where a.ledger_id = ? and a.category = ? and a.status = 'ACTIVE'
                   and not exists (select 1 from ledger_account child
                                   where child.ledger_id = a.ledger_id and child.parent_id = a.id)

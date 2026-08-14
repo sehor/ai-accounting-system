@@ -50,7 +50,11 @@ public class BalanceSnapshotRebuilder {
             ), movements as (
                 select v.period_id, vl.account_id,
                     sum(case when vl.side = 'DEBIT' then vl.base_amount else 0 end) period_debit,
-                    sum(case when vl.side = 'CREDIT' then vl.base_amount else 0 end) period_credit
+                    sum(case when vl.side = 'CREDIT' then vl.base_amount else 0 end) period_credit,
+                    sum(case when v.accounting_role = 'OPERATING' and vl.side = 'DEBIT'
+                             then vl.base_amount else 0 end) operating_debit,
+                    sum(case when v.accounting_role = 'OPERATING' and vl.side = 'CREDIT'
+                             then vl.base_amount else 0 end) operating_credit
                 from voucher v
                 join input i on i.ledger_id = v.ledger_id
                 join periods p on p.period_id = v.period_id
@@ -63,6 +67,8 @@ public class BalanceSnapshotRebuilder {
                     coalesce(anchor.opening_credit, opening.opening_credit, 0::numeric) opening_credit,
                     coalesce(movement.period_debit, 0::numeric) period_debit,
                     coalesce(movement.period_credit, 0::numeric) period_credit,
+                    coalesce(movement.operating_debit, 0::numeric) operating_debit,
+                    coalesce(movement.operating_credit, 0::numeric) operating_credit,
                     coalesce(anchor.opening_debit, opening.opening_debit, 0::numeric)
                         + coalesce(movement.period_debit, 0::numeric) closing_debit,
                     coalesce(anchor.opening_credit, opening.opening_credit, 0::numeric)
@@ -83,6 +89,8 @@ public class BalanceSnapshotRebuilder {
                     previous.closing_credit opening_credit,
                     coalesce(movement.period_debit, 0::numeric) period_debit,
                     coalesce(movement.period_credit, 0::numeric) period_credit,
+                    coalesce(movement.operating_debit, 0::numeric) operating_debit,
+                    coalesce(movement.operating_credit, 0::numeric) operating_credit,
                     previous.closing_debit
                         + coalesce(movement.period_debit, 0::numeric) closing_debit,
                     previous.closing_credit
@@ -109,6 +117,8 @@ public class BalanceSnapshotRebuilder {
                     sum(leaf.opening_credit) opening_credit,
                     sum(leaf.period_debit) period_debit,
                     sum(leaf.period_credit) period_credit,
+                    sum(leaf.operating_debit) operating_debit,
+                    sum(leaf.operating_credit) operating_credit,
                     sum(leaf.closing_debit) closing_debit,
                     sum(leaf.closing_credit) closing_credit
                 from leaf_rollup leaf
@@ -120,11 +130,13 @@ public class BalanceSnapshotRebuilder {
                 ledger_id, period_id, account_id,
                 opening_debit_base, opening_credit_base,
                 period_debit_base, period_credit_base,
+                operating_debit_base, operating_credit_base,
                 closing_debit_base, closing_credit_base,
                 finalized_at, version, updated_at)
             select ledger_id, period_id, account_id,
                 opening_debit, opening_credit,
                 period_debit, period_credit,
+                operating_debit, operating_credit,
                 closing_debit, closing_credit,
                 case when status = 'CLOSED' then now() else null end,
                 1, now()
@@ -133,6 +145,8 @@ public class BalanceSnapshotRebuilder {
                or opening_credit <> 0
                or period_debit <> 0
                or period_credit <> 0
+               or operating_debit <> 0
+               or operating_credit <> 0
                or closing_debit <> 0
                or closing_credit <> 0
             """;

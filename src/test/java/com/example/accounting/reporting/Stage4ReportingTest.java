@@ -63,6 +63,7 @@ class Stage4ReportingTest {
                 .singleElement()
                 .extracting(ReportResponses.StatementLine::amount)
                 .isEqualTo(new BigDecimal("50.00"));
+        applyProjection(ledgerId);
         assertThat(reportingService.incomeStatement(userId, ledgerId, "2026-01").totalLines()).isGreaterThan(0);
         assertThat(reportingService.generalLedger(userId, ledgerId, "2026-01")).hasSize(3);
         assertThat(reportingService.subLedger(userId, ledgerId, "2026-01")).hasSize(3);
@@ -130,7 +131,7 @@ class Stage4ReportingTest {
     }
 
     @Test
-    void incomeStatementIgnoresPeriodClosingTransferVouchers() {
+    void incomeStatementReadsOperatingProjectionAfterManualProfitLossTransfer() {
         UUID userId = UUID.randomUUID();
         UUID ledgerId = ledgerService.create(new CurrentUserResolver.ResolvedUser(userId, "test", userId.toString()),
                 new LedgerRequests.Create("income statement closing transfer", "SME", "v1", "CNY",
@@ -138,14 +139,16 @@ class Stage4ReportingTest {
         UUID periodId = id("select id from accounting_period where ledger_id = ? and period_code = '2026-01'", ledgerId);
         UUID cashId = id("select id from ledger_account where ledger_id = ? and code = '1001'", ledgerId);
         UUID revenueId = id("select id from ledger_account where ledger_id = ? and code = '5001'", ledgerId);
+        UUID profitId = id("select id from ledger_account where ledger_id = ? and code = '3103'", ledgerId);
 
         voucherService.create(userId, ledgerId, new VoucherRequests.Create(
                 periodId, LocalDate.of(2026, 1, 15), "记", "1", "Revenue",
                 List.of(line(cashId, "DEBIT", "100"), line(revenueId, "CREDIT", "100"))));
-        voucherService.createGenerated(userId, ledgerId, new VoucherRequests.Create(
-                periodId, LocalDate.of(2026, 1, 31), "记", "2", "Period closing",
-                List.of(line(revenueId, "DEBIT", "100"), line(cashId, "CREDIT", "100"))),
-                "income-statement-closing-transfer", "PERIOD_CLOSING", UUID.randomUUID());
+        VoucherResponses.Voucher transfer = voucherService.create(userId, ledgerId, new VoucherRequests.Create(
+                periodId, LocalDate.of(2026, 1, 31), "记", "2", "Manual closing",
+                List.of(line(revenueId, "DEBIT", "100"), line(profitId, "CREDIT", "100"))));
+        assertThat(accountingRole(transfer.id())).isEqualTo("PROFIT_LOSS_TRANSFER");
+        applyProjection(ledgerId);
 
         assertThat(reportingService.incomeStatement(userId, ledgerId, "2026-01").lines())
                 .singleElement()
@@ -156,7 +159,7 @@ class Stage4ReportingTest {
     }
 
     @Test
-    void statutoryIncomeStatementUsesActivityAfterPeriodClosing() {
+    void statutoryIncomeStatementUsesOperatingProjectionAfterProfitLossTransfer() {
         UUID userId = UUID.randomUUID();
         UUID ledgerId = ledgerService.create(new CurrentUserResolver.ResolvedUser(userId, "test", userId.toString()),
                 new LedgerRequests.Create("statutory income closing transfer", "SME", "v1", "CNY",
@@ -164,17 +167,15 @@ class Stage4ReportingTest {
         UUID periodId = id("select id from accounting_period where ledger_id = ? and period_code = '2026-01'", ledgerId);
         UUID cashId = id("select id from ledger_account where ledger_id = ? and code = '1001'", ledgerId);
         UUID revenueId = id("select id from ledger_account where ledger_id = ? and code = '5001'", ledgerId);
+        UUID profitId = id("select id from ledger_account where ledger_id = ? and code = '3103'", ledgerId);
 
         voucherService.create(userId, ledgerId, new VoucherRequests.Create(
                 periodId, LocalDate.of(2026, 1, 15), "记", "1", "Revenue",
                 List.of(line(cashId, "DEBIT", "100"), line(revenueId, "CREDIT", "100"))));
-        voucherService.createGenerated(userId, ledgerId, new VoucherRequests.Create(
-                periodId, LocalDate.of(2026, 1, 31), "记", "2", "Period closing",
-                List.of(line(revenueId, "DEBIT", "100"), line(cashId, "CREDIT", "100"))),
-                "statutory-income-closing-transfer", "PERIOD_CLOSING", UUID.randomUUID());
-        while (projection.applyPendingBatch(200, 5000)) {
-            // Keep applying pending projection batches until the statutory report source is fresh.
-        }
+        voucherService.create(userId, ledgerId, new VoucherRequests.Create(
+                periodId, LocalDate.of(2026, 1, 31), "记", "2", "Manual closing",
+                List.of(line(revenueId, "DEBIT", "100"), line(profitId, "CREDIT", "100"))));
+        applyProjection(ledgerId);
 
         StatutoryReportResponses.Statement result = reportingService.statutoryStatement(
                 userId, ledgerId, "income-statement", "2026-01");
@@ -186,6 +187,65 @@ class Stage4ReportingTest {
         assertThat(revenue.comparativeAmount()).isEqualByComparingTo("100.00");
         assertThat(netProfit.primaryAmount()).isEqualByComparingTo("100.00");
         assertThat(netProfit.comparativeAmount()).isEqualByComparingTo("100.00");
+    }
+
+    @Test
+    void mixedVoucherIsConservativelyOperatingEvenWhenItIncludesProfitAccount() {
+        UUID userId = UUID.randomUUID();
+        UUID ledgerId = ledgerService.create(new CurrentUserResolver.ResolvedUser(userId, "test", userId.toString()),
+                new LedgerRequests.Create("mixed profit account voucher", "SME", "v1", "CNY",
+                        LocalDate.of(2026, 1, 1), false)).id();
+        UUID periodId = id("select id from accounting_period where ledger_id = ? and period_code = '2026-01'", ledgerId);
+        UUID cashId = id("select id from ledger_account where ledger_id = ? and code = '1001'", ledgerId);
+        UUID revenueId = id("select id from ledger_account where ledger_id = ? and code = '5001'", ledgerId);
+        UUID profitId = id("select id from ledger_account where ledger_id = ? and code = '3103'", ledgerId);
+
+        voucherService.create(userId, ledgerId, new VoucherRequests.Create(
+                periodId, LocalDate.of(2026, 1, 15), "记", "1", "Revenue",
+                List.of(line(cashId, "DEBIT", "100"), line(revenueId, "CREDIT", "100"))));
+        VoucherResponses.Voucher mixed = voucherService.create(userId, ledgerId, new VoucherRequests.Create(
+                periodId, LocalDate.of(2026, 1, 31), "记", "2", "Mixed voucher",
+                List.of(line(revenueId, "DEBIT", "100"), line(profitId, "CREDIT", "50"),
+                        line(cashId, "CREDIT", "50"))));
+
+        assertThat(accountingRole(mixed.id())).isEqualTo("OPERATING");
+    }
+
+    @Test
+    void configuredProfitAccountIsUsedForManualTransferClassification() {
+        UUID userId = UUID.randomUUID();
+        UUID ledgerId = ledgerService.create(new CurrentUserResolver.ResolvedUser(userId, "test", userId.toString()),
+                new LedgerRequests.Create("configured profit transfer", "SME", "v1", "CNY",
+                        LocalDate.of(2026, 1, 1), false)).id();
+        UUID periodId = id("select id from accounting_period where ledger_id = ? and period_code = '2026-01'", ledgerId);
+        UUID cashId = id("select id from ledger_account where ledger_id = ? and code = '1001'", ledgerId);
+        UUID revenueId = id("select id from ledger_account where ledger_id = ? and code = '5001'", ledgerId);
+        UUID configuredProfit = ledgerService.createAccount(userId, ledgerId,
+                new LedgerRequests.AccountCreate("3999", "自定义本年利润", "EQUITY", "CREDIT")).id();
+        jdbcTemplate.update("insert into period_closing_setting (ledger_id, profit_account_id) values (?, ?)",
+                ledgerId, configuredProfit);
+
+        voucherService.create(userId, ledgerId, new VoucherRequests.Create(
+                periodId, LocalDate.of(2026, 1, 15), "记", "1", "Revenue",
+                List.of(line(cashId, "DEBIT", "100"), line(revenueId, "CREDIT", "100"))));
+        VoucherResponses.Voucher transfer = voucherService.create(userId, ledgerId, new VoucherRequests.Create(
+                periodId, LocalDate.of(2026, 1, 31), "记", "2", "Configured closing",
+                List.of(line(revenueId, "DEBIT", "100"), line(configuredProfit, "CREDIT", "100"))));
+
+        assertThat(accountingRole(transfer.id())).isEqualTo("PROFIT_LOSS_TRANSFER");
+    }
+
+    private void applyProjection(UUID ledgerId) {
+        for (int attempt = 0; attempt < 50 && !projection.status(ledgerId, "2026-01").fresh(); attempt++) {
+            if (!projection.applyPendingBatch(200, 5000)) {
+                Thread.onSpinWait();
+            }
+        }
+        assertThat(projection.status(ledgerId, "2026-01").fresh()).isTrue();
+    }
+
+    private String accountingRole(UUID voucherId) {
+        return jdbcTemplate.queryForObject("select accounting_role from voucher where id = ?", String.class, voucherId);
     }
 
     private VoucherRequests.Line line(UUID accountId, String side, String amount) {

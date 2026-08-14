@@ -55,6 +55,9 @@ public interface VoucherRepository {
 
     boolean controlsComplete(UUID ledgerId, UUID voucherId);
 
+    /** Derives the internal business role from the voucher lines and same-period posted facts. */
+    void reclassifyAccountingRole(UUID ledgerId, UUID voucherId);
+
     List<VoucherResponses.Voucher> list(UUID ledgerId, int limit, int offset);
 
     List<VoucherResponses.Voucher> list(UUID ledgerId, String periodCode, int limit, int offset);

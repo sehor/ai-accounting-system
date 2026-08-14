@@ -217,7 +217,7 @@ export interface FixedAssetCategory {
   assetAccountId: string
   accumulatedDepreciationAccountId: string
   depreciationExpenseAccountId: string
-  impairmentAccountId: string
+  impairmentAccountId: string | null
   clearingAccountId: string
   disposalGainAccountId: string
   disposalLossAccountId: string
@@ -243,8 +243,8 @@ export interface FixedAsset {
   openingAccumulatedDepreciation: string
   openingDepreciatedMonths: number
   impairmentAmount: string
-  monthlyDepreciation: string
-  periodDepreciation: string
+  currentDepreciation: string
+  currentAccumulatedDepreciation: string
   endingAccumulatedDepreciation: string
   openingNetValue: string
   endingNetValue: string
@@ -253,7 +253,7 @@ export interface FixedAsset {
   assetAccountId: string
   accumulatedDepreciationAccountId: string
   depreciationExpenseAccountId: string
-  impairmentAccountId: string
+  impairmentAccountId: string | null
   clearingAccountId: string
   disposalGainAccountId: string
   disposalLossAccountId: string
@@ -263,7 +263,7 @@ export interface FixedAsset {
 }
 
 export interface FixedAssetPage { data: FixedAsset[]; page: number; pageSize: number; totalItems: number; totalPages: number }
-export interface FixedAssetPreviewLine { assetId: string; code: string; name: string; amount: string; status: string; detail: string | null }
+export interface FixedAssetPreviewLine { assetId: string; assetCode: string; assetName: string; amount: string; status: string; detail: string | null }
 export interface FixedAssetPreview {
   periodId: string; periodCode: string; totalAmount: string; eligibleCount: number; completedCount: number; pendingCount: number
   readyToClose: boolean; blockers: string[]; lines: FixedAssetPreviewLine[]

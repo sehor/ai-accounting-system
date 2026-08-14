@@ -54,18 +54,28 @@ public class JdbcReportingRepository implements ReportingRepository {
     @Override
     public List<ReportResponses.TrialBalanceLine> trialBalance(
             UUID ledgerId, PeriodRange range, boolean includeParents) {
-        return trialBalance(ledgerId, range, includeParents, false);
+        return readTrialBalance(ledgerId, range, includeParents);
     }
 
     @Override
     public List<ReportResponses.TrialBalanceLine> incomeStatementTrialBalance(
             UUID ledgerId, PeriodRange range, boolean includeParents) {
-        return trialBalance(ledgerId, range, includeParents, true);
+        if (projection == null) {
+            throw new IllegalStateException("Balance projection is not configured");
+        }
+        BalanceProjectionService.ProjectionStatus status = projection.status(ledgerId, range);
+        if (!status.fresh()) {
+            throw new IllegalStateException("Balance projection is not ready");
+        }
+        BalanceReadMetadata.set("projection", status.projectedAt() == null
+                ? (status.lastEnqueuedAt() == null ? OffsetDateTime.now() : status.lastEnqueuedAt())
+                : status.projectedAt(), lagMs(status));
+        return projection.operatingTrialBalance(ledgerId, range, includeParents);
     }
 
-    private List<ReportResponses.TrialBalanceLine> trialBalance(
-            UUID ledgerId, PeriodRange range, boolean includeParents, boolean excludePeriodClosing) {
-        if (!excludePeriodClosing && useProjection(ledgerId, range)) {
+    private List<ReportResponses.TrialBalanceLine> readTrialBalance(
+            UUID ledgerId, PeriodRange range, boolean includeParents) {
+        if (useProjection(ledgerId, range)) {
             return projection.trialBalance(ledgerId, range, includeParents);
         }
         markFallback(ledgerId, range);
@@ -104,7 +114,6 @@ public class JdbcReportingRepository implements ReportingRepository {
                     join accounting_period p on p.ledger_id = v.ledger_id and p.id = v.period_id
                     where v.ledger_id = ? and v.status = 'POSTED' and v.deleted_at is null
                       and p.period_code between ? and ?
-                      and (? or (v.source_type is null or v.source_type <> 'PERIOD_CLOSING'))
                     group by vl.account_id
                 ), amounts as (
                     select path.account_id,
@@ -136,7 +145,7 @@ public class JdbcReportingRepository implements ReportingRepository {
                 order by account.code
                 """, (rs, row) -> trialBalanceLine(rs), ledgerId, ledgerId,
                 ledgerId, ledgerId, range.periodFrom(), ledgerId, range.periodFrom(), range.periodTo(),
-                !excludePeriodClosing, ledgerId, includeParents);
+                ledgerId, includeParents);
     }
 
     @Override

@@ -323,6 +323,47 @@ a { color: #1677a7; }
 .accounts-page .ant-table-thead > tr > th { background: #eef0f2; border-color: #d5dbe2; font-weight: 600; }
 .accounts-page .ant-table-tbody > tr > td { border-color: #d9dee4; }
 
+.fixed-asset-tabs {
+  display: flex;
+  gap: 2px;
+  padding: 8px 10px;
+  border-bottom: 1px solid #d5dbe2;
+  background: #f7f8fa;
+}
+.fixed-asset-list { padding: 12px; }
+.fixed-asset-list > .ant-space { margin-bottom: 12px; }
+.fixed-asset-empty { padding: 28px 12px; }
+.fixed-asset-editor-card {
+  border-color: #cfd5dc;
+  border-radius: 0;
+  box-shadow: none;
+}
+.fixed-asset-editor-card > .ant-card-body { padding: 14px 16px; }
+.fixed-asset-section-title {
+  margin: 0 0 10px !important;
+  padding-bottom: 6px;
+  border-bottom: 1px solid #d9dee4;
+  font-size: 14px !important;
+  font-weight: 600;
+}
+.fixed-asset-editor-card section + section { margin-top: 16px; }
+.fixed-asset-editor-card .ant-form-item { margin-bottom: 10px; }
+.fixed-asset-status {
+  margin-inline-start: 4px;
+  padding: 2px 10px;
+  border-width: 2px;
+  border-radius: 2px;
+  background: #fff;
+  font-size: 16px;
+  font-weight: 700;
+  transform: rotate(-2deg);
+}
+.fixed-asset-status.is-active { color: #c93434; border-color: #d94a4a; }
+.fixed-asset-status.is-disposed { color: #69727d; border-color: #8b949e; }
+.fixed-asset-amount-summary { margin-top: 4px; }
+.fixed-asset-amount-summary .ant-descriptions-item-label { background: #f5f6f7 !important; }
+.fixed-asset-amount-summary .ant-descriptions-item-content { font-variant-numeric: tabular-nums; }
+
 @media (max-width: 991px) {
   .mobile-menu-trigger { display: inline-flex; }
 }
@@ -345,6 +386,9 @@ a { color: #1677a7; }
   .account-switcher { width: 100%; min-height: auto; }
   .account-switcher .ant-tree { max-height: 240px; }
   .page-heading { align-items: flex-start; flex-direction: column; }
+  .fixed-asset-tabs { overflow-x: auto; }
+  .fixed-asset-tabs .ant-btn { flex: 0 0 auto; }
+  .fixed-asset-editor-card > .ant-card-body { padding: 12px; }
   .financial-table { overflow-x: auto; }
   .voucher-document-header { display: flex; flex-direction: column; align-items: stretch; gap: 8px; }
   .voucher-document-title { order: -1; }

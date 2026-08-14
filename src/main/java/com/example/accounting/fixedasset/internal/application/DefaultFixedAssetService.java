@@ -85,9 +85,9 @@ public class DefaultFixedAssetService implements FixedAssetService {
     public FixedAssetResponses.Category createCategory(UUID actorId, UUID ledgerId,
                                                        FixedAssetRequests.CategoryCreate request) {
         requireRole(actorId, ledgerId, WRITE_ROLES);
-        validateAccounts(actorId, ledgerId, List.of(request.assetAccountId(), request.accumulatedDepreciationAccountId(),
+        validateAccounts(actorId, ledgerId, request.assetAccountId(), request.accumulatedDepreciationAccountId(),
                 request.depreciationExpenseAccountId(), request.impairmentAccountId(), request.clearingAccountId(),
-                request.disposalGainAccountId(), request.disposalLossAccountId()));
+                request.disposalGainAccountId(), request.disposalLossAccountId());
         validateRate(request.residualRate());
         CategoryRecord row = new CategoryRecord(UUID.randomUUID(), ledgerId, request.code().trim(), request.name().trim(),
                 request.usefulLifeMonths(), scaleRate(request.residualRate()), request.assetAccountId(),
@@ -121,9 +121,9 @@ public class DefaultFixedAssetService implements FixedAssetService {
                 request.disposalLossAccountId() == null ? current.disposalLossAccountId() : request.disposalLossAccountId(),
                 request.status() == null ? current.status() : request.status(), current.version());
         validateRate(next.residualRate());
-        validateAccounts(actorId, ledgerId, List.of(next.assetAccountId(), next.accumulatedDepreciationAccountId(),
+        validateAccounts(actorId, ledgerId, next.assetAccountId(), next.accumulatedDepreciationAccountId(),
                 next.depreciationExpenseAccountId(), next.impairmentAccountId(), next.clearingAccountId(),
-                next.disposalGainAccountId(), next.disposalLossAccountId()));
+                next.disposalGainAccountId(), next.disposalLossAccountId());
         if (!Set.of("ACTIVE", "INACTIVE").contains(next.status())) {
             throw problem(422, "FIXED_ASSET_CATEGORY_STATUS_INVALID", "Invalid category status", "Status must be ACTIVE or INACTIVE");
         }
@@ -169,14 +169,14 @@ public class DefaultFixedAssetService implements FixedAssetService {
         validateRate(request.residualRate());
         validateAmounts(request.originalCost(), request.residualRate(), request.openingAccumulatedDepreciation(),
                 request.impairmentAmount(), request.usefulLifeMonths(), request.openingDepreciatedMonths());
-        validateAccounts(actorId, ledgerId, List.of(
+        validateAccounts(actorId, ledgerId,
                 request.assetAccountId() == null ? category.assetAccountId() : request.assetAccountId(),
                 request.accumulatedDepreciationAccountId() == null ? category.accumulatedDepreciationAccountId() : request.accumulatedDepreciationAccountId(),
                 request.depreciationExpenseAccountId() == null ? category.depreciationExpenseAccountId() : request.depreciationExpenseAccountId(),
                 request.impairmentAccountId() == null ? category.impairmentAccountId() : request.impairmentAccountId(),
                 request.clearingAccountId() == null ? category.clearingAccountId() : request.clearingAccountId(),
                 request.disposalGainAccountId() == null ? category.disposalGainAccountId() : request.disposalGainAccountId(),
-                request.disposalLossAccountId() == null ? category.disposalLossAccountId() : request.disposalLossAccountId()));
+                request.disposalLossAccountId() == null ? category.disposalLossAccountId() : request.disposalLossAccountId());
         validateAcquisitionVoucher(actorId, ledgerId, request.acquisitionVoucherId());
         validateDepartment(actorId, ledgerId, request.departmentValueId());
         AssetRecord row = new AssetRecord(UUID.randomUUID(), ledgerId, category.id(), category.code(), category.name(),
@@ -249,9 +249,9 @@ public class DefaultFixedAssetService implements FixedAssetService {
         validateRate(next.residualRate());
         validateAmounts(next.originalCost(), next.residualRate(), next.openingAccumulatedDepreciation(), next.impairmentAmount(),
                 next.usefulLifeMonths(), next.openingDepreciatedMonths());
-        validateAccounts(actorId, ledgerId, List.of(next.assetAccountId(), next.accumulatedDepreciationAccountId(),
+        validateAccounts(actorId, ledgerId, next.assetAccountId(), next.accumulatedDepreciationAccountId(),
                 next.depreciationExpenseAccountId(), next.impairmentAccountId(), next.clearingAccountId(),
-                next.disposalGainAccountId(), next.disposalLossAccountId()));
+                next.disposalGainAccountId(), next.disposalLossAccountId());
         validateAcquisitionVoucher(actorId, ledgerId, next.acquisitionVoucherId());
         validateDepartment(actorId, ledgerId, next.departmentValueId());
         if (!assets.updateAsset(ledgerId, assetId, next, request.expectedVersion(), actorId)) {
@@ -303,6 +303,7 @@ public class DefaultFixedAssetService implements FixedAssetService {
         List<AssetRecord> rows = assets.activeAssets(ledgerId);
         List<LineRecord> lines = assets.activeLines(ledgerId, periodId);
         Map<UUID, LineRecord> byAsset = lines.stream().collect(Collectors.toMap(LineRecord::assetId, line -> line, (a, b) -> b));
+        DepreciationControls controls = depreciationControls(actorId, ledgerId, rows);
         List<FixedAssetResponses.PreviewLine> preview = new ArrayList<>();
         BigDecimal total = BigDecimal.ZERO;
         int eligible = 0, completed = 0;
@@ -317,9 +318,7 @@ public class DefaultFixedAssetService implements FixedAssetService {
             } else {
                 total = total.add(amount);
                 preview.add(new FixedAssetResponses.PreviewLine(row.id(), row.code(), row.name(), amount, "PENDING", "待生成"));
-                if (row.departmentValueId() == null && requiresDepartment(actorId, ledgerId, row.depreciationExpenseAccountId())) {
-                    blockers.add(row.code() + "：折旧费用科目要求部门");
-                }
+                blockers.addAll(depreciationBlockers(row, controls));
             }
         }
         boolean stale = assets.currentRun(ledgerId, periodId, "MONTH_END")
@@ -327,7 +326,7 @@ public class DefaultFixedAssetService implements FixedAssetService {
         if (stale) blockers.add("本期折旧批次已失效，请重新生成");
         int pending = eligible - completed;
         return new FixedAssetResponses.DepreciationPreview(periodId, period.periodCode(), total, eligible, completed, pending,
-                pending == 0 && blockers.isEmpty(), blockers, preview);
+                pending == 0 && blockers.isEmpty(), blockers.stream().distinct().toList(), preview);
     }
 
     @Override
@@ -574,6 +573,7 @@ public class DefaultFixedAssetService implements FixedAssetService {
         List<AssetRecord> rows = assets.activeAssets(ledgerId);
         Map<UUID, LineRecord> existing = assets.activeLines(ledgerId, periodId).stream()
                 .collect(Collectors.toMap(LineRecord::assetId, line -> line, (a, b) -> b));
+        DepreciationControls controls = depreciationControls(actorId, ledgerId, rows);
         Map<VoucherGroup, BigDecimal> grouped = new LinkedHashMap<>();
         Map<UUID, BigDecimal> amounts = new HashMap<>();
         for (AssetRecord row : rows) {
@@ -581,14 +581,16 @@ public class DefaultFixedAssetService implements FixedAssetService {
             BigDecimal amount = monthly(row, period);
             if (amount.signum() <= 0) continue;
             amounts.put(row.id(), amount);
-            grouped.merge(new VoucherGroup(row.depreciationExpenseAccountId(), row.departmentValueId(), "DEBIT"), amount, BigDecimal::add);
-            grouped.merge(new VoucherGroup(row.accumulatedDepreciationAccountId(), null, "CREDIT"), amount, BigDecimal::add);
+            grouped.merge(new VoucherGroup(row.depreciationExpenseAccountId(),
+                    controls.departmentValueId(row.depreciationExpenseAccountId(), row.departmentValueId()), "DEBIT"), amount, BigDecimal::add);
+            grouped.merge(new VoucherGroup(row.accumulatedDepreciationAccountId(),
+                    controls.departmentValueId(row.accumulatedDepreciationAccountId(), row.departmentValueId()), "CREDIT"), amount, BigDecimal::add);
         }
         if (grouped.isEmpty()) throw problem(409, "FIXED_ASSET_NO_DEPRECIATION", "No depreciation is due", "There is no asset to depreciate in this period");
         List<VoucherRequests.Line> voucherLines = new ArrayList<>();
         for (Map.Entry<VoucherGroup, BigDecimal> entry : grouped.entrySet()) {
             VoucherGroup group = entry.getKey();
-            List<VoucherRequests.Dimension> dimensions = group.departmentValueId() == null ? List.of() : departmentDimension(actorId, ledgerId, group.departmentValueId());
+            List<VoucherRequests.Dimension> dimensions = controls.dimensions(group.accountId(), group.departmentValueId());
             voucherLines.add(new VoucherRequests.Line(group.accountId(), group.side(), ledgers.findLedger(actorId, ledgerId).baseCurrency(),
                     entry.getValue(), BigDecimal.ONE, "计提固定资产折旧", null, null, null, dimensions));
         }
@@ -618,7 +620,8 @@ public class DefaultFixedAssetService implements FixedAssetService {
         for (AssetRecord row : rows) {
             BigDecimal amount = amounts.get(row.id());
             if (amount == null) continue;
-            UUID lineId = voucherLineIds.get(new VoucherGroup(row.depreciationExpenseAccountId(), row.departmentValueId(), "DEBIT"));
+            UUID lineId = voucherLineIds.get(new VoucherGroup(row.depreciationExpenseAccountId(),
+                    controls.departmentValueId(row.depreciationExpenseAccountId(), row.departmentValueId()), "DEBIT"));
             assets.insertLine(new LineRecord(UUID.randomUUID(), ledgerId, runId, row.id(), periodId, amount,
                     row.depreciationExpenseAccountId(), row.accumulatedDepreciationAccountId(), row.departmentValueId(), lineId, "ACTIVE"));
         }
@@ -685,17 +688,12 @@ public class DefaultFixedAssetService implements FixedAssetService {
     private CategoryRecord categoryRow(UUID ledgerId, UUID categoryId) { return assets.findCategory(ledgerId, categoryId).orElseThrow(() -> problem(404, "FIXED_ASSET_CATEGORY_NOT_FOUND", "Category not found", "The category is not available to this ledger")); }
     private AssetRecord assetRow(UUID ledgerId, UUID assetId) { return assets.findAsset(ledgerId, assetId).orElseThrow(() -> problem(404, "FIXED_ASSET_NOT_FOUND", "Fixed asset not found", "The asset is not available to this ledger")); }
 
-    private void validateAccounts(UUID actorId, UUID ledgerId, List<UUID> ids) {
+    private void validateAccounts(UUID actorId, UUID ledgerId, UUID... ids) {
         Map<UUID, LedgerResponses.Account> accounts = ledgers.listAccounts(actorId, ledgerId).stream().collect(Collectors.toMap(LedgerResponses.Account::id, a -> a));
         for (UUID id : ids) if (id != null) {
             LedgerResponses.Account account = accounts.get(id);
             if (account == null || !account.isLeaf() || !"ACTIVE".equals(account.status())) throw problem(422, "FIXED_ASSET_ACCOUNT_INVALID", "Invalid fixed-asset account", "Accounts must be active leaf accounts in this ledger");
         }
-    }
-
-    private boolean requiresDepartment(UUID actorId, UUID ledgerId, UUID accountId) {
-        return ledgers.listAccounts(actorId, ledgerId).stream().filter(a -> a.id().equals(accountId))
-                .flatMap(a -> a.dimensionRequirements().stream()).anyMatch(d -> "DEPARTMENT".equalsIgnoreCase(d.code()) && d.required());
     }
 
     private void validateDepartment(UUID actorId, UUID ledgerId, UUID valueId) {
@@ -708,13 +706,71 @@ public class DefaultFixedAssetService implements FixedAssetService {
         if (!active) throw problem(422, "DEPARTMENT_VALUE_INVALID", "Invalid department", "The department value must be active");
     }
 
-    private List<VoucherRequests.Dimension> departmentDimension(UUID actorId, UUID ledgerId, UUID valueId) {
-        LedgerResponses.DimensionType type = ledgers.listDimensionTypes(actorId, ledgerId).stream()
-                .filter(t -> "DEPARTMENT".equalsIgnoreCase(t.code())).findFirst()
-                .orElseThrow(() -> problem(422, "DEPARTMENT_DIMENSION_MISSING", "Department dimension is missing", "Create a DEPARTMENT auxiliary dimension first"));
-        boolean valid = ledgers.listDimensionValues(actorId, ledgerId, type.id()).stream().anyMatch(v -> v.id().equals(valueId));
-        if (!valid) throw problem(422, "DEPARTMENT_VALUE_INVALID", "Invalid department", "The department value is not active in this ledger");
-        return List.of(new VoucherRequests.Dimension(type.id(), valueId));
+    private DepreciationControls depreciationControls(UUID actorId, UUID ledgerId, List<AssetRecord> rows) {
+        Map<UUID, LedgerResponses.Account> accounts = ledgers.listAccounts(actorId, ledgerId).stream()
+                .collect(Collectors.toMap(LedgerResponses.Account::id, account -> account));
+        Map<UUID, AccountControl> controls = new HashMap<>();
+        Set<UUID> departmentTypeIds = new java.util.HashSet<>();
+        for (AssetRecord row : rows) {
+            configureDepreciationAccount(row.depreciationExpenseAccountId(), accounts.get(row.depreciationExpenseAccountId()), controls, departmentTypeIds);
+            configureDepreciationAccount(row.accumulatedDepreciationAccountId(), accounts.get(row.accumulatedDepreciationAccountId()), controls, departmentTypeIds);
+        }
+        Map<UUID, Set<UUID>> activeDepartmentValues = new HashMap<>();
+        for (UUID typeId : departmentTypeIds) {
+            activeDepartmentValues.put(typeId, ledgers.listDimensionValues(actorId, ledgerId, typeId).stream()
+                    .filter(value -> "ACTIVE".equals(value.status()))
+                    .map(LedgerResponses.DimensionValue::id)
+                    .collect(Collectors.toSet()));
+        }
+        return new DepreciationControls(controls, activeDepartmentValues);
+    }
+
+    private void configureDepreciationAccount(UUID accountId, LedgerResponses.Account account,
+                                              Map<UUID, AccountControl> controls,
+                                              Set<UUID> departmentTypeIds) {
+        if (controls.containsKey(accountId)) return;
+        if (account == null) {
+            controls.put(accountId, AccountControl.invalid());
+            return;
+        }
+        LedgerResponses.DimensionRequirement department = account.dimensionRequirements().stream()
+                .filter(requirement -> "DEPARTMENT".equalsIgnoreCase(requirement.code()))
+                .findFirst().orElse(null);
+        List<String> unsupportedRequiredDimensions = account.dimensionRequirements().stream()
+                .filter(requirement -> requirement.required() && !"DEPARTMENT".equalsIgnoreCase(requirement.code()))
+                .map(LedgerResponses.DimensionRequirement::code)
+                .toList();
+        AccountControl control = new AccountControl(department == null ? null : department.dimensionTypeId(),
+                department != null && department.required(), unsupportedRequiredDimensions,
+                account.isLeaf() && "ACTIVE".equals(account.status()));
+        controls.put(accountId, control);
+        if (control.departmentTypeId() != null) departmentTypeIds.add(control.departmentTypeId());
+    }
+
+    private List<String> depreciationBlockers(AssetRecord row, DepreciationControls controls) {
+        List<String> blockers = new ArrayList<>();
+        addDepreciationAccountBlockers(blockers, row, "折旧费用", row.depreciationExpenseAccountId(), controls);
+        addDepreciationAccountBlockers(blockers, row, "累计折旧", row.accumulatedDepreciationAccountId(), controls);
+        return blockers;
+    }
+
+    private void addDepreciationAccountBlockers(List<String> blockers, AssetRecord row, String accountLabel,
+                                                UUID accountId, DepreciationControls controls) {
+        AccountControl control = controls.account(accountId);
+        if (!control.activeLeaf()) {
+            blockers.add(row.code() + "：" + accountLabel + "科目必须是启用的末级科目");
+        }
+        if (!control.unsupportedRequiredDimensions().isEmpty()) {
+            blockers.add(row.code() + "：" + accountLabel + "科目要求系统暂不支持的辅助核算维度 "
+                    + String.join(", ", control.unsupportedRequiredDimensions()));
+        }
+        if (control.departmentRequired()) {
+            if (row.departmentValueId() == null) {
+                blockers.add(row.code() + "：" + accountLabel + "科目要求有效的部门");
+            } else if (!controls.isActiveDepartment(control.departmentTypeId(), row.departmentValueId())) {
+                blockers.add(row.code() + "：" + accountLabel + "科目的部门不存在或已停用");
+            }
+        }
     }
 
     private void validateAcquisitionVoucher(UUID actorId, UUID ledgerId, UUID voucherId) {
@@ -740,4 +796,32 @@ public class DefaultFixedAssetService implements FixedAssetService {
     private ApiProblemException problem(int status, String code, String title, String detail) { return new ApiProblemException(status, code, title, detail, false); }
     private FixedAssetResponses.Category category(CategoryRecord row) { return new FixedAssetResponses.Category(row.id(), row.ledgerId(), row.code(), row.name(), row.usefulLifeMonths(), row.residualRate(), row.assetAccountId(), row.accumulatedDepreciationAccountId(), row.depreciationExpenseAccountId(), row.impairmentAccountId(), row.clearingAccountId(), row.disposalGainAccountId(), row.disposalLossAccountId(), row.status(), row.version()); }
     private record VoucherGroup(UUID accountId, UUID departmentValueId, String side) { }
+    private record AccountControl(UUID departmentTypeId, boolean departmentRequired,
+                                  List<String> unsupportedRequiredDimensions, boolean activeLeaf) {
+        private static AccountControl invalid() {
+            return new AccountControl(null, false, List.of(), false);
+        }
+    }
+    private record DepreciationControls(Map<UUID, AccountControl> accounts,
+                                        Map<UUID, Set<UUID>> activeDepartmentValues) {
+        private AccountControl account(UUID accountId) {
+            return accounts.getOrDefault(accountId, AccountControl.invalid());
+        }
+
+        private boolean isActiveDepartment(UUID typeId, UUID valueId) {
+            return typeId != null && activeDepartmentValues.getOrDefault(typeId, Set.of()).contains(valueId);
+        }
+
+        private UUID departmentValueId(UUID accountId, UUID valueId) {
+            AccountControl control = account(accountId);
+            return control.departmentTypeId() != null && isActiveDepartment(control.departmentTypeId(), valueId)
+                    ? valueId : null;
+        }
+
+        private List<VoucherRequests.Dimension> dimensions(UUID accountId, UUID valueId) {
+            AccountControl control = account(accountId);
+            return valueId == null || control.departmentTypeId() == null ? List.of()
+                    : List.of(new VoucherRequests.Dimension(control.departmentTypeId(), valueId));
+        }
+    }
 }

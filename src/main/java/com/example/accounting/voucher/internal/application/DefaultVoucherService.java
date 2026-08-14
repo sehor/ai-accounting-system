@@ -145,6 +145,7 @@ public class DefaultVoucherService implements VoucherService {
         }
         vouchers.deleteLines(ledgerId, voucherId);
         insertLines(ledgerId, voucherId, context, request.lines());
+        vouchers.reclassifyAccountingRole(ledgerId, voucherId);
         VoucherSnapshot after = snapshot(ledgerId, voucherId);
         audit(ledgerId, voucherId, "UPDATE", actorId, null, before, after);
         if ("POSTED".equals(state.status())) {
@@ -180,6 +181,7 @@ public class DefaultVoucherService implements VoucherService {
         }
         vouchers.deleteLines(ledgerId, voucherId);
         insertLines(ledgerId, voucherId, context, request.lines());
+        vouchers.reclassifyAccountingRole(ledgerId, voucherId);
         VoucherSnapshot after = snapshot(ledgerId, voucherId);
         audit(ledgerId, voucherId, "UPDATE_GENERATED", actorId, sourceType, before, after);
         if ("POSTED".equals(state.status())) {
@@ -483,6 +485,7 @@ public class DefaultVoucherService implements VoucherService {
         ensureControlsComplete(ledgerId, voucherId);
         VoucherSnapshot before = snapshot(ledgerId, voucherId);
         balanceProjection.requireOpenPeriod(ledgerId, before.periodId());
+        vouchers.reclassifyAccountingRole(ledgerId, voucherId);
         if (!vouchers.post(ledgerId, voucherId, requiredStatus, actorId)) {
             throw problem(409, "VOUCHER_STATE_INVALID", "Invalid voucher state", "The voucher state has changed");
         }
@@ -536,6 +539,7 @@ public class DefaultVoucherService implements VoucherService {
                 target.voucherNumber(), target.summary(), target.approvalRequired(), actorId);
         vouchers.deleteLines(ledgerId, voucherId);
         insertSnapshotLines(ledgerId, voucherId, target.lines());
+        vouchers.reclassifyAccountingRole(ledgerId, voucherId);
         VoucherSnapshot after = snapshot(ledgerId, voucherId);
         audit(ledgerId, voucherId, "RESTORE_REVISION", actorId, "revision:" + revision, before, after);
         if ("POSTED".equals(state.status())) {

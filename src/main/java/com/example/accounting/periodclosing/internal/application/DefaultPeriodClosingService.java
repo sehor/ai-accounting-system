@@ -5,6 +5,7 @@ import com.example.accounting.fixedasset.FixedAssetResponses;
 import com.example.accounting.fixedasset.FixedAssetService;
 import com.example.accounting.ledger.LedgerAccessService;
 import com.example.accounting.ledger.LedgerRole;
+import com.example.accounting.shared.accounting.ProfitLossTransferCategories;
 import com.example.accounting.ledger.PeriodCloseGuard;
 import com.example.accounting.periodclosing.PeriodClosingRequests;
 import com.example.accounting.periodclosing.PeriodClosingResponses;
@@ -37,12 +38,6 @@ public class DefaultPeriodClosingService implements PeriodClosingService, Period
     private static final Set<LedgerRole> READ_ROLES = Set.of(LedgerRole.OWNER, LedgerRole.EDITOR,
             LedgerRole.REVIEWER, LedgerRole.VIEWER, LedgerRole.AGENT);
     private static final Set<LedgerRole> WRITE_ROLES = Set.of(LedgerRole.OWNER, LedgerRole.EDITOR);
-    private static final Set<String> REVENUE_TRANSFER_CATEGORIES = Set.of(
-            "OPERATING_REVENUE", "OTHER_INCOME");
-    private static final Set<String> EXPENSE_TRANSFER_CATEGORIES = Set.of(
-            "OPERATING_COST_AND_TAX", "OTHER_EXPENSE", "PERIOD_EXPENSE",
-            "INCOME_TAX", "PRIOR_YEAR_ADJUSTMENT");
-
     private final PeriodClosingRepository closing;
     private final LedgerAccessService ledgerAccess;
     private final FixedAssetService fixedAssets;
@@ -399,7 +394,8 @@ public class DefaultPeriodClosingService implements PeriodClosingService, Period
     private List<PeriodClosingRepository.AccountAmount> transferAmounts(
             UUID ledgerId, UUID periodId, boolean revenue) {
         List<PeriodClosingRepository.AccountAmount> result = new ArrayList<>();
-        for (String category : revenue ? REVENUE_TRANSFER_CATEGORIES : EXPENSE_TRANSFER_CATEGORIES) {
+        for (String category : revenue ? ProfitLossTransferCategories.revenue()
+                : ProfitLossTransferCategories.expense()) {
             result.addAll(closing.amounts(ledgerId, periodId, category));
         }
         return result;
@@ -408,7 +404,8 @@ public class DefaultPeriodClosingService implements PeriodClosingService, Period
     private List<PeriodClosingRepository.AccountAmount> transferNetAmounts(
             UUID ledgerId, UUID periodId, boolean revenue) {
         List<PeriodClosingRepository.AccountAmount> result = new ArrayList<>();
-        for (String category : revenue ? REVENUE_TRANSFER_CATEGORIES : EXPENSE_TRANSFER_CATEGORIES) {
+        for (String category : revenue ? ProfitLossTransferCategories.revenue()
+                : ProfitLossTransferCategories.expense()) {
             result.addAll(closing.netAmounts(ledgerId, periodId, category));
         }
         return result;

@@ -254,6 +254,91 @@ public class JdbcVoucherRepository implements VoucherRepository {
     }
 
     @Override
+    public void reclassifyAccountingRole(UUID ledgerId, UUID voucherId) {
+        jdbcTemplate.update("""
+                with current_voucher as (
+                    select id, period_id
+                    from voucher
+                    where ledger_id = ? and id = ? and deleted_at is null
+                ), profit_account as (
+                    select coalesce(
+                        (select setting.profit_account_id
+                         from period_closing_setting setting
+                         join ledger_account account
+                           on account.ledger_id = setting.ledger_id
+                          and account.id = setting.profit_account_id
+                         where setting.ledger_id = ? and account.status = 'ACTIVE'
+                           and account.category = 'EQUITY'
+                           and not exists (select 1 from ledger_account child
+                                           where child.ledger_id = account.ledger_id
+                                             and child.parent_id = account.id)),
+                        (select account.id from ledger_account account
+                         where account.ledger_id = ? and account.code = '3103'
+                           and account.status = 'ACTIVE' and account.category = 'EQUITY'
+                           and not exists (select 1 from ledger_account child
+                                           where child.ledger_id = account.ledger_id
+                                             and child.parent_id = account.id) limit 1),
+                        (select account.id from ledger_account account
+                         where account.ledger_id = ? and account.code = '4103'
+                           and account.status = 'ACTIVE' and account.category = 'EQUITY'
+                           and not exists (select 1 from ledger_account child
+                                           where child.ledger_id = account.ledger_id
+                                             and child.parent_id = account.id) limit 1)
+                    ) account_id
+                ), candidate_lines as (
+                    select line.account_id, account.category,
+                        sum(case when line.side = 'DEBIT' then line.base_amount else -line.base_amount end) net,
+                        sum(case when line.side = 'DEBIT' then line.base_amount else 0 end) debit,
+                        sum(case when line.side = 'CREDIT' then line.base_amount else 0 end) credit
+                    from voucher_line line
+                    join ledger_account account
+                      on account.ledger_id = line.ledger_id and account.id = line.account_id
+                    where line.ledger_id = ? and line.voucher_id = ?
+                    group by line.account_id, account.category
+                ), is_transfer as (
+                    select exists (select 1 from profit_account where account_id is not null)
+                       and exists (select 1 from candidate_lines line join profit_account profit
+                                   on line.account_id = profit.account_id)
+                       and exists (select 1 from candidate_lines
+                                   where category in ('OPERATING_REVENUE', 'OTHER_INCOME',
+                                       'OPERATING_COST_AND_TAX', 'OTHER_EXPENSE', 'PERIOD_EXPENSE',
+                                       'INCOME_TAX', 'PRIOR_YEAR_ADJUSTMENT'))
+                       and not exists (
+                           select 1 from candidate_lines line left join profit_account profit on true
+                           where line.account_id <> profit.account_id
+                             and line.category not in ('OPERATING_REVENUE', 'OTHER_INCOME',
+                                 'OPERATING_COST_AND_TAX', 'OTHER_EXPENSE', 'PERIOD_EXPENSE',
+                                 'INCOME_TAX', 'PRIOR_YEAR_ADJUSTMENT'))
+                       and not exists (
+                           select 1
+                           from candidate_lines line
+                           cross join current_voucher current
+                           where line.category in ('OPERATING_REVENUE', 'OTHER_INCOME',
+                                       'OPERATING_COST_AND_TAX', 'OTHER_EXPENSE', 'PERIOD_EXPENSE',
+                                       'INCOME_TAX', 'PRIOR_YEAR_ADJUSTMENT')
+                             and line.net + coalesce((
+                                 select sum(case when posted_line.side = 'DEBIT'
+                                                   then posted_line.base_amount else -posted_line.base_amount end)
+                                 from voucher posted
+                                 join voucher_line posted_line
+                                   on posted_line.ledger_id = posted.ledger_id
+                                  and posted_line.voucher_id = posted.id
+                                 where posted.ledger_id = ? and posted.period_id = current.period_id
+                                   and posted.id <> current.id and posted.status = 'POSTED'
+                                   and posted.deleted_at is null and posted_line.account_id = line.account_id
+                             ), 0) <> 0)
+                       and (select coalesce(sum(debit), 0) = coalesce(sum(credit), 0)
+                            from candidate_lines)
+                    as value
+                )
+                update voucher set accounting_role = case when (select value from is_transfer)
+                    then 'PROFIT_LOSS_TRANSFER' else 'OPERATING' end
+                where ledger_id = ? and id = ?
+                """, ledgerId, voucherId, ledgerId, ledgerId, ledgerId, ledgerId, voucherId,
+                ledgerId, ledgerId, voucherId);
+    }
+
+    @Override
     public List<VoucherResponses.Voucher> list(UUID ledgerId, int limit, int offset) {
         return list(ledgerId, new VoucherRequests.Search(null, null, null, null), limit, offset);
     }

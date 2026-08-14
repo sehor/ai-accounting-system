@@ -300,6 +300,35 @@ public class JdbcBalanceProjectionRepository implements BalanceProjectionReposit
     }
 
     @Override
+    public List<ReportResponses.TrialBalanceLine> operatingTrialBalance(
+            UUID ledgerId, PeriodRange range, boolean includeParents) {
+        return jdbc.query("""
+                with movement as (
+                    select b.account_id, sum(b.operating_debit_base) operating_debit,
+                        sum(b.operating_credit_base) operating_credit
+                    from account_period_balance b
+                    join accounting_period p on p.ledger_id = b.ledger_id and p.id = b.period_id
+                    where b.ledger_id = ? and p.period_code between ? and ?
+                    group by b.account_id
+                )
+                select a.id, a.code, a.name, a.category,
+                    0::numeric opening_debit, 0::numeric opening_credit,
+                    coalesce(m.operating_debit, 0) period_debit,
+                    coalesce(m.operating_credit, 0) period_credit,
+                    0::numeric closing_debit, 0::numeric closing_credit
+                from ledger_account a
+                left join movement m on m.account_id = a.id
+                where a.ledger_id = ?
+                  and (? or not exists (
+                      select 1 from ledger_account child
+                      where child.ledger_id = a.ledger_id and child.parent_id = a.id))
+                  and (coalesce(m.operating_debit, 0) <> 0 or coalesce(m.operating_credit, 0) <> 0)
+                order by a.code
+                """, (rs, row) -> projectionLine(rs), ledgerId, range.periodFrom(), range.periodTo(),
+                ledgerId, includeParents);
+    }
+
+    @Override
     public BigDecimal openingBalance(UUID ledgerId, String periodCode, UUID accountId) {
         return jdbc.queryForObject("""
                 select coalesce(sum(b.opening_debit_base - b.opening_credit_base), 0)

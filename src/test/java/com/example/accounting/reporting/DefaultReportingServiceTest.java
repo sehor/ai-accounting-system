@@ -143,6 +143,21 @@ class DefaultReportingServiceTest {
         verify(repository, never()).incomeStatementTrialBalance(ledgerId, new PeriodRange("2026-01", "2026-06"), true);
     }
 
+    @Test
+    void doesNotFallBackToLiveFactsWhenIncomeProjectionIsPending() {
+        UUID actorId = UUID.randomUUID();
+        UUID ledgerId = UUID.randomUUID();
+        when(access.requireMembership(actorId, ledgerId)).thenReturn(LedgerRole.VIEWER);
+        when(repository.periodsExist(ledgerId, PeriodRange.single("2026-06"))).thenReturn(true);
+        when(repository.statutoryProjectionReady(ledgerId, PeriodRange.single("2026-06"))).thenReturn(false);
+
+        assertThatThrownBy(() -> service.incomeStatement(actorId, ledgerId, "2026-06"))
+                .isInstanceOf(ApiProblemException.class)
+                .extracting(error -> ((ApiProblemException) error).code())
+                .isEqualTo("INCOME_STATEMENT_PROJECTION_PENDING");
+        verify(repository, never()).incomeStatementTrialBalance(ledgerId, PeriodRange.single("2026-06"), false);
+    }
+
     private ReportResponses.TrialBalanceLine line(String code, String name, String side,
                                                    String amount, String closing) {
         BigDecimal value = new BigDecimal(amount);

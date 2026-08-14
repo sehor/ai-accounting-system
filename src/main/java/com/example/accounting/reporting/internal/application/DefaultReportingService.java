@@ -101,6 +101,7 @@ public class DefaultReportingService implements ReportingService {
     public ReportResponses.Statement incomeStatement(UUID actorId, UUID ledgerId, PeriodRange range) {
         requireView(actorId, ledgerId);
         validateRange(ledgerId, range);
+        requireIncomeProjection(ledgerId, range);
         List<ReportResponses.TrialBalanceLine> lines = reports.incomeStatementTrialBalance(ledgerId, range, false);
         Set<String> revenueCategories = reports.formulaCategories(
                 ledgerId, "INCOME_STATEMENT", "revenueCategories");
@@ -170,6 +171,13 @@ public class DefaultReportingService implements ReportingService {
     private void requireStatutoryProjection(UUID ledgerId, PeriodRange range) {
         if (!reports.statutoryProjectionReady(ledgerId, range)) {
             throw problem(409, "STATUTORY_REPORT_PROJECTION_PENDING", "法定报表暂不可用",
+                    "余额投影正在更新，请稍后刷新报表");
+        }
+    }
+
+    private void requireIncomeProjection(UUID ledgerId, PeriodRange range) {
+        if (!reports.statutoryProjectionReady(ledgerId, range)) {
+            throw problem(409, "INCOME_STATEMENT_PROJECTION_PENDING", "利润表暂不可用",
                     "余额投影正在更新，请稍后刷新报表");
         }
     }
