@@ -28,6 +28,8 @@ public interface PeriodClosingRepository {
     Optional<AccountInfo> account(UUID ledgerId, UUID accountId);
     Optional<AccountInfo> accountByCode(UUID ledgerId, String code);
     boolean hasRequiredDimensions(UUID ledgerId, UUID accountId);
+    String baseCurrency(UUID ledgerId);
+    TrialBalanceAmounts trialBalanceAmounts(UUID ledgerId, String periodCode);
 
     record SettingRecord(UUID ledgerId, UUID profitAccountId, UUID retainedEarningsAccountId,
                          long version) { }
@@ -41,4 +43,6 @@ public interface PeriodClosingRepository {
                        String status, UUID parentId, boolean leaf) { }
     record AccountAmount(UUID accountId, String code, String name, String category,
                         BigDecimal debit, BigDecimal credit) { }
+    record TrialBalanceAmounts(BigDecimal openingDebit, BigDecimal openingCredit,
+                               BigDecimal periodDebit, BigDecimal periodCredit) { }
 }

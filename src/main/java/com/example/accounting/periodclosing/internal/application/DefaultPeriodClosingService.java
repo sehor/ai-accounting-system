@@ -13,9 +13,6 @@ import com.example.accounting.periodclosing.PeriodClosingService;
 import com.example.accounting.periodclosing.PeriodClosingStepStatus;
 import com.example.accounting.periodclosing.PeriodClosingStepType;
 import com.example.accounting.periodclosing.internal.port.PeriodClosingRepository;
-import com.example.accounting.reporting.PeriodRange;
-import com.example.accounting.reporting.ReportResponses;
-import com.example.accounting.reporting.internal.port.ReportingRepository;
 import com.example.accounting.shared.balance.BalanceProjectionService;
 import com.example.accounting.shared.web.ApiProblemException;
 import com.example.accounting.voucher.VoucherRequests;
@@ -42,17 +39,15 @@ public class DefaultPeriodClosingService implements PeriodClosingService, Period
     private final LedgerAccessService ledgerAccess;
     private final FixedAssetService fixedAssets;
     private final VoucherService vouchers;
-    private final ReportingRepository reporting;
     private final BalanceProjectionService projection;
 
     public DefaultPeriodClosingService(PeriodClosingRepository closing, LedgerAccessService ledgerAccess,
                                        FixedAssetService fixedAssets, VoucherService vouchers,
-                                       ReportingRepository reporting, BalanceProjectionService projection) {
+                                       BalanceProjectionService projection) {
         this.closing = closing;
         this.ledgerAccess = ledgerAccess;
         this.fixedAssets = fixedAssets;
         this.vouchers = vouchers;
-        this.reporting = reporting;
         this.projection = projection;
     }
 
@@ -293,7 +288,7 @@ public class DefaultPeriodClosingService implements PeriodClosingService, Period
     }
 
     private VoucherRequests.Line line(UUID ledgerId, UUID accountId, String side, BigDecimal amount, String summary) {
-        return new VoucherRequests.Line(accountId, side, reporting.baseCurrency(ledgerId), amount, BigDecimal.ONE, summary);
+        return new VoucherRequests.Line(accountId, side, closing.baseCurrency(ledgerId), amount, BigDecimal.ONE, summary);
     }
 
     private PeriodClosingResponses.Step blocked(UUID ledgerId, UUID periodId,
@@ -328,13 +323,13 @@ public class DefaultPeriodClosingService implements PeriodClosingService, Period
     }
 
     private PeriodClosingResponses.TrialBalanceTotals trialBalance(UUID ledgerId, String periodCode) {
-        List<ReportResponses.TrialBalanceLine> lines = reporting.trialBalance(ledgerId, PeriodRange.single(periodCode), false);
-        BigDecimal od = lines.stream().map(ReportResponses.TrialBalanceLine::openingDebit).reduce(BigDecimal.ZERO, BigDecimal::add);
-        BigDecimal oc = lines.stream().map(ReportResponses.TrialBalanceLine::openingCredit).reduce(BigDecimal.ZERO, BigDecimal::add);
-        BigDecimal pd = lines.stream().map(ReportResponses.TrialBalanceLine::periodDebit).reduce(BigDecimal.ZERO, BigDecimal::add);
-        BigDecimal pc = lines.stream().map(ReportResponses.TrialBalanceLine::periodCredit).reduce(BigDecimal.ZERO, BigDecimal::add);
-        BigDecimal cd = lines.stream().map(ReportResponses.TrialBalanceLine::closingDebit).reduce(BigDecimal.ZERO, BigDecimal::add);
-        BigDecimal cc = lines.stream().map(ReportResponses.TrialBalanceLine::closingCredit).reduce(BigDecimal.ZERO, BigDecimal::add);
+        PeriodClosingRepository.TrialBalanceAmounts amounts = closing.trialBalanceAmounts(ledgerId, periodCode);
+        BigDecimal od = amounts.openingDebit();
+        BigDecimal oc = amounts.openingCredit();
+        BigDecimal pd = amounts.periodDebit();
+        BigDecimal pc = amounts.periodCredit();
+        BigDecimal cd = od.add(pd);
+        BigDecimal cc = oc.add(pc);
         BigDecimal odiff = od.subtract(oc).abs(), pdiff = pd.subtract(pc).abs(), cdiff = cd.subtract(cc).abs();
         return new PeriodClosingResponses.TrialBalanceTotals(od, oc, pd, pc, cd, cc, odiff, pdiff, cdiff,
                 odiff.signum() == 0 && pdiff.signum() == 0 && cdiff.signum() == 0);
