@@ -1,8 +1,11 @@
 package com.example.accounting.voucher;
 
+import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -12,6 +15,7 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
+import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
@@ -45,5 +49,37 @@ class VoucherControllerTest {
 
         verify(voucherService).list(userId, ledgerId, search, 20, 20);
         verify(voucherService).count(userId, ledgerId, search);
+    }
+
+    @Test
+    void acceptsBlankVoucherRowsForServiceSideFiltering() throws Exception {
+        UUID userId = UUID.randomUUID();
+        UUID ledgerId = UUID.randomUUID();
+
+        mockMvc.perform(post("/v1/ledgers/{ledgerId}/vouchers", ledgerId)
+                        .header("X-User-Id", userId)
+                        .header("Idempotency-Key", "create-voucher")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "voucherDate": "2026-06-15",
+                                  "voucherType": "记",
+                                  "lines": [
+                                    {
+                                      "side": "DEBIT",
+                                      "currency": "CNY",
+                                      "originalAmount": "",
+                                      "exchangeRate": "1",
+                                      "dimensions": []
+                                    }
+                                  ]
+                                }
+                                """))
+                .andExpect(status().isCreated());
+
+        verify(voucherService).create(eq(userId), eq(ledgerId), argThat(request ->
+                request.lines().size() == 1
+                        && request.lines().getFirst().accountId() == null
+                        && request.lines().getFirst().originalAmount() == null), eq("create-voucher"));
     }
 }

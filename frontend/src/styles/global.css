@@ -192,6 +192,23 @@ a { color: #1677a7; }
   box-shadow: none;
 }
 .voucher-editor-card > .ant-card-body { padding: 18px; }
+.voucher-editor-card-closed { position: relative; }
+.voucher-closed-stamp {
+  position: absolute;
+  z-index: 2;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%) rotate(-2deg);
+  padding: 5px 16px;
+  border: 3px solid #cf3030;
+  color: #cf3030;
+  background: rgba(255, 255, 255, 0.92);
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: 4px;
+  line-height: 1.15;
+  box-shadow: inset 0 0 0 2px rgba(207, 48, 48, 0.12);
+}
 .voucher-page-toolbar {
   display: flex;
   align-items: center;
@@ -223,7 +240,8 @@ a { color: #1677a7; }
 .voucher-header-fields .ant-form-item-label > label { height: 32px; }
 .voucher-header-fields .ant-input { width: 76px; }
 .voucher-header-fields .ant-picker { width: 142px; }
-.voucher-number-pending { white-space: nowrap; color: #4f5964; }
+.voucher-number-pending,
+.voucher-number-display { white-space: nowrap; color: #4f5964; }
 .voucher-document-title { text-align: center; }
 .voucher-document-title h1.ant-typography {
   margin: 0;

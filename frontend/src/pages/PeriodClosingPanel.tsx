@@ -12,8 +12,8 @@ const labels: Record<PeriodClosingStepType, string> = {
   YEAR_END_PROFIT_TRANSFER: '结转本年利润',
 }
 
-export function PeriodClosingPanel({ ledgerId, session, period, accounts, onClose }: {
-  ledgerId: string; session: ApiAuth; period: Period; accounts: Account[]; onClose: () => void
+export function PeriodClosingPanel({ ledgerId, session, period, accounts, onConfirmClose, onDismiss }: {
+  ledgerId: string; session: ApiAuth; period: Period; accounts: Account[]; onConfirmClose: () => void; onDismiss: () => void
 }) {
   const client = useQueryClient(); const [showSettings, setShowSettings] = useState(false); const [activeStep, setActiveStep] = useState<PeriodClosingStepType | null>(null); const generatingRef = useRef(false)
   const [messageApi, contextHolder] = message.useMessage()
@@ -41,7 +41,7 @@ export function PeriodClosingPanel({ ledgerId, session, period, accounts, onClos
       <Space wrap style={{ width: '100%' }}>{data.steps.map((step) => <StepCard key={step.step} step={step} onGenerate={() => generateStep(step.step)} onVoucher={() => window.location.assign(`/ledgers/${ledgerId}/vouchers/${step.voucherId}`)} loading={activeStep === step.step && generate.isPending} disabled={generate.isPending} />)}</Space>
       {data.blockers.length > 0 && <Alert type="warning" showIcon message="存在结账阻塞" description={<ul>{data.blockers.map((blocker) => <li key={`${blocker.code}-${blocker.detail}`}>{blocker.title}：{blocker.detail}</li>)}</ul>} />}
       <Card size="small" title="试算平衡"><Space wrap><Typography.Text>期初差额：{data.trialBalance.openingDifference}</Typography.Text><Typography.Text>本期差额：{data.trialBalance.periodDifference}</Typography.Text><Typography.Text>期末差额：{data.trialBalance.closingDifference}</Typography.Text><Tag color={data.trialBalance.balanced ? 'success' : 'error'}>{data.trialBalance.balanced ? '平衡' : '不平衡'}</Tag></Space></Card>
-      <Button type="primary" disabled={!data.canClose} onClick={onClose}>结账</Button>
+      <Space><Button onClick={onDismiss}>关闭</Button><Button type="primary" disabled={!data.canClose} onClick={onConfirmClose}>结账</Button></Space>
     </>}
   </Space>
 }

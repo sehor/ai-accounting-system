@@ -16,7 +16,7 @@ public final class VoucherRequests {
     private VoucherRequests() {
     }
 
-    public record Create(@NotNull UUID periodId,
+    public record Create(@Nullable UUID periodId,
                          @NotNull LocalDate voucherDate,
                          @NotBlank String voucherType,
                          @Nullable String voucherNumber,
@@ -39,10 +39,10 @@ public final class VoucherRequests {
                          @Nullable String keyword) {
     }
 
-    public record Line(@NotNull UUID accountId,
+    public record Line(@Nullable UUID accountId,
                        @NotBlank @Pattern(regexp = "DEBIT|CREDIT") String side,
                        @NotBlank @Pattern(regexp = "[A-Z]{3}") String currency,
-                       @NotNull BigDecimal originalAmount,
+                       @Nullable BigDecimal originalAmount,
                        @NotNull BigDecimal exchangeRate,
                        @Nullable String summary,
                        @Nullable UUID cashFlowItemId,

@@ -19,12 +19,23 @@ const status = {
 
 function renderPanel() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-  render(<QueryClientProvider client={client}><App><PeriodClosingPanel ledgerId="ledger-1" session={{ localUserId: 'user-1' }} period={period} accounts={[]} onClose={vi.fn()} /></App></QueryClientProvider>)
+  render(<QueryClientProvider client={client}><App><PeriodClosingPanel ledgerId="ledger-1" session={{ localUserId: 'user-1' }} period={period} accounts={[]} onDismiss={vi.fn()} onConfirmClose={vi.fn()} /></App></QueryClientProvider>)
 }
 
 afterEach(() => vi.clearAllMocks())
 
 describe('PeriodClosingPanel', () => {
+  it('provides a dismiss button', async () => {
+    vi.spyOn(message, 'useMessage').mockReturnValue([{ error: vi.fn() }, null] as never)
+    vi.mocked(apiFetch).mockImplementation((path) => {
+      if (path.endsWith('/period-closing-settings')) return Promise.resolve({ ledgerId: 'ledger-1', profitAccountId: null, retainedEarningsAccountId: null, defaultProfitAccountId: null, defaultRetainedEarningsAccountId: null, version: 1 })
+      return Promise.resolve(status)
+    })
+    renderPanel()
+
+    expect(await screen.findByRole('button', { name: /关\s*闭/ })).toBeEnabled()
+  })
+
   it('posts only the clicked step once and shows loading only on that card', async () => {
     vi.spyOn(message, 'useMessage').mockReturnValue([{ error: vi.fn() }, null] as never)
     let rejectGenerate: ((reason?: unknown) => void) | undefined

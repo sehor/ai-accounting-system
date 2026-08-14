@@ -56,13 +56,27 @@ public class JdbcVoucherRepository implements VoucherRepository {
     @Override
     public Optional<LedgerContext> findLedgerContext(UUID ledgerId, UUID periodId) {
         return Optional.ofNullable(jdbcTemplate.query("""
-                select l.base_currency, l.approval_enabled, p.status, p.start_date, p.end_date
+                select p.id, l.base_currency, l.approval_enabled, p.status, p.start_date, p.end_date
                 from ledger l join accounting_period p on p.ledger_id = l.id
                 where l.id = ? and p.id = ? and l.deleted_at is null
-                """, rs -> rs.next() ? new LedgerContext(rs.getString("base_currency"),
-                rs.getBoolean("approval_enabled"), rs.getString("status"),
-                rs.getObject("start_date", LocalDate.class), rs.getObject("end_date", LocalDate.class)) : null,
+                """, rs -> rs.next() ? ledgerContext(rs) : null,
                 ledgerId, periodId));
+    }
+
+    @Override
+    public List<LedgerContext> findLedgerContextsByDate(UUID ledgerId, LocalDate voucherDate) {
+        return jdbcTemplate.query("""
+                select p.id, l.base_currency, l.approval_enabled, p.status, p.start_date, p.end_date
+                from ledger l join accounting_period p on p.ledger_id = l.id
+                where l.id = ? and l.deleted_at is null and ? between p.start_date and p.end_date
+                order by p.start_date, p.id
+                """, (rs, rowNum) -> ledgerContext(rs), ledgerId, voucherDate);
+    }
+
+    private LedgerContext ledgerContext(java.sql.ResultSet rs) throws java.sql.SQLException {
+        return new LedgerContext(rs.getObject("id", UUID.class), rs.getString("base_currency"),
+                rs.getBoolean("approval_enabled"), rs.getString("status"),
+                rs.getObject("start_date", LocalDate.class), rs.getObject("end_date", LocalDate.class));
     }
 
     @Override

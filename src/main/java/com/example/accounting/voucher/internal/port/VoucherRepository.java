@@ -19,6 +19,8 @@ public interface VoucherRepository {
 
     Optional<LedgerContext> findLedgerContext(UUID ledgerId, UUID periodId);
 
+    List<LedgerContext> findLedgerContextsByDate(UUID ledgerId, LocalDate voucherDate);
+
     boolean activeAccountExists(UUID ledgerId, UUID accountId);
 
     Optional<AccountControls> accountControls(UUID ledgerId, UUID accountId);
@@ -103,7 +105,7 @@ public interface VoucherRepository {
     record Idempotency(String requestHash, UUID voucherId) {
     }
 
-    record LedgerContext(String baseCurrency, boolean approvalRequired, String status,
+    record LedgerContext(UUID periodId, String baseCurrency, boolean approvalRequired, String status,
                          LocalDate startDate, LocalDate endDate) {
     }
 

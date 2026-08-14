@@ -56,18 +56,83 @@ class Stage3VoucherTest {
                 new LedgerRequests.Create("automatic-number", "SME", "v1", "CNY", LocalDate.of(2026, 1, 1), false)).id();
         UUID periodId = periodId(ledgerId, "2026-01");
         List<VoucherRequests.Line> lines = List.of(line(accountId(ledgerId, "1001"), "DEBIT", "1"),
-                line(accountId(ledgerId, "3001"), "CREDIT", "1"));
+                line(accountId(ledgerId, "3001"), "CREDIT", "1"),
+                new VoucherRequests.Line(null, "DEBIT", "CNY", null, BigDecimal.ONE,
+                        null, null, null, null, List.of()));
 
         VoucherResponses.Voucher numbered = voucherService.create(userId, ledgerId,
                 new VoucherRequests.Create(periodId, LocalDate.of(2026, 1, 15), "记", "7", "Manual", lines));
         VoucherResponses.Voucher generated = voucherService.create(userId, ledgerId,
-                new VoucherRequests.Create(periodId, LocalDate.of(2026, 1, 15), "记", null, "Generated", lines));
+                new VoucherRequests.Create(null, LocalDate.of(2026, 1, 15), "记", null, "Generated", lines));
         VoucherResponses.Voucher nextGenerated = voucherService.create(userId, ledgerId,
-                new VoucherRequests.Create(periodId, LocalDate.of(2026, 1, 15), "记", " ", "Generated", lines));
+                new VoucherRequests.Create(null, LocalDate.of(2026, 1, 15), "记", " ", "Generated", lines));
 
         assertThat(numbered.voucherNumber()).isEqualTo("7");
+        assertThat(generated.periodId()).isEqualTo(periodId);
         assertThat(generated.voucherNumber()).isEqualTo("8");
         assertThat(nextGenerated.voucherNumber()).isEqualTo("9");
+        assertThat(generated.lines()).hasSize(2);
+    }
+
+    @Test
+    void rejectsClosedOrUnmappedVoucherDatesWhenPeriodIsOmitted() {
+        UUID userId = UUID.randomUUID();
+        UUID ledgerId = ledgerService.create(
+                new CurrentUserResolver.ResolvedUser(userId, "test", userId.toString()),
+                new LedgerRequests.Create("date-derived-period", "SME", "v1", "CNY",
+                        LocalDate.of(2026, 1, 1), false)).id();
+        UUID periodId = periodId(ledgerId, "2026-01");
+        List<VoucherRequests.Line> lines = List.of(line(accountId(ledgerId, "1001"), "DEBIT", "1"),
+                line(accountId(ledgerId, "3001"), "CREDIT", "1"));
+        jdbcTemplate.update("update accounting_period set status = 'CLOSED' where ledger_id = ? and id = ?",
+                ledgerId, periodId);
+
+        assertThatThrownBy(() -> voucherService.create(userId, ledgerId, new VoucherRequests.Create(
+                null, LocalDate.of(2026, 1, 15), "记", null, "Closed", lines)))
+                .isInstanceOf(ApiProblemException.class)
+                .satisfies(exception -> {
+                    ApiProblemException problem = (ApiProblemException) exception;
+                    assertThat(problem.status()).isEqualTo(409);
+                    assertThat(problem.code()).isEqualTo("ACCOUNTING_PERIOD_CLOSED");
+                });
+        assertThatThrownBy(() -> voucherService.create(userId, ledgerId, new VoucherRequests.Create(
+                null, LocalDate.of(2030, 1, 15), "记", null, "Unmapped", lines)))
+                .isInstanceOf(ApiProblemException.class)
+                .satisfies(exception -> {
+                    ApiProblemException problem = (ApiProblemException) exception;
+                    assertThat(problem.status()).isEqualTo(422);
+                    assertThat(problem.code()).isEqualTo("VOUCHER_PERIOD_NOT_FOUND");
+                });
+    }
+
+    @Test
+    void rejectsPeriodDateMismatchAndOverlappingPeriodConfiguration() {
+        UUID userId = UUID.randomUUID();
+        UUID ledgerId = ledgerService.create(
+                new CurrentUserResolver.ResolvedUser(userId, "test", userId.toString()),
+                new LedgerRequests.Create("period-date-validation", "SME", "v1", "CNY",
+                        LocalDate.of(2026, 1, 1), false)).id();
+        List<VoucherRequests.Line> lines = List.of(line(accountId(ledgerId, "1001"), "DEBIT", "1"),
+                line(accountId(ledgerId, "3001"), "CREDIT", "1"));
+
+        assertThatThrownBy(() -> voucherService.create(userId, ledgerId, new VoucherRequests.Create(
+                periodId(ledgerId, "2026-02"), LocalDate.of(2026, 1, 15), "记", null, "Mismatch", lines)))
+                .isInstanceOf(ApiProblemException.class)
+                .extracting(exception -> ((ApiProblemException) exception).code())
+                .isEqualTo("VOUCHER_PERIOD_DATE_MISMATCH");
+
+        jdbcTemplate.update("""
+                insert into accounting_period (id, ledger_id, period_code, start_date, end_date, status)
+                values (?, ?, '2026-13', '2026-01-10', '2026-01-20', 'OPEN')
+                """, UUID.randomUUID(), ledgerId);
+        assertThatThrownBy(() -> voucherService.create(userId, ledgerId, new VoucherRequests.Create(
+                null, LocalDate.of(2026, 1, 15), "记", null, "Overlap", lines)))
+                .isInstanceOf(ApiProblemException.class)
+                .satisfies(exception -> {
+                    ApiProblemException problem = (ApiProblemException) exception;
+                    assertThat(problem.status()).isEqualTo(409);
+                    assertThat(problem.code()).isEqualTo("ACCOUNTING_PERIOD_DATE_OVERLAP");
+                });
     }
 
     @Test
@@ -152,6 +217,74 @@ class Stage3VoucherTest {
         assertThat(jdbcTemplate.queryForObject(
                 "select count(*) from balance_projection_event where ledger_id = ? and aggregate_id = ? and event_type = 'UPDATE'",
                 Long.class, ledgerId, voucher.id())).isEqualTo(1L);
+    }
+
+    @Test
+    void rejectsAnUnbalancedUpdateAndRollsBackThePostedVoucher() {
+        UUID userId = UUID.randomUUID();
+        UUID ledgerId = ledgerService.create(
+                new CurrentUserResolver.ResolvedUser(userId, "test", userId.toString()),
+                new LedgerRequests.Create("unbalanced-update", "SME", "v1", "CNY",
+                        LocalDate.of(2026, 1, 1), false)).id();
+        UUID periodId = periodId(ledgerId, "2026-01");
+        UUID debitAccountId = accountId(ledgerId, "1001");
+        UUID creditAccountId = accountId(ledgerId, "3001");
+        VoucherResponses.Voucher voucher = voucherService.create(userId, ledgerId, new VoucherRequests.Create(
+                periodId, LocalDate.of(2026, 1, 15), "记", "1", "Before",
+                List.of(line(debitAccountId, "DEBIT", "100"),
+                        line(creditAccountId, "CREDIT", "100"))));
+
+        assertThatThrownBy(() -> voucherService.update(userId, ledgerId, voucher.id(),
+                new VoucherRequests.Update(voucher.version(), periodId, voucher.voucherDate(),
+                        voucher.voucherType(), voucher.voucherNumber(), "Unbalanced", List.of(
+                        line(debitAccountId, "DEBIT", "120"),
+                        line(creditAccountId, "CREDIT", "100")))))
+                .isInstanceOf(ApiProblemException.class)
+                .extracting(exception -> ((ApiProblemException) exception).code())
+                .isEqualTo("VOUCHER_NOT_BALANCED");
+
+        VoucherResponses.Voucher unchanged = voucherService.find(userId, ledgerId, voucher.id());
+        assertThat(unchanged.version()).isEqualTo(voucher.version());
+        assertThat(unchanged.summary()).isEqualTo("Before");
+        assertThat(unchanged.lines()).extracting(VoucherResponses.Line::originalAmount)
+                .containsOnly(new BigDecimal("100.0000"));
+        assertThat(jdbcTemplate.queryForObject(
+                "select count(*) from balance_projection_event where ledger_id = ? and aggregate_id = ? and event_type = 'UPDATE'",
+                Long.class, ledgerId, voucher.id())).isZero();
+    }
+
+    @Test
+    void allowsChangingTheDateButNotThePeriodOfASavedVoucher() {
+        UUID userId = UUID.randomUUID();
+        UUID ledgerId = ledgerService.create(
+                new CurrentUserResolver.ResolvedUser(userId, "test", userId.toString()),
+                new LedgerRequests.Create("immutable-voucher-period", "SME", "v1", "CNY",
+                        LocalDate.of(2026, 1, 1), false)).id();
+        UUID januaryId = periodId(ledgerId, "2026-01");
+        UUID februaryId = periodId(ledgerId, "2026-02");
+        List<VoucherRequests.Line> lines = List.of(
+                line(accountId(ledgerId, "1001"), "DEBIT", "100"),
+                line(accountId(ledgerId, "3001"), "CREDIT", "100"));
+        VoucherResponses.Voucher voucher = voucherService.create(userId, ledgerId,
+                new VoucherRequests.Create(januaryId, LocalDate.of(2026, 1, 15),
+                        "记", "1", "January", lines));
+
+        VoucherResponses.Voucher dated = voucherService.update(userId, ledgerId, voucher.id(),
+                new VoucherRequests.Update(voucher.version(), januaryId, LocalDate.of(2026, 1, 20),
+                        voucher.voucherType(), voucher.voucherNumber(), voucher.summary(), lines));
+        assertThat(dated.voucherDate()).isEqualTo(LocalDate.of(2026, 1, 20));
+
+        assertThatThrownBy(() -> voucherService.update(userId, ledgerId, voucher.id(),
+                new VoucherRequests.Update(dated.version(), februaryId, LocalDate.of(2026, 2, 1),
+                        voucher.voucherType(), voucher.voucherNumber(), voucher.summary(), lines)))
+                .isInstanceOf(ApiProblemException.class)
+                .extracting(exception -> ((ApiProblemException) exception).code())
+                .isEqualTo("VOUCHER_PERIOD_IMMUTABLE");
+
+        VoucherResponses.Voucher unchanged = voucherService.find(userId, ledgerId, voucher.id());
+        assertThat(unchanged.periodId()).isEqualTo(januaryId);
+        assertThat(unchanged.voucherDate()).isEqualTo(LocalDate.of(2026, 1, 20));
+        assertThat(unchanged.version()).isEqualTo(dated.version());
     }
 
     @Test

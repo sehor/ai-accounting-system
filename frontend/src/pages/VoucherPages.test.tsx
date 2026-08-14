@@ -1,10 +1,12 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { App } from 'antd'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { MemoryRouter, Route, Routes } from 'react-router-dom'
+import dayjs from 'dayjs'
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { apiFetch, apiFetchWithHeaders } from '../api/client'
-import { voucherAmountPattern, VoucherEditorPage, VoucherListPage } from './VoucherPages'
+import { WorkspaceTabsProvider } from '../components/workspaceTabs'
+import { buildVoucherRequestBody, dateBelongsToPeriod, openPeriodForDate, voucherAmountPattern, VoucherEditorPage, VoucherListPage } from './VoucherPages'
 
 vi.mock('../api/client', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../api/client')>()
@@ -14,6 +16,8 @@ vi.mock('../api/client', async (importOriginal) => {
 vi.mock('../auth/AuthProvider', () => ({
   useAuth: () => ({ session: { localUserId: 'user-1', localUserName: 'admin' } }),
 }))
+
+const CurrentPath = () => <output aria-label="当前路径">{useLocation().pathname}</output>
 
 beforeAll(() => {
   const getComputedStyle = window.getComputedStyle
@@ -146,28 +150,41 @@ describe('VoucherListPage', () => {
     expect(params.get('endDate')).toBe('2026-07-31')
   })
 
-  it('shows a clear processing entry for draft vouchers', async () => {
+  it('only offers deletion for a voucher row', async () => {
     vi.mocked(apiFetchWithHeaders).mockResolvedValueOnce({ data: [{
       id: 'voucher-1', ledgerId: 'ledger-1', periodId: 'period-1', voucherDate: '2026-06-11',
       voucherType: '记', voucherNumber: '1', summary: '缴纳社保', status: 'DRAFT',
       approvalRequired: false, version: 0, lines: [],
     }], headers: new Headers({ 'X-Total-Count': '1' }) })
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    const closeTab = vi.fn()
+    queryClient.setQueryData(['voucher', 'ledger-1', 'voucher-1'], { id: 'voucher-1' })
 
     render(
       <QueryClientProvider client={queryClient}>
-        <App>
+        <WorkspaceTabsProvider value={{ closeTab }}><App>
           <MemoryRouter initialEntries={['/ledgers/ledger-1/vouchers']}>
             <Routes>
               <Route path="/ledgers/:ledgerId/vouchers" element={<VoucherListPage />} />
             </Routes>
           </MemoryRouter>
-        </App>
+        </App></WorkspaceTabsProvider>
       </QueryClientProvider>,
     )
 
-    expect(await screen.findByRole('link', { name: '继续处理' }))
-      .toHaveAttribute('href', '/ledgers/ledger-1/vouchers/voucher-1')
+    expect(await screen.findByRole('button', { name: '删除' })).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: '继续处理' })).not.toBeInTheDocument()
+    expect(screen.queryByText('状态')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '删除' }))
+    const confirmDialog = await screen.findByRole('dialog', { name: '确认删除凭证？' })
+    fireEvent.click(within(confirmDialog).getByRole('button', { name: /删\s*除/ }))
+    await waitFor(() => expect(apiFetch).toHaveBeenCalledWith(
+      '/ledgers/ledger-1/vouchers/voucher-1',
+      { localUserId: 'user-1', localUserName: 'admin' },
+      { method: 'DELETE' },
+    ))
+    expect(queryClient.getQueryData(['voucher', 'ledger-1', 'voucher-1'])).toBeUndefined()
+    expect(closeTab).toHaveBeenCalledWith('voucher-voucher-1', { discardChanges: true })
   })
 
   it('shows voucher line subjects and supports bulk posting', async () => {
@@ -308,6 +325,106 @@ describe('VoucherEditorPage', () => {
 
     expect(await screen.findByRole('heading', { name: '记账凭证' })).toBeInTheDocument()
     expect(screen.queryByLabelText('凭证号')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('凭证字')).not.toBeInTheDocument()
+    expect(screen.getByText('凭证号由系统保存时自动生成')).toBeInTheDocument()
+    expect(screen.queryByLabelText('会计期间')).not.toBeInTheDocument()
+    expect(screen.getAllByLabelText(/分录摘要$/)).toHaveLength(5)
+  })
+
+  it('keeps blank lines in the request and leaves period assignment to the server', () => {
+    const body = buildVoucherRequestBody({
+      periodId: 'client-period-must-be-ignored',
+      voucherDate: dayjs('2026-08-14'),
+      voucherType: '记',
+      lines: [
+        { accountId: 'account-1', side: 'DEBIT', currency: 'CNY', originalAmount: '100', exchangeRate: '1' },
+        { accountId: 'account-2', side: 'CREDIT', currency: 'CNY', originalAmount: '100', exchangeRate: '1' },
+        { side: 'DEBIT', currency: 'CNY', originalAmount: '', exchangeRate: '1' },
+        { side: 'DEBIT', currency: 'CNY', originalAmount: '', exchangeRate: '1' },
+        { side: 'DEBIT', currency: 'CNY', originalAmount: '', exchangeRate: '1' },
+      ],
+    }, false)
+    expect(body).not.toHaveProperty('periodId')
+    expect(body.lines).toHaveLength(5)
+    expect(body.lines.slice(0, 2).map((line: { accountId?: string }) => line.accountId)).toEqual(['account-1', 'account-2'])
+    expect(body.lines.slice(2).every((line: { accountId?: string; originalAmount: string }) => (
+      line.accountId === undefined && line.originalAmount === ''
+    ))).toBe(true)
+  })
+
+  it('keeps the current tag and updates the returned voucher id on later saves', async () => {
+    const createdVoucher = {
+      id: 'voucher-created', ledgerId: 'ledger-1', periodId: 'period-open', voucherDate: '2026-08-14',
+      voucherType: '记', voucherNumber: '1', summary: null, status: 'POSTED',
+      approvalRequired: false, version: 0, lines: [],
+    }
+    vi.mocked(apiFetch).mockImplementation((path, _session, options) => {
+      if (path.endsWith('/periods')) return Promise.resolve([{
+        id: 'period-open', ledgerId: 'ledger-1', periodCode: '2026-08',
+        startDate: '2026-08-01', endDate: '2026-08-31', status: 'OPEN',
+      }])
+      if (path.endsWith('/accounts')) return Promise.resolve([])
+      if (path.endsWith('/vouchers') && options?.method === 'POST') return Promise.resolve(createdVoucher)
+      if (path.endsWith('/vouchers/voucher-created') && options?.method === 'PUT') {
+        return Promise.resolve({ ...createdVoucher, version: 1 })
+      }
+      return Promise.resolve([])
+    })
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <App>
+          <MemoryRouter initialEntries={['/ledgers/ledger-1/vouchers/new']}>
+            <Routes><Route path="/ledgers/:ledgerId/vouchers/:voucherId" element={<><VoucherEditorPage /><CurrentPath /></>} /></Routes>
+          </MemoryRouter>
+        </App>
+      </QueryClientProvider>,
+    )
+
+    await screen.findByRole('button', { name: '保存并记账' })
+    await waitFor(() => expect(queryClient.getQueryData(['periods', 'ledger-1'])).toBeDefined())
+    fireEvent.click(screen.getByRole('button', { name: '保存并记账' }))
+    await waitFor(() => expect(vi.mocked(apiFetch).mock.calls.some(([path, , options]) => (
+      path === '/ledgers/ledger-1/vouchers' && options?.method === 'POST'
+    ))).toBe(true))
+    expect(screen.getByRole('status', { name: '当前路径' })).toHaveTextContent('/ledgers/ledger-1/vouchers/new')
+
+    expect(await screen.findByText('会计期间 2026-08（保存后不可修改）')).toBeInTheDocument()
+    expect(screen.queryByLabelText('会计期间')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '保存修改' }))
+    await waitFor(() => expect(vi.mocked(apiFetch).mock.calls.some(([path, , options]) => (
+      path === '/ledgers/ledger-1/vouchers/voucher-created' && options?.method === 'PUT'
+    ))).toBe(true))
+    const updateCall = vi.mocked(apiFetch).mock.calls.find(([path, , options]) => (
+      path === '/ledgers/ledger-1/vouchers/voucher-created' && options?.method === 'PUT'
+    ))!
+    expect(JSON.parse(String(updateCall[2]?.body))).toEqual(expect.objectContaining({
+      periodId: 'period-open', voucherNumber: '1', expectedVersion: 0,
+    }))
+    expect(screen.getByRole('status', { name: '当前路径' })).toHaveTextContent('/ledgers/ledger-1/vouchers/new')
+  })
+
+  it('maps voucher dates only to open accounting periods', () => {
+    const periods = [
+      { id: 'closed', ledgerId: 'ledger-1', periodCode: '2026-05', startDate: '2026-05-01', endDate: '2026-05-31', status: 'CLOSED' },
+      { id: 'open', ledgerId: 'ledger-1', periodCode: '2026-06', startDate: '2026-06-01', endDate: '2026-06-30', status: 'OPEN' },
+    ]
+
+    expect(openPeriodForDate(periods, dayjs('2026-06-15'))?.id).toBe('open')
+    expect(openPeriodForDate(periods, dayjs('2026-05-15'))).toBeUndefined()
+    expect(openPeriodForDate(periods, dayjs('2026-07-01'))).toBeUndefined()
+  })
+
+  it('keeps a saved voucher date inside its original accounting period', () => {
+    const period = {
+      id: 'period-1', ledgerId: 'ledger-1', periodCode: '2026-06',
+      startDate: '2026-06-01', endDate: '2026-06-30', status: 'OPEN',
+    }
+
+    expect(dateBelongsToPeriod(period, dayjs('2026-06-01'))).toBe(true)
+    expect(dateBelongsToPeriod(period, dayjs('2026-06-30'))).toBe(true)
+    expect(dateBelongsToPeriod(period, dayjs('2026-07-01'))).toBe(false)
   })
 
   it('groups debit and credit amounts into adjacent voucher columns', async () => {
@@ -389,12 +506,42 @@ describe('VoucherEditorPage', () => {
     )
 
     expect(await screen.findByText('POSTED')).toBeInTheDocument()
+    expect(screen.getByText('会计期间 2026-06（保存后不可修改）')).toBeInTheDocument()
+    expect(screen.queryByLabelText('会计期间')).not.toBeInTheDocument()
     expect(await screen.findByRole('button', { name: '保存修改' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '删除凭证' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '校验' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '记账' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '反记账' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /冲\s*销/ })).not.toBeInTheDocument()
+  })
+
+  it('does not expose editing actions before the voucher period is resolved', async () => {
+    vi.mocked(apiFetch).mockImplementation((path) => {
+      if (path.endsWith('/periods')) return new Promise(() => {})
+      if (path.endsWith('/voucher-1')) return Promise.resolve({
+        id: 'voucher-1', ledgerId: 'ledger-1', periodId: 'period-1', voucherDate: '2026-06-25',
+        voucherType: '记', voucherNumber: '6', summary: '收货款', status: 'POSTED',
+        approvalRequired: false, version: 2, lines: [],
+      })
+      return Promise.resolve([])
+    })
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <App>
+          <MemoryRouter initialEntries={['/ledgers/ledger-1/vouchers/voucher-1']}>
+            <Routes><Route path="/ledgers/:ledgerId/vouchers/:voucherId" element={<VoucherEditorPage />} /></Routes>
+          </MemoryRouter>
+        </App>
+      </QueryClientProvider>,
+    )
+
+    expect(await screen.findByText('正在读取凭证会计期间')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '保存修改' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '删除凭证' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('textbox', { name: /分录摘要/ })).not.toBeInTheDocument()
   })
 
   it('keeps a posted voucher read-only after the period is closed', async () => {
@@ -419,7 +566,9 @@ describe('VoucherEditorPage', () => {
       </QueryClientProvider>,
     )
 
-    expect(await screen.findByText('期间已结账，不能修改或删除凭证')).toBeInTheDocument()
+    expect(await screen.findByText('已结账')).toHaveAttribute('role', 'status')
+    expect(screen.queryByText('期间已结账，不能修改或删除凭证')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('已结账凭证，只读')).toHaveAttribute('inert')
     expect(screen.queryByRole('button', { name: '保存修改' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '删除凭证' })).not.toBeInTheDocument()
   })

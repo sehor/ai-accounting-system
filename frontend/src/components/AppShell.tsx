@@ -15,6 +15,7 @@ import { useAuth } from '../auth/AuthProvider'
 import { logoutOidc, isOidcConfigured } from '../auth/session'
 import { clearWorkspaceTabDirty, isWorkspaceTabDirty } from './workspaceDirty'
 import { WorkspaceTabSearchProvider } from './workspaceSearch'
+import { WorkspaceTabsProvider } from './workspaceTabs'
 
 const { Header, Sider, Content } = Layout
 const TAB_STORAGE_PREFIX = 'ai-accounting.tabs.'
@@ -168,10 +169,10 @@ export function AppShell() {
   }, [location.pathname])
 
   const go = (suffix: string) => ledgerId && navigate(`/ledgers/${ledgerId}/${suffix}`)
-  const removeTab = (tabId: string) => {
+  const removeTab = (tabId: string, options?: { discardChanges?: boolean }) => {
     const target = tabs.find((tab) => tab.id === tabId)
     if (!target?.closable) return
-    if (isWorkspaceTabDirty(tabId)
+    if (!options?.discardChanges && isWorkspaceTabDirty(tabId)
       && !window.confirm('关闭凭证标签？未保存的修改将丢失。')) return
     const index = tabs.findIndex((tab) => tab.id === tabId)
     const remaining = tabs.filter((tab) => tab.id !== tabId)
@@ -204,7 +205,7 @@ export function AppShell() {
     else navigate('/login', { replace: true })
   }
 
-  return <AntApp>
+  return <WorkspaceTabsProvider value={{ closeTab: removeTab }}><AntApp>
     <a className="skip-link" href="#workspace-content">跳到主要内容</a>
     <Layout className="app-shell">
       <Sider breakpoint="lg" collapsedWidth="0" collapsed={menuCollapsed} onCollapse={setMenuCollapsed}
@@ -270,5 +271,5 @@ export function AppShell() {
         </Content>
       </Layout>
     </Layout>
-  </AntApp>
+  </AntApp></WorkspaceTabsProvider>
 }

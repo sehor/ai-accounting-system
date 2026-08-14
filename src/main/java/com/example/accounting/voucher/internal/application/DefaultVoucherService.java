@@ -109,17 +109,18 @@ public class DefaultVoucherService implements VoucherService {
                 return find(actorId, ledgerId, existing.voucherId());
             }
         }
-        LedgerContext context = ledgerContext(ledgerId, request.periodId(), request.voucherDate());
+        LedgerContext context = createLedgerContext(ledgerId, request.periodId(), request.voucherDate());
+        UUID periodId = context.periodId();
         String voucherType = request.voucherType().trim();
         String voucherNumber = request.voucherNumber() == null || request.voucherNumber().isBlank()
-                ? vouchers.nextVoucherNumber(ledgerId, request.periodId(), voucherType)
+                ? vouchers.nextVoucherNumber(ledgerId, periodId, voucherType)
                 : request.voucherNumber().trim();
         if (sourceType == null) {
-            vouchers.createVoucher(voucherId, ledgerId, request.periodId(), request.voucherDate(),
+            vouchers.createVoucher(voucherId, ledgerId, periodId, request.voucherDate(),
                     voucherType, voucherNumber, request.summary(),
                     context.approvalRequired(), null, actorId);
         } else {
-            vouchers.createGeneratedVoucher(voucherId, ledgerId, request.periodId(), request.voucherDate(),
+            vouchers.createGeneratedVoucher(voucherId, ledgerId, periodId, request.voucherDate(),
                     voucherType, voucherNumber, request.summary(),
                     context.approvalRequired(), null, actorId, sourceType, sourceId);
         }
@@ -135,6 +136,7 @@ public class DefaultVoucherService implements VoucherService {
         requireRole(actorId, ledgerId, Set.of(LedgerRole.OWNER, LedgerRole.EDITOR));
         VoucherState state = stateWithVersion(ledgerId, voucherId);
         VoucherSnapshot before = snapshot(ledgerId, voucherId);
+        ensurePeriodUnchanged(before.periodId(), request.periodId());
         requireOpenPeriods(ledgerId, before.periodId(), request.periodId());
         LedgerContext context = ledgerContext(ledgerId, request.periodId(), request.voucherDate());
         if (!vouchers.updateVoucher(ledgerId, voucherId, request.periodId(), request.voucherDate(),
@@ -170,6 +172,7 @@ public class DefaultVoucherService implements VoucherService {
                     "The generated voucher is owned by another process");
         }
         VoucherSnapshot before = snapshot(ledgerId, voucherId);
+        ensurePeriodUnchanged(before.periodId(), request.periodId());
         requireOpenPeriods(ledgerId, before.periodId(), request.periodId());
         LedgerContext context = ledgerContext(ledgerId, request.periodId(), request.voucherDate());
         if (!vouchers.replaceGeneratedVoucher(ledgerId, voucherId, request.periodId(), request.voucherDate(),
@@ -191,8 +194,17 @@ public class DefaultVoucherService implements VoucherService {
     }
 
     private void insertLines(UUID ledgerId, UUID voucherId, LedgerContext context, List<VoucherRequests.Line> lines) {
+        List<VoucherRequests.Line> effectiveLines = lines.stream().filter(line -> !isBlankLine(line)).toList();
+        if (effectiveLines.isEmpty()) {
+            throw problem(422, "VOUCHER_LINES_REQUIRED", "Voucher lines required",
+                    "At least one completed voucher line is required");
+        }
         int lineNo = 1;
-        for (VoucherRequests.Line line : lines) {
+        for (VoucherRequests.Line line : effectiveLines) {
+            if (line.accountId() == null || line.originalAmount() == null) {
+                throw problem(422, "INVALID_VOUCHER_LINE", "Invalid voucher line",
+                        "A non-empty voucher line requires both an account and an amount");
+            }
             BigDecimal original = amount(line.originalAmount());
             BigDecimal rate = rate(line.exchangeRate());
             if (original.signum() == 0 || rate.signum() <= 0) {
@@ -217,6 +229,27 @@ public class DefaultVoucherService implements VoucherService {
                     line.summary(), cashFlowItemId, line.quantity(), line.unitPrice());
             vouchers.createLineDimensions(lineId, ledgerId, dimensions);
         }
+        ensureBalancedVoucher(ledgerId, voucherId);
+    }
+
+    private void ensureBalancedVoucher(UUID ledgerId, UUID voucherId) {
+        int lineCount = vouchers.lineCount(ledgerId, voucherId);
+        BigDecimal debit = total(ledgerId, voucherId, "DEBIT");
+        BigDecimal credit = total(ledgerId, voucherId, "CREDIT");
+        if (lineCount < 2 || debit.compareTo(credit) != 0) {
+            throw problem(422, "VOUCHER_NOT_BALANCED", "Voucher is not balanced",
+                    "A voucher needs at least two lines and equal debit and credit base amounts");
+        }
+    }
+
+    private boolean isBlankLine(VoucherRequests.Line line) {
+        return line.accountId() == null
+                && line.originalAmount() == null
+                && (line.summary() == null || line.summary().isBlank())
+                && line.cashFlowItemId() == null
+                && line.quantity() == null
+                && line.unitPrice() == null
+                && (line.dimensions() == null || line.dimensions().isEmpty());
     }
 
     private void validateLineControls(
@@ -378,13 +411,7 @@ public class DefaultVoucherService implements VoucherService {
                     "Only draft vouchers can be validated");
         }
         ensureControlsComplete(ledgerId, voucherId);
-        int lineCount = vouchers.lineCount(ledgerId, voucherId);
-        BigDecimal debit = total(ledgerId, voucherId, "DEBIT");
-        BigDecimal credit = total(ledgerId, voucherId, "CREDIT");
-        if (lineCount < 2 || debit.compareTo(credit) != 0) {
-            throw problem(422, "VOUCHER_NOT_BALANCED", "Voucher is not balanced",
-                    "A voucher needs at least two lines and equal debit and credit base amounts");
-        }
+        ensureBalancedVoucher(ledgerId, voucherId);
         VoucherSnapshot before = snapshot(ledgerId, voucherId);
         changeStatus(ledgerId, voucherId, "DRAFT", "VALIDATED", actorId);
         audit(ledgerId, voucherId, "VALIDATE", actorId, null, before, snapshot(ledgerId, voucherId));
@@ -533,6 +560,7 @@ public class DefaultVoucherService implements VoucherService {
                         "The requested voucher revision does not exist"));
         VoucherSnapshot target = fromJson(targetData);
         VoucherSnapshot before = snapshot(ledgerId, voucherId);
+        ensurePeriodUnchanged(before.periodId(), target.periodId());
         requireOpenPeriods(ledgerId, before.periodId(), target.periodId());
         ledgerContext(ledgerId, target.periodId(), target.voucherDate());
         vouchers.restoreHeader(ledgerId, voucherId, target.periodId(), target.voucherDate(), target.voucherType(),
@@ -631,6 +659,13 @@ public class DefaultVoucherService implements VoucherService {
         }
     }
 
+    private void ensurePeriodUnchanged(UUID persistedPeriodId, UUID requestedPeriodId) {
+        if (!persistedPeriodId.equals(requestedPeriodId)) {
+            throw problem(422, "VOUCHER_PERIOD_IMMUTABLE", "Voucher period is immutable",
+                    "A saved voucher cannot be moved to another accounting period");
+        }
+    }
+
     private void changeStatus(UUID ledgerId, UUID voucherId, String expected, String next, UUID actorId) {
         if (!vouchers.changeStatus(ledgerId, voucherId, expected, next, actorId)) {
             throw problem(409, "VOUCHER_STATE_INVALID", "Invalid voucher state", "The voucher state has changed");
@@ -674,6 +709,7 @@ public class DefaultVoucherService implements VoucherService {
                             dimension.dimensionTypeId(), dimension.dimensionValueId()))
                     .toList());
         }
+        ensureBalancedVoucher(ledgerId, voucherId);
     }
 
     private String toJson(VoucherSnapshot snapshot) {
@@ -710,6 +746,25 @@ public class DefaultVoucherService implements VoucherService {
             throw problem(422, "INVALID_VOUCHER_PERIOD", "Invalid voucher period",
                     "The voucher date must be inside an open period");
         }
+        return context;
+    }
+
+    private LedgerContext createLedgerContext(UUID ledgerId, UUID requestedPeriodId, LocalDate voucherDate) {
+        List<LedgerContext> matches = vouchers.findLedgerContextsByDate(ledgerId, voucherDate);
+        if (matches.isEmpty()) {
+            throw problem(422, "VOUCHER_PERIOD_NOT_FOUND", "Voucher period not found",
+                    "No accounting period contains the voucher date");
+        }
+        if (matches.size() > 1) {
+            throw problem(409, "ACCOUNTING_PERIOD_DATE_OVERLAP", "Accounting period configuration conflict",
+                    "More than one accounting period contains the voucher date");
+        }
+        LedgerContext context = matches.getFirst();
+        if (requestedPeriodId != null && !requestedPeriodId.equals(context.periodId())) {
+            throw problem(422, "VOUCHER_PERIOD_DATE_MISMATCH", "Voucher period does not match date",
+                    "The supplied period does not contain the voucher date");
+        }
+        balanceProjection.requireOpenPeriod(ledgerId, context.periodId());
         return context;
     }
 

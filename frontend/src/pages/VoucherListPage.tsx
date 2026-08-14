@@ -1,6 +1,6 @@
 import { DownloadOutlined, PlusOutlined, UploadOutlined } from '@ant-design/icons'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Alert, App as AntApp, Button, Card, Checkbox, Empty, Input, Modal, Pagination, Space, Table, Tag, Typography, Upload } from 'antd'
+import { Alert, App as AntApp, Button, Card, Checkbox, Empty, Input, Modal, Pagination, Space, Table, Typography, Upload } from 'antd'
 import { useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { ApiError, apiFetch, apiFetchWithHeaders, createIdempotencyKey, jsonBody } from '../api/client'
@@ -8,6 +8,7 @@ import type { Account, KingdeeImportResult, Voucher, VoucherLine } from '../api/
 import { useAuth } from '../auth/AuthProvider'
 import { PeriodRangeSelector, usePeriodRangeFilter } from '../components/PeriodSelector'
 import { useWorkspaceSearchParams } from '../components/workspaceSearch'
+import { useWorkspaceTabs } from '../components/workspaceTabs'
 
 type DisplayRow = {
   key: string
@@ -17,14 +18,6 @@ type DisplayRow = {
   lineCount: number
 }
 
-const statusLabel = (status: string) => ({
-  DRAFT: '草稿', VALIDATED: '已校验', SUBMITTED: '待审核', APPROVED: '已审核',
-  POSTED: '已记账', DELETED: '已删除',
-}[status] || status)
-const statusColor = (status: string) => ({
-  DRAFT: 'default', VALIDATED: 'blue', SUBMITTED: 'orange', APPROVED: 'cyan',
-  POSTED: 'green', DELETED: 'red',
-}[status] || 'default')
 const amount = (value?: string) => value
   ? Number(value).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
   : ''
@@ -39,7 +32,8 @@ export function VoucherListPage() {
   const { session } = useAuth()
   const navigate = useNavigate()
   const client = useQueryClient()
-  const { message } = AntApp.useApp()
+  const { closeTab } = useWorkspaceTabs()
+  const { message, modal } = AntApp.useApp()
   const [search, setSearch] = useWorkspaceSearchParams()
   const { periods, periodFrom, periodTo, setPeriodRange } = usePeriodRangeFilter(ledgerId)
   const limit = Number(search.get('limit') || 20)
@@ -155,6 +149,19 @@ export function VoucherListPage() {
     },
     onError: (error) => message.error(error instanceof ApiError ? error.message : '金蝶凭证导出失败'),
   })
+  const removeVoucher = useMutation({
+    mutationFn: (voucher: Voucher) => apiFetch<void>(
+      `/ledgers/${ledgerId}/vouchers/${voucher.id}`, session!, { method: 'DELETE' },
+    ),
+    onSuccess: (_, voucher) => {
+      setSelectedKeys((current) => current.filter((key) => key !== voucher.id))
+      client.removeQueries({ queryKey: ['voucher', ledgerId, voucher.id], exact: true })
+      closeTab(`voucher-${voucher.id}`, { discardChanges: true })
+      message.success(`凭证 ${voucher.voucherType}-${voucher.voucherNumber} 删除成功`)
+      void client.invalidateQueries({ queryKey: ['vouchers', ledgerId] })
+    },
+    onError: (error) => message.error(error instanceof ApiError ? error.message : '删除凭证失败'),
+  })
 
   const accountLabel = (accountId?: string) => {
     if (!accountId) return '—'
@@ -162,6 +169,18 @@ export function VoucherListPage() {
     return account ? `${account.code} ${account.name}` : accountId
   }
   const mergedCell = (row: DisplayRow) => ({ rowSpan: row.lineIndex === 0 ? row.lineCount : 0 })
+  const mergedTopCell = (row: DisplayRow) => ({
+    rowSpan: row.lineIndex === 0 ? row.lineCount : 0,
+    style: { verticalAlign: 'top' },
+  })
+  const confirmRemove = (voucher: Voucher) => modal.confirm({
+    title: '确认删除凭证？',
+    content: `将删除凭证 ${voucher.voucherType}-${voucher.voucherNumber}，此操作不可撤销。`,
+    okText: '删除',
+    okButtonProps: { danger: true },
+    cancelText: '取消',
+    onOk: () => removeVoucher.mutateAsync(voucher),
+  })
   const toggleVoucher = (voucherId: string, checked: boolean) => setSelectedKeys((current) => checked
     ? [...new Set([...current, voucherId])]
     : current.filter((key) => key !== voucherId))
@@ -237,18 +256,17 @@ export function VoucherListPage() {
               onChange={(event) => selectAll(event.target.checked)} />, width: 44, align: 'center', onCell: mergedCell,
             render: (_, row) => row.lineIndex === 0 ? <Checkbox aria-label={`选择凭证 ${row.voucher.voucherType}-${row.voucher.voucherNumber}`}
               checked={selectedKeys.includes(row.voucher.id)} onChange={(event) => toggleVoucher(row.voucher.id, event.target.checked)} /> : null },
-          { title: '日期', width: 110, onCell: mergedCell, render: (_, row) => row.lineIndex === 0 ? row.voucher.voucherDate : null },
-          { title: '凭证字号', width: 110, onCell: mergedCell, render: (_, row) => row.lineIndex === 0
+          { title: '日期', width: 110, onCell: mergedTopCell, render: (_, row) => row.lineIndex === 0 ? row.voucher.voucherDate : null },
+          { title: '凭证字号', width: 110, onCell: mergedTopCell, render: (_, row) => row.lineIndex === 0
             ? <Link to={`/ledgers/${ledgerId}/vouchers/${row.voucher.id}`}>{row.voucher.voucherType}-{row.voucher.voucherNumber}</Link>
             : null },
           { title: '摘要', width: 260, render: (_, row) => row.line?.summary || row.voucher.summary || '—' },
           { title: '科目', width: 360, render: (_, row) => accountLabel(row.line?.accountId) },
           { title: '借方金额', width: 140, align: 'right', render: (_, row) => row.line?.side === 'DEBIT' ? amount(row.line.baseAmount) : '' },
           { title: '贷方金额', width: 140, align: 'right', render: (_, row) => row.line?.side === 'CREDIT' ? amount(row.line.baseAmount) : '' },
-          { title: '状态', width: 100, onCell: mergedCell, render: (_, row) => row.lineIndex === 0
-            ? <Tag color={statusColor(row.voucher.status)}>{statusLabel(row.voucher.status)}</Tag> : null },
           { title: '操作', width: 100, fixed: 'right', onCell: mergedCell, render: (_, row) => row.lineIndex === 0
-            ? <Link to={`/ledgers/${ledgerId}/vouchers/${row.voucher.id}`}>{row.voucher.status === 'SUBMITTED' ? '审核处理' : ['DRAFT', 'VALIDATED', 'APPROVED'].includes(row.voucher.status) ? '继续处理' : '查看详情'}</Link>
+            ? <Button type="link" danger loading={removeVoucher.isPending && removeVoucher.variables?.id === row.voucher.id}
+                onClick={() => confirmRemove(row.voucher)}>删除</Button>
             : null },
         ]}
       />
