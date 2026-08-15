@@ -28,6 +28,10 @@ public interface ReportingRepository {
     List<ReportResponses.TrialBalanceLine> statutoryTrialBalance(
             UUID ledgerId, PeriodRange range, boolean includeParents);
 
+    /** Leaf-only statutory source joined to the ledger's stable standard-account mapping. */
+    List<StatutoryAccountAmount> statutoryAccountAmounts(
+            UUID ledgerId, PeriodRange range, boolean operatingActivity);
+
     List<ReportResponses.LedgerLine> ledgerLines(UUID ledgerId, String periodCode);
 
     boolean periodExists(UUID ledgerId, String periodCode);
@@ -89,6 +93,13 @@ public interface ReportingRepository {
         public DimensionBalanceRow {
             dimensions = dimensions == null ? List.of() : List.copyOf(dimensions);
         }
+    }
+
+    record StatutoryAccountAmount(
+            UUID accountId, String accountCode, String standardAccountKey,
+            BigDecimal openingDebit, BigDecimal openingCredit,
+            BigDecimal periodDebit, BigDecimal periodCredit,
+            BigDecimal closingDebit, BigDecimal closingCredit) {
     }
 
     record DimensionTypeInfo(UUID id, String code, String name) {

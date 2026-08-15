@@ -112,6 +112,10 @@ class LedgerBackupServiceTest {
         List<UUID> sourceAccounts = ids("ledger_account", sourceId);
         List<UUID> restoredAccounts = ids("ledger_account", restored.id());
         assertThat(restoredAccounts).doesNotContainAnyElementsOf(sourceAccounts);
+        assertThat(jdbc.queryForObject("""
+                select count(*) from ledger_account
+                where ledger_id = ? and standard_account_key is null
+                """, Integer.class, restored.id())).isZero();
         assertThat(jdbc.queryForObject("select title from accounting_experience where ledger_id = ?",
                 String.class, restored.id())).isEqualTo("账套经验");
         assertThat(jdbc.queryForMap("""

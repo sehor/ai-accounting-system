@@ -31,6 +31,7 @@ public final class LedgerResponses {
             UUID ledgerId,
             String code,
             String name,
+            String standardAccountKey,
             String category,
             String normalBalance,
             String status,
@@ -51,14 +52,33 @@ public final class LedgerResponses {
 
         public Account(UUID id, UUID ledgerId, String code, String name, String category,
                        String normalBalance, String status) {
-            this(id, ledgerId, code, name, category, normalBalance, status, null, 1,
+            this(id, ledgerId, code, name, null, category, normalBalance, status, null, 1,
                     true, false, false, false, false, 0, false, null, false, null, List.of(), null);
         }
 
         public Account(UUID id, UUID ledgerId, String code, String name, String category,
                        String normalBalance, String status, OffsetDateTime createdAt) {
-            this(id, ledgerId, code, name, category, normalBalance, status, null, 1,
+            this(id, ledgerId, code, name, null, category, normalBalance, status, null, 1,
                     true, false, false, false, false, 0, false, null, false, null, List.of(), createdAt);
+        }
+
+        public Account(UUID id, UUID ledgerId, String code, String name, String standardAccountKey,
+                       String category, String normalBalance, String status, OffsetDateTime createdAt) {
+            this(id, ledgerId, code, name, standardAccountKey, category, normalBalance, status, null, 1,
+                    true, false, false, false, false, 0, false, null, false, null, List.of(), createdAt);
+        }
+
+        public Account(UUID id, UUID ledgerId, String code, String name, String category,
+                       String normalBalance, String status, UUID parentId, int level,
+                       boolean isLeaf, boolean isTemplate, boolean hasBusinessUsage,
+                       boolean coreLocked, boolean legacyCode, long version,
+                       boolean cashFlowRequired, UUID defaultCashFlowItemId,
+                       boolean quantityEnabled, String unitName,
+                       List<DimensionRequirement> dimensionRequirements, OffsetDateTime createdAt) {
+            this(id, ledgerId, code, name, null, category, normalBalance, status, parentId, level,
+                    isLeaf, isTemplate, hasBusinessUsage, coreLocked, legacyCode, version,
+                    cashFlowRequired, defaultCashFlowItemId, quantityEnabled, unitName,
+                    dimensionRequirements, createdAt);
         }
     }
 

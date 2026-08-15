@@ -203,21 +203,25 @@ public class LedgerController {
     public List<LedgerResponses.OpeningBalance> replaceOpeningBalances(HttpServletRequest request,
                                                                          @PathVariable UUID ledgerId,
                                                                          @Valid @RequestBody LedgerRequests.OpeningBalances body) {
-        return ledgerService.replaceOpeningBalances(user(request), ledgerId, body.lines());
+        return ledgerService.replaceOpeningBalances(user(request), ledgerId, body.lines(), body.reason());
     }
 
     @PostMapping(value = "/{ledgerId}/opening-balances:import-csv", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public List<LedgerResponses.OpeningBalance> importOpeningBalances(HttpServletRequest request,
                                                                         @PathVariable UUID ledgerId,
-                                                                        @RequestPart("file") MultipartFile file)
+                                                                        @RequestPart("file") MultipartFile file,
+                                                                        @RequestPart(value = "reason", required = false) String reason)
             throws java.io.IOException {
-        return ledgerService.importOpeningBalances(user(request), ledgerId, file.getInputStream());
+        return ledgerService.importOpeningBalances(user(request), ledgerId, file.getInputStream(), reason);
     }
 
     @PostMapping("/{ledgerId}/opening-balances:confirm")
     public java.util.Map<String, Integer> confirmOpeningBalances(HttpServletRequest request,
-                                                                  @PathVariable UUID ledgerId) {
-        return java.util.Map.of("confirmedCount", ledgerService.confirmOpeningBalances(user(request), ledgerId));
+                                                                  @PathVariable UUID ledgerId,
+                                                                  @org.springframework.web.bind.annotation.RequestParam(
+                                                                          required = false) String reason) {
+        return java.util.Map.of("confirmedCount",
+                ledgerService.confirmOpeningBalances(user(request), ledgerId, reason));
     }
 
     @PostMapping("/{ledgerId}/members")

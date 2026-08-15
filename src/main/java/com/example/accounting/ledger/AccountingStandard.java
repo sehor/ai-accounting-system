@@ -15,6 +15,7 @@ public final class AccountingStandard {
             String name,
             LocalDate effectiveDate,
             AccountCodeRule accountCodeRule,
+            List<StandardAccountKey> standardAccountKeys,
             List<Account> accounts,
             List<Formula> formulas,
             List<CashFlowItem> cashFlowItems,
@@ -27,6 +28,7 @@ public final class AccountingStandard {
 
     public record Account(
             String code,
+            String standardAccountKey,
             String name,
             String parentCode,
             String category,
@@ -34,6 +36,9 @@ public final class AccountingStandard {
             boolean cashFlowRequired,
             boolean quantityEnabled,
             String unitName) {
+    }
+
+    public record StandardAccountKey(String key, List<String> legacyCodes) {
     }
 
     public record Formula(String code, String name, JsonNode definition) {

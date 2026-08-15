@@ -10,7 +10,6 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.example.accounting.fixedasset.internal.application.AuditSnapshotSerializer;
 import com.example.accounting.fixedasset.internal.application.DefaultFixedAssetService;
 import com.example.accounting.fixedasset.internal.port.FixedAssetRepository;
 import com.example.accounting.fixedasset.internal.port.FixedAssetRepository.AssetRecord;
@@ -20,6 +19,7 @@ import com.example.accounting.ledger.LedgerResponses;
 import com.example.accounting.ledger.LedgerRole;
 import com.example.accounting.ledger.LedgerService;
 import com.example.accounting.shared.web.ApiProblemException;
+import com.example.accounting.shared.audit.AuditSnapshotSerializer;
 import com.example.accounting.voucher.GeneratedVoucherCommandService;
 import com.example.accounting.voucher.VoucherService;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -109,7 +109,7 @@ class DefaultFixedAssetServiceAuditSnapshotTest {
     private void assertSerializationFailureRollsBack(int failingCall) {
         AuditSnapshotSerializer serializer = mock(AuditSnapshotSerializer.class);
         AtomicInteger calls = new AtomicInteger();
-        when(serializer.serialize(any())).thenAnswer(invocation -> {
+        when(serializer.serialize(any(), any(), any(), any())).thenAnswer(invocation -> {
             if (calls.incrementAndGet() == failingCall) {
                 throw snapshotFailure();
             }

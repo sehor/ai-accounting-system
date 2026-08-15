@@ -32,6 +32,7 @@ Object.defineProperty(window, 'matchMedia', {
 function account(id: string, name: string, createdAt: string, overrides: Partial<Account> = {}): Account {
   return {
     id, ledgerId: 'ledger-1', code: id, name, category: 'CURRENT_ASSET', normalBalance: 'DEBIT', status: 'ACTIVE',
+    standardAccountKey: 'ASSET.CASH',
     parentId: null, level: 1, isLeaf: true, isTemplate: false, hasBusinessUsage: false, coreLocked: false,
     legacyCode: false, version: 0, cashFlowRequired: false, defaultCashFlowItemId: null,
     quantityEnabled: false, unitName: null, dimensionRequirements: [], createdAt, ...overrides,
@@ -39,6 +40,45 @@ function account(id: string, name: string, createdAt: string, overrides: Partial
 }
 
 describe('AccountsTab account form', () => {
+  it('submits an allowed stable key when creating a top-level account', async () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    render(
+      <QueryClientProvider client={queryClient}>
+        <App>
+          <AccountsTab
+            ledgerId="ledger-1"
+            session={{ localUserId: 'user-1', localUserName: 'admin' }}
+            accounts={[account('1001', 'Cash', '2026-01-01T00:00:00+08:00', { isTemplate: true })]}
+            dimensionTypes={[]}
+            periods={[]}
+            loading={false}
+            writable
+            category="CURRENT_ASSET"
+            onChanged={() => {}}
+          />
+        </App>
+      </QueryClientProvider>,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: /新增一级科目/ }))
+    fireEvent.change(screen.getByLabelText('科目编码'), { target: { value: '1999' } })
+    fireEvent.change(screen.getByLabelText('科目名称'), { target: { value: 'Custom cash' } })
+    fireEvent.mouseDown(screen.getByRole('combobox', { name: '法定报表归类' }))
+    fireEvent.click(await screen.findByText(/ASSET.CASH/))
+    fireEvent.mouseDown(screen.getByRole('combobox', { name: '余额方向' }))
+    fireEvent.click(await screen.findByText('借'))
+    fireEvent.click(screen.getByRole('button', { name: 'OK' }))
+
+    await waitFor(() => expect(apiFetch).toHaveBeenCalledWith(
+      '/ledgers/ledger-1/accounts',
+      { localUserId: 'user-1', localUserName: 'admin' },
+      expect.objectContaining({
+        method: 'POST',
+        body: expect.objectContaining({ standardAccountKey: 'ASSET.CASH' }),
+      }),
+    ))
+  })
+
   it('does not warn when reopening the account form', async () => {
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
     const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {})

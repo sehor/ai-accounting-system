@@ -42,6 +42,7 @@ class AccountManagementIntegrationTest {
                         false, null, false, null, List.of()));
         assertThat(child.parentId()).isEqualTo(bank.id());
         assertThat(child.level()).isEqualTo(2);
+        assertThat(child.standardAccountKey()).isEqualTo("ASSET.BANK_DEPOSIT");
         assertThat(ledgers.findAccount(owner, ledgerId, bank.id()).isLeaf()).isFalse();
 
         assertProblem("ACCOUNT_CODE_RULE_LOCKED", () -> ledgers.updateAccountCodeRule(
@@ -54,6 +55,7 @@ class AccountManagementIntegrationTest {
         LedgerResponses.Account renamed = ledgers.updateAccount(owner, ledgerId, child.id(),
                 new LedgerRequests.AccountPatch(child.version(), null, "人民币基本户", null,
                         null, null, null, null, null, null, null, null));
+        assertThat(renamed.standardAccountKey()).isEqualTo("ASSET.BANK_DEPOSIT");
         assertThat(renamed.name()).isEqualTo("人民币基本户");
         assertProblem("ACCOUNT_VERSION_CONFLICT", () -> ledgers.updateAccount(
                 owner, ledgerId, child.id(), new LedgerRequests.AccountPatch(

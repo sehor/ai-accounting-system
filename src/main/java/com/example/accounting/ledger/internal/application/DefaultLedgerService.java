@@ -18,6 +18,7 @@ import com.example.accounting.ledger.LedgerService;
 import com.example.accounting.ledger.MembershipStatus;
 import com.example.accounting.ledger.PeriodCloseGuard;
 import com.example.accounting.shared.balance.BalanceProjectionService;
+import com.example.accounting.shared.audit.AuditSnapshotSerializer;
 import com.example.accounting.shared.accounting.DimensionCombinationKey;
 import com.example.accounting.shared.accounting.DimensionCombinationStore;
 import com.example.accounting.ledger.internal.persistence.AccountManagementRepository;
@@ -71,6 +72,7 @@ public class DefaultLedgerService implements LedgerService {
     private final PlatformAdminPolicy platformAdmin;
     private final BalanceProjectionService balanceProjection;
     private final DimensionCombinationStore dimensionCombinations;
+    private final AuditSnapshotSerializer auditSnapshots;
     private final ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
 
     @Autowired
@@ -80,7 +82,8 @@ public class DefaultLedgerService implements LedgerService {
                                 LocalSuperAgentPolicy localSuperAgent,
                                 PlatformAdminPolicy platformAdmin,
                                 BalanceProjectionService balanceProjection,
-                                DimensionCombinationStore dimensionCombinations) {
+                                DimensionCombinationStore dimensionCombinations,
+                                AuditSnapshotSerializer auditSnapshots) {
         this.ledgers = ledgers;
         this.accounts = accounts;
         this.ledgerAccess = ledgerAccess;
@@ -91,6 +94,17 @@ public class DefaultLedgerService implements LedgerService {
         this.platformAdmin = platformAdmin;
         this.balanceProjection = balanceProjection;
         this.dimensionCombinations = dimensionCombinations;
+        this.auditSnapshots = auditSnapshots;
+    }
+
+    public DefaultLedgerService(LedgerRepository ledgers, AccountManagementRepository accounts,
+                                LedgerAccessService ledgerAccess, IdentityService identityService,
+                                AccountingStandardCatalog standards, ObjectProvider<PeriodCloseGuard> periodCloseGuard,
+                                LocalSuperAgentPolicy localSuperAgent, PlatformAdminPolicy platformAdmin,
+                                BalanceProjectionService balanceProjection,
+                                DimensionCombinationStore dimensionCombinations) {
+        this(ledgers, accounts, ledgerAccess, identityService, standards, periodCloseGuard, localSuperAgent,
+                platformAdmin, balanceProjection, dimensionCombinations, new AuditSnapshotSerializer());
     }
 
     @Override
@@ -512,9 +526,24 @@ public class DefaultLedgerService implements LedgerService {
     @Transactional
     public List<LedgerResponses.OpeningBalance> replaceOpeningBalances(
             UUID actorId, UUID ledgerId, List<LedgerRequests.OpeningBalanceLine> lines) {
+        return replaceOpeningBalances(actorId, ledgerId, lines, null);
+    }
+
+    @Override
+    @Transactional
+    public List<LedgerResponses.OpeningBalance> replaceOpeningBalances(
+            UUID actorId, UUID ledgerId, List<LedgerRequests.OpeningBalanceLine> lines, String reason) {
+        return replaceOpeningBalances(actorId, ledgerId, lines, "REPLACE",
+                normalizeOpeningAuditReason(reason, "Opening balances replaced"));
+    }
+
+    private List<LedgerResponses.OpeningBalance> replaceOpeningBalances(
+            UUID actorId, UUID ledgerId, List<LedgerRequests.OpeningBalanceLine> lines,
+            String operation, String reason) {
         requireRole(actorId, ledgerId, WRITE_ROLES);
         ledgers.lockLedger(ledgerId);
         requireRole(actorId, ledgerId, WRITE_ROLES);
+        List<LedgerResponses.OpeningBalance> before = ledgers.listOpeningBalances(ledgerId);
         if (ledgers.hasConfirmedOpeningBalances(ledgerId)) {
             throw confirmedOpeningBalance();
         }
@@ -541,15 +570,24 @@ public class DefaultLedgerService implements LedgerService {
                     .orElseThrow(this::confirmedOpeningBalance);
             ledgers.replaceOpeningBalanceDimensions(ledgerId, openingBalanceId, dimensions);
         }
-        return ledgers.listOpeningBalances(ledgerId);
+        List<LedgerResponses.OpeningBalance> after = ledgers.listOpeningBalances(ledgerId);
+        recordOpeningBalanceRevision(ledgerId, actorId, operation, reason, before, after);
+        return after;
     }
 
     @Override
     @Transactional
     public int confirmOpeningBalances(UUID actorId, UUID ledgerId) {
+        return confirmOpeningBalances(actorId, ledgerId, null);
+    }
+
+    @Override
+    @Transactional
+    public int confirmOpeningBalances(UUID actorId, UUID ledgerId, String reason) {
         requireRole(actorId, ledgerId, WRITE_ROLES);
         ledgers.lockLedger(ledgerId);
         requireRole(actorId, ledgerId, WRITE_ROLES);
+        List<LedgerResponses.OpeningBalance> before = ledgers.listOpeningBalances(ledgerId);
         LedgerRepository.OpeningTotals totals = ledgers.openingTotals(ledgerId);
         if (totals.debit().compareTo(totals.credit()) != 0) {
             throw problem(422, "OPENING_BALANCE_UNBALANCED", "Opening balance is not balanced",
@@ -567,6 +605,9 @@ public class DefaultLedgerService implements LedgerService {
                                             BigDecimal.ZERO,
                                             BigDecimal.ZERO)))));
         }
+        List<LedgerResponses.OpeningBalance> after = ledgers.listOpeningBalances(ledgerId);
+        recordOpeningBalanceRevision(ledgerId, actorId, "CONFIRM",
+                normalizeOpeningAuditReason(reason, "Opening balances confirmed"), before, after);
         return confirmed;
     }
 
@@ -574,6 +615,13 @@ public class DefaultLedgerService implements LedgerService {
     @Transactional
     public List<LedgerResponses.OpeningBalance> importOpeningBalances(
             UUID actorId, UUID ledgerId, InputStream input) {
+        return importOpeningBalances(actorId, ledgerId, input, null);
+    }
+
+    @Override
+    @Transactional
+    public List<LedgerResponses.OpeningBalance> importOpeningBalances(
+            UUID actorId, UUID ledgerId, InputStream input, String reason) {
         requireRole(actorId, ledgerId, WRITE_ROLES);
         List<LedgerRequests.OpeningBalanceLine> lines = new ArrayList<>();
         try (BufferedReader reader = new BufferedReader(new InputStreamReader(input, StandardCharsets.UTF_8))) {
@@ -616,7 +664,37 @@ public class DefaultLedgerService implements LedgerService {
         } catch (IOException exception) {
             throw problem(422, "OPENING_BALANCE_CSV_INVALID", "Invalid CSV", "The CSV could not be read");
         }
-        return replaceOpeningBalances(actorId, ledgerId, lines);
+        return replaceOpeningBalances(actorId, ledgerId, lines, "IMPORT",
+                normalizeOpeningAuditReason(reason, "Opening balances imported"));
+    }
+
+    private void recordOpeningBalanceRevision(
+            UUID ledgerId, UUID actorId, String operation, String reason,
+            List<LedgerResponses.OpeningBalance> before, List<LedgerResponses.OpeningBalance> after) {
+        OpeningBalanceAuditSnapshot beforeSnapshot = new OpeningBalanceAuditSnapshot(
+                ledgerId, actorId, operation, reason, allConfirmed(before), before);
+        OpeningBalanceAuditSnapshot afterSnapshot = new OpeningBalanceAuditSnapshot(
+                ledgerId, actorId, operation, reason, allConfirmed(after), after);
+        ledgers.recordOpeningBalanceRevision(ledgerId, operation, actorId, reason,
+                auditSnapshots.serialize(beforeSnapshot), auditSnapshots.serialize(afterSnapshot));
+    }
+
+    private boolean allConfirmed(List<LedgerResponses.OpeningBalance> balances) {
+        return !balances.isEmpty() && balances.stream().allMatch(LedgerResponses.OpeningBalance::confirmed);
+    }
+
+    private String normalizeOpeningAuditReason(String reason, String defaultReason) {
+        String normalized = reason == null || reason.isBlank() ? defaultReason : reason.trim();
+        if (normalized.length() > 1000) {
+            throw problem(422, "OPENING_BALANCE_REASON_INVALID", "Opening balance reason is invalid",
+                    "Opening balance reason must contain at most 1000 characters");
+        }
+        return normalized;
+    }
+
+    private record OpeningBalanceAuditSnapshot(
+            UUID ledgerId, UUID actorId, String operation, String reason,
+            boolean confirmed, List<LedgerResponses.OpeningBalance> balances) {
     }
 
     @Override
@@ -865,6 +943,8 @@ public class DefaultLedgerService implements LedgerService {
         ParentResolution parent = resolveParent(
                 ledgerId, null, code, request.parentId(), category);
         category = parent.category();
+        String standardAccountKey = resolveStandardAccountKey(
+                ledgerId, parent.parentId(), request.standardAccountKey());
         validateAccountValues(ledgerId, code, name, category, normalBalance, cashFlowRequired,
                 request.defaultCashFlowItemId(), quantityEnabled, unitName,
                 request.dimensionRequirements());
@@ -884,7 +964,7 @@ public class DefaultLedgerService implements LedgerService {
             if (idempotent) {
                 boolean inserted = accounts.createIfAbsent(
                         accountId, ledgerId, code, name, category, normalBalance,
-                        parent.parentId(), parent.level());
+                        standardAccountKey, parent.parentId(), parent.level());
                 if (!inserted) {
                     return accounts.findByCode(ledgerId, code).orElseThrow();
                 }
@@ -894,7 +974,7 @@ public class DefaultLedgerService implements LedgerService {
                             "The account code already exists");
                 }
                 accounts.create(accountId, ledgerId, code, name, category, normalBalance,
-                        parent.parentId(), parent.level(), false, cashFlowRequired,
+                        standardAccountKey, parent.parentId(), parent.level(), false, cashFlowRequired,
                         request.defaultCashFlowItemId(), quantityEnabled,
                         quantityEnabled ? unitName : null);
             }
@@ -937,6 +1017,29 @@ public class DefaultLedgerService implements LedgerService {
         return new ParentResolution(parent.id(), level, parent.category());
     }
 
+    private String resolveStandardAccountKey(UUID ledgerId, UUID parentId, String requestedKey) {
+        String normalized = requestedKey == null ? null : requestedKey.trim();
+        if (parentId != null) {
+            String inherited = requireAccount(ledgerId, parentId).standardAccountKey();
+            if (inherited == null) {
+                throw problem(422, "ACCOUNT_STANDARD_MAPPING_REQUIRED", "Account mapping required",
+                        "A custom child requires a mapped parent account");
+            }
+            if (normalized != null && !normalized.equals(inherited)) {
+                throw accountInvalid("A child must inherit its parent's standard account key");
+            }
+            return inherited;
+        }
+        LedgerResponses.Ledger ledger = requireLedger(ledgerId);
+        if (normalized == null || normalized.isBlank()
+                || !standards.containsStandardAccountKey(
+                        ledger.accountingStandardCode(), ledger.accountingStandardVersion(), normalized)) {
+            throw problem(422, "ACCOUNT_STANDARD_MAPPING_REQUIRED", "Account mapping required",
+                    "A custom top-level account requires an allowed standard account key");
+        }
+        return normalized;
+    }
+
     private void validateAccountValues(
             UUID ledgerId, String code, String name, String category, String normalBalance,
             boolean cashFlowRequired, UUID defaultCashFlowItemId, boolean quantityEnabled,
@@ -970,7 +1073,7 @@ public class DefaultLedgerService implements LedgerService {
                         account -> standard.accountCodeRule().levelOf(account.code())))
                 .forEach(account -> accounts.create(
                         accountIds.get(account.code()), ledgerId, account.code(), account.name(),
-                        account.category(), account.normalBalance(),
+                        account.category(), account.normalBalance(), account.standardAccountKey(),
                         account.parentCode() == null ? null : accountIds.get(account.parentCode()),
                         standard.accountCodeRule().levelOf(account.code()), true,
                         account.cashFlowRequired(), null, account.quantityEnabled(),

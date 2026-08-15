@@ -188,6 +188,26 @@ public class JdbcPeriodClosingRepository implements PeriodClosingRepository {
     }
 
     @Override
+    public Optional<StepRecord> stepForUpdate(UUID ledgerId, UUID periodId, PeriodClosingStepType type) {
+        return Optional.ofNullable(jdbc.query("""
+                select id, ledger_id, period_id, step_type, status, amount, input_fingerprint,
+                    voucher_id, blocker_code, blocker_detail, updated_at
+                from period_closing_step where ledger_id = ? and period_id = ? and step_type = ?
+                for update
+                """, rs -> rs.next() ? mapStep(rs) : null, ledgerId, periodId, type.name()));
+    }
+
+    @Override
+    public StepRecord ensureStep(UUID id, UUID ledgerId, UUID periodId, PeriodClosingStepType type) {
+        jdbc.update("""
+                insert into period_closing_step (id, ledger_id, period_id, step_type, status, amount)
+                values (?, ?, ?, ?, 'PENDING', 0)
+                on conflict (ledger_id, period_id, step_type) do nothing
+                """, id, ledgerId, periodId, type.name());
+        return stepForUpdate(ledgerId, periodId, type).orElseThrow();
+    }
+
+    @Override
     public String baseCurrency(UUID ledgerId) {
         return jdbc.queryForObject("select base_currency from ledger where id = ?", String.class, ledgerId);
     }
@@ -235,6 +255,16 @@ public class JdbcPeriodClosingRepository implements PeriodClosingRepository {
                 rs.getBigDecimal("opening_debit"), rs.getBigDecimal("opening_credit"),
                 rs.getBigDecimal("period_debit"), rs.getBigDecimal("period_credit")),
                 ledgerId, ledgerId, periodCode, ledgerId, periodCode);
+    }
+
+    @Override
+    public Optional<UUID> depreciationRunId(UUID ledgerId, UUID periodId, UUID voucherId) {
+        return Optional.ofNullable(jdbc.query("""
+                select id from fixed_asset_depreciation_run
+                where ledger_id = ? and period_id = ? and voucher_id = ?
+                  and run_type = 'MONTH_END' and status = 'POSTED'
+                """, rs -> rs.next() ? rs.getObject("id", UUID.class) : null,
+                ledgerId, periodId, voucherId));
     }
 
     private StepRecord mapStep(java.sql.ResultSet rs) throws java.sql.SQLException {

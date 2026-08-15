@@ -159,20 +159,26 @@ public class DefaultReportingService implements ReportingService {
             throw problem(404, "PERIOD_NOT_FOUND", "Period not found",
                     "No accounting period is available in the selected year");
         }
-        List<ReportResponses.TrialBalanceLine> primary;
-        List<ReportResponses.TrialBalanceLine> comparative;
+        List<ReportingRepository.StatutoryAccountAmount> primary;
+        List<ReportingRepository.StatutoryAccountAmount> comparative;
         if ("income-statement".equals(reportType)) {
             PeriodRange yearToDate = new PeriodRange(firstPeriod, periodCode);
             requireStatutoryProjection(ledgerId, yearToDate);
             requireStatutoryProjection(ledgerId, selected);
-            primary = reports.incomeStatementTrialBalance(ledgerId, yearToDate, true);
-            comparative = reports.incomeStatementTrialBalance(ledgerId, selected, true);
+            primary = reports.statutoryAccountAmounts(ledgerId, yearToDate, true);
+            comparative = reports.statutoryAccountAmounts(ledgerId, selected, true);
+            requireStatutoryMappings(primary);
+            requireStatutoryMappings(comparative);
         } else {
             PeriodRange openingPeriod = PeriodRange.single(firstPeriod);
             requireStatutoryProjection(ledgerId, selected);
             requireStatutoryProjection(ledgerId, openingPeriod);
-            primary = reports.statutoryTrialBalance(ledgerId, selected, true);
-            comparative = openingBalances(reports.statutoryTrialBalance(ledgerId, openingPeriod, true));
+            primary = reports.statutoryAccountAmounts(ledgerId, selected, false);
+            List<ReportingRepository.StatutoryAccountAmount> opening =
+                    reports.statutoryAccountAmounts(ledgerId, openingPeriod, false);
+            requireStatutoryMappings(primary);
+            requireStatutoryMappings(opening);
+            comparative = openingAmounts(opening);
         }
         return new StatutoryReportCalculator().calculate(reportType, periodCode, standardVersion, formula,
                 primary, comparative);
@@ -192,13 +198,34 @@ public class DefaultReportingService implements ReportingService {
         }
     }
 
-    private List<ReportResponses.TrialBalanceLine> openingBalances(
-            List<ReportResponses.TrialBalanceLine> lines) {
-        return lines.stream().map(line -> new ReportResponses.TrialBalanceLine(
-                line.accountId(), line.code(), line.name(), line.category(),
-                line.openingDebit(), line.openingCredit(), BigDecimal.ZERO, BigDecimal.ZERO,
-                line.openingDebit(), line.openingCredit(), line.openingDebit(), line.openingCredit(),
-                line.openingDebit().subtract(line.openingCredit()))).toList();
+    private void requireStatutoryMappings(List<ReportingRepository.StatutoryAccountAmount> amounts) {
+        List<ReportingRepository.StatutoryAccountAmount> unmapped = amounts.stream()
+                .filter(amount -> amount.standardAccountKey() == null && hasAnyAmount(amount))
+                .toList();
+        if (!unmapped.isEmpty()) {
+            String identifiers = unmapped.stream().limit(10)
+                    .map(amount -> amount.accountId() + "/" + amount.accountCode())
+                    .collect(Collectors.joining(", "));
+            if (unmapped.size() > 10) {
+                identifiers += ", ... (" + unmapped.size() + " accounts)";
+            }
+            throw problem(422, "STATUTORY_ACCOUNT_MAPPING_REQUIRED", "Statutory account mapping required",
+                    "Map the following non-zero leaf accounts before generating the report: " + identifiers);
+        }
+    }
+
+    private boolean hasAnyAmount(ReportingRepository.StatutoryAccountAmount amount) {
+        return amount.openingDebit().signum() != 0 || amount.openingCredit().signum() != 0
+                || amount.periodDebit().signum() != 0 || amount.periodCredit().signum() != 0
+                || amount.closingDebit().signum() != 0 || amount.closingCredit().signum() != 0;
+    }
+
+    private List<ReportingRepository.StatutoryAccountAmount> openingAmounts(
+            List<ReportingRepository.StatutoryAccountAmount> amounts) {
+        return amounts.stream().map(amount -> new ReportingRepository.StatutoryAccountAmount(
+                amount.accountId(), amount.accountCode(), amount.standardAccountKey(),
+                amount.openingDebit(), amount.openingCredit(), BigDecimal.ZERO, BigDecimal.ZERO,
+                amount.openingDebit(), amount.openingCredit())).toList();
     }
 
     @Override

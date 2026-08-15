@@ -16,9 +16,11 @@ public interface LedgerRepository {
 
     void createOwner(UUID ledgerId, UUID actorId);
 
-    void createAccount(UUID ledgerId, String code, String name, String category, String normalBalance);
+    void createAccount(UUID ledgerId, String code, String name, String category, String normalBalance,
+                       String standardAccountKey);
 
-    boolean createAccountIfAbsent(UUID ledgerId, String code, String name, String category, String normalBalance);
+    boolean createAccountIfAbsent(UUID ledgerId, String code, String name, String category, String normalBalance,
+                                  String standardAccountKey);
 
     void createPeriod(UUID ledgerId, String periodCode, LocalDate startDate, LocalDate endDate);
 
@@ -70,6 +72,9 @@ public interface LedgerRepository {
 
     void recordDimensionRevision(UUID ledgerId, String aggregateType, UUID aggregateId,
                                  String action, UUID actorId, String beforeJson, String afterJson);
+
+    void recordOpeningBalanceRevision(UUID ledgerId, String action, UUID actorId, String reason,
+                                      String beforeJson, String afterJson);
 
     List<LedgerResponses.OpeningBalance> listOpeningBalances(UUID ledgerId);
 

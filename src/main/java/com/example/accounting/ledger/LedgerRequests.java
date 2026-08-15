@@ -68,6 +68,7 @@ public final class LedgerRequests {
     public record AccountCreate(
             @NotBlank @Pattern(regexp = "[A-Za-z0-9._-]{1,32}") String code,
             @NotBlank @Size(max = 200) String name,
+            @Pattern(regexp = "[A-Z][A-Z0-9]*(\\.[A-Z0-9_]+)+") String standardAccountKey,
             @NotBlank @Pattern(regexp = "CURRENT_ASSET|NON_CURRENT_ASSET|CURRENT_LIABILITY|NON_CURRENT_LIABILITY|EQUITY|COST|OPERATING_REVENUE|OTHER_INCOME|OPERATING_COST_AND_TAX|OTHER_EXPENSE|PERIOD_EXPENSE|INCOME_TAX|PRIOR_YEAR_ADJUSTMENT") String category,
             @NotBlank @Pattern(regexp = "DEBIT|CREDIT") String normalBalance,
             UUID parentId,
@@ -78,7 +79,21 @@ public final class LedgerRequests {
             List<@Valid DimensionRequirement> dimensionRequirements) {
 
         public AccountCreate(String code, String name, String category, String normalBalance) {
-            this(code, name, category, normalBalance, null, false, null, false, null, List.of());
+            this(code, name, null, category, normalBalance, null, false, null, false, null, List.of());
+        }
+
+        public AccountCreate(String code, String name, String standardAccountKey,
+                             String category, String normalBalance) {
+            this(code, name, standardAccountKey, category, normalBalance,
+                    null, false, null, false, null, List.of());
+        }
+
+        public AccountCreate(String code, String name, String category, String normalBalance,
+                             UUID parentId, Boolean cashFlowRequired, UUID defaultCashFlowItemId,
+                             Boolean quantityEnabled, String unitName,
+                             List<DimensionRequirement> dimensionRequirements) {
+            this(code, name, null, category, normalBalance, parentId, cashFlowRequired,
+                    defaultCashFlowItemId, quantityEnabled, unitName, dimensionRequirements);
         }
     }
 
@@ -130,7 +145,12 @@ public final class LedgerRequests {
                                       @Pattern(regexp = "ACTIVE|INACTIVE") String status) {
     }
 
-    public record OpeningBalances(@NotEmpty List<@Valid OpeningBalanceLine> lines) {
+    public record OpeningBalances(@NotEmpty List<@Valid OpeningBalanceLine> lines,
+                                  @Size(max = 1000) String reason) {
+
+        public OpeningBalances(List<OpeningBalanceLine> lines) {
+            this(lines, null);
+        }
     }
 
     public record OpeningBalanceLine(@NotNull UUID accountId,

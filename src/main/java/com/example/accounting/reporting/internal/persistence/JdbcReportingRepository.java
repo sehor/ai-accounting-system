@@ -172,6 +172,41 @@ public class JdbcReportingRepository implements ReportingRepository {
     }
 
     @Override
+    public List<ReportingRepository.StatutoryAccountAmount> statutoryAccountAmounts(
+            UUID ledgerId, PeriodRange range, boolean operatingActivity) {
+        if (projection == null) {
+            throw new IllegalStateException("Balance projection is not configured");
+        }
+        BalanceProjectionService.ProjectionStatus status = projection.status(ledgerId, range);
+        if (!status.fresh()) {
+            throw new IllegalStateException("Balance projection is not ready");
+        }
+        BalanceReadMetadata.set("projection", status.projectedAt() == null
+                ? (status.lastEnqueuedAt() == null ? OffsetDateTime.now() : status.lastEnqueuedAt())
+                : status.projectedAt(), lagMs(status));
+        List<ReportResponses.TrialBalanceLine> leafAmounts = operatingActivity
+                ? projection.operatingTrialBalance(ledgerId, range, false)
+                : projection.trialBalance(ledgerId, range, false);
+        Map<UUID, String> keys = jdbc.query("""
+                select id, standard_account_key
+                from ledger_account account
+                where ledger_id = ? and not exists (
+                    select 1 from ledger_account child
+                    where child.ledger_id = account.ledger_id and child.parent_id = account.id)
+                """, rs -> {
+            Map<UUID, String> result = new java.util.HashMap<>();
+            while (rs.next()) {
+                result.put(rs.getObject("id", UUID.class), rs.getString("standard_account_key"));
+            }
+            return result;
+        }, ledgerId);
+        return leafAmounts.stream().map(line -> new ReportingRepository.StatutoryAccountAmount(
+                line.accountId(), line.code(), keys.get(line.accountId()),
+                line.openingDebit(), line.openingCredit(), line.periodDebit(), line.periodCredit(),
+                line.closingDebit(), line.closingCredit())).toList();
+    }
+
+    @Override
     public List<ReportResponses.LedgerLine> ledgerLines(UUID ledgerId, String periodCode) {
         return jdbc.query("""
                 select v.id voucher_id, v.voucher_number, v.voucher_date, a.code account_code, a.name account_name,

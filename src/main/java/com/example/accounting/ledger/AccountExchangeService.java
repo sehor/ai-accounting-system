@@ -41,6 +41,7 @@ import org.apache.poi.ss.usermodel.Workbook;
 import org.apache.poi.ss.usermodel.WorkbookFactory;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -52,7 +53,8 @@ public class AccountExchangeService {
     private static final ZoneId ACCOUNTING_ZONE = ZoneId.of("Asia/Shanghai");
     private static final List<String> STANDARD_HEADERS = List.of(
             "Code", "Name", "ParentCode", "Category", "NormalBalance", "Status",
-            "CashFlowRequired", "DefaultCashFlowItemCode", "QuantityEnabled", "UnitName");
+            "CashFlowRequired", "DefaultCashFlowItemCode", "QuantityEnabled", "UnitName",
+            "StandardAccountKey");
     private static final List<String> KINGDEE_HEADERS = List.of(
             "科目代码", "科目名称", "上级科目代码", "科目类别", "余额方向", "状态",
             "现金流必填", "数量核算", "单位");
@@ -64,16 +66,26 @@ public class AccountExchangeService {
     private final AccountManagementRepository accounts;
     private final AccountImportRepository imports;
     private final AccountAiMapper aiMapper;
+    private final AccountingStandardCatalog standards;
     private final ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
 
+    @Autowired
     public AccountExchangeService(
             LedgerService ledgers, LedgerAccessService access,
-            AccountManagementRepository accounts, AccountImportRepository imports, AccountAiMapper aiMapper) {
+            AccountManagementRepository accounts, AccountImportRepository imports, AccountAiMapper aiMapper,
+            AccountingStandardCatalog standards) {
         this.ledgers = ledgers;
         this.access = access;
         this.accounts = accounts;
         this.imports = imports;
         this.aiMapper = aiMapper;
+        this.standards = standards;
+    }
+
+    public AccountExchangeService(
+            LedgerService ledgers, LedgerAccessService access,
+            AccountManagementRepository accounts, AccountImportRepository imports, AccountAiMapper aiMapper) {
+        this(ledgers, access, accounts, imports, aiMapper, new AccountingStandardCatalog());
     }
 
     @Transactional(readOnly = true)
@@ -142,8 +154,10 @@ public class AccountExchangeService {
 
         AccountCodeRule rule = accounts.codeRule(ledgerId);
         List<ParsedAccount> parsed = parse(content, format, rule);
+        LedgerResponses.Ledger ledger = ledgers.findLedger(actorId, ledgerId);
         Map<String, LedgerResponses.Account> existingAccounts = ledgers.listAccounts(actorId, ledgerId).stream()
                 .collect(Collectors.toMap(LedgerResponses.Account::code, account -> account));
+        applyStandardMappings(format, ledger, rule, parsed, existingAccounts);
         Set<String> availableCodes = new HashSet<>(existingAccounts.keySet());
         parsed.forEach(row -> availableCodes.add(row.code()));
         parsed.stream().filter(row -> rule.levelOf(row.code()) > 1).forEach(row ->
@@ -467,7 +481,8 @@ public class AccountExchangeService {
                     account.category(), account.normalBalance(), account.status(),
                     Boolean.toString(account.cashFlowRequired()),
                     nullable(cashCodes.get(account.defaultCashFlowItemId())),
-                    Boolean.toString(account.quantityEnabled()), nullable(account.unitName())));
+                    Boolean.toString(account.quantityEnabled()), nullable(account.unitName()),
+                    nullable(account.standardAccountKey())));
         }
         autosize(sheet, STANDARD_HEADERS.size());
     }
@@ -617,6 +632,7 @@ public class AccountExchangeService {
         cleaned.put("defaultCashFlowItemCode", format == Format.STANDARD ? clean(cells.get(7)) : "");
         cleaned.put("quantityEnabled", Boolean.toString(quantity));
         cleaned.put("unitName", unit);
+        cleaned.put("standardAccountKey", format == Format.STANDARD ? clean(cells.get(10)) : "");
         List<String> issues = new ArrayList<>();
         if (rule.levelOf(code) == 0) {
             issues.add("ERROR:INVALID_CODE");
@@ -638,6 +654,41 @@ public class AccountExchangeService {
             issues.add("ERROR:UNIT_REQUIRED");
         }
         return new ParsedAccount(code, raw, cleaned, issues);
+    }
+
+    private void applyStandardMappings(
+            Format format, LedgerResponses.Ledger ledger, AccountCodeRule rule,
+            List<ParsedAccount> parsed, Map<String, LedgerResponses.Account> existingAccounts) {
+        for (ParsedAccount account : parsed) {
+            LedgerResponses.Account existing = existingAccounts.get(account.code());
+            String importedKey = account.cleaned().get("standardAccountKey");
+            if (existing != null) {
+                if (format == Format.STANDARD && !importedKey.isBlank()
+                        && !java.util.Objects.equals(importedKey, existing.standardAccountKey())) {
+                    account.issues().add("ERROR:STANDARD_ACCOUNT_KEY_CONFLICT");
+                } else {
+                    account.cleaned().put("standardAccountKey",
+                            existing.standardAccountKey() == null ? "" : existing.standardAccountKey());
+                }
+                continue;
+            }
+            if (format == Format.STANDARD) {
+                if (importedKey.isBlank() || !standards.containsStandardAccountKey(
+                        ledger.accountingStandardCode(), ledger.accountingStandardVersion(), importedKey)) {
+                    account.issues().add("ERROR:STANDARD_ACCOUNT_KEY_INVALID");
+                }
+                continue;
+            }
+            List<String> matches = standards.legacyCodeMatches(
+                    ledger.accountingStandardCode(), ledger.accountingStandardVersion(), account.code());
+            if (matches.size() == 1) {
+                account.cleaned().put("standardAccountKey", matches.getFirst());
+            } else if (matches.size() > 1) {
+                account.issues().add("ERROR:STANDARD_ACCOUNT_KEY_AMBIGUOUS");
+            } else if (rule.levelOf(account.code()) == 1) {
+                account.issues().add("ERROR:STANDARD_ACCOUNT_KEY_REQUIRED");
+            }
+        }
     }
 
     private void standardControls(Workbook workbook, List<ParsedAccount> accounts, AccountCodeRule rule) {
@@ -1094,7 +1145,7 @@ public class AccountExchangeService {
         LedgerRequests.AccountCreate createRequest(
                 Map<String, UUID> dimensionIds, Map<String, UUID> cashFlowIds) {
             return new LedgerRequests.AccountCreate(
-                    values.get("code"), values.get("name"), values.get("category"),
+                    values.get("code"), values.get("name"), emptyToNull(values.get("standardAccountKey")), values.get("category"),
                     values.get("normalBalance"), null, Boolean.valueOf(values.get("cashFlowRequired")),
                     cashFlowIds.get(values.get("defaultCashFlowItemCode")),
                     Boolean.valueOf(values.get("quantityEnabled")), emptyToNull(values.get("unitName")),

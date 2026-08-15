@@ -3,6 +3,7 @@ package com.example.accounting.periodclosing.internal.application;
 import com.example.accounting.fixedasset.FixedAssetRequests;
 import com.example.accounting.fixedasset.FixedAssetResponses;
 import com.example.accounting.fixedasset.FixedAssetService;
+import com.example.accounting.fixedasset.FixedAssetDepreciationCancellationCommand;
 import com.example.accounting.ledger.LedgerAccessService;
 import com.example.accounting.ledger.LedgerRole;
 import com.example.accounting.shared.accounting.ProfitLossTransferCategories;
@@ -18,6 +19,7 @@ import com.example.accounting.shared.web.ApiProblemException;
 import com.example.accounting.voucher.VoucherRequests;
 import com.example.accounting.voucher.VoucherResponses;
 import com.example.accounting.voucher.VoucherService;
+import com.example.accounting.voucher.GeneratedVoucherCommandService;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -39,20 +41,26 @@ public class DefaultPeriodClosingService implements PeriodClosingService, Period
     private final LedgerAccessService ledgerAccess;
     private final FixedAssetService fixedAssets;
     private final VoucherService vouchers;
+    private final GeneratedVoucherCommandService generatedVouchers;
+    private final FixedAssetDepreciationCancellationCommand depreciationCancellation;
     private final BalanceProjectionService projection;
 
     public DefaultPeriodClosingService(PeriodClosingRepository closing, LedgerAccessService ledgerAccess,
                                        FixedAssetService fixedAssets, VoucherService vouchers,
+                                       GeneratedVoucherCommandService generatedVouchers,
+                                       FixedAssetDepreciationCancellationCommand depreciationCancellation,
                                        BalanceProjectionService projection) {
         this.closing = closing;
         this.ledgerAccess = ledgerAccess;
         this.fixedAssets = fixedAssets;
         this.vouchers = vouchers;
+        this.generatedVouchers = generatedVouchers;
+        this.depreciationCancellation = depreciationCancellation;
         this.projection = projection;
     }
 
     @Override
-    @Transactional
+    @Transactional(readOnly = true)
     public PeriodClosingResponses.Status status(UUID actorId, UUID ledgerId, UUID periodId) {
         requireRole(actorId, ledgerId, READ_ROLES);
         PeriodClosingRepository.PeriodRecord period = period(ledgerId, periodId);
@@ -60,48 +68,9 @@ public class DefaultPeriodClosingService implements PeriodClosingService, Period
         List<PeriodClosingResponses.Blocker> blockers = new ArrayList<>();
         List<PeriodClosingResponses.Step> steps = new ArrayList<>();
         for (PeriodClosingStepType type : required) {
-            PeriodClosingRepository.StepRecord record = ensureStep(ledgerId, periodId, type);
-            record = normalizeNotRequired(actorId, ledgerId, period, record);
-            if (type == PeriodClosingStepType.DEPRECIATION
-                    && record.status() == PeriodClosingStepStatus.GENERATED
-                    && fixedAssets.previewDepreciation(actorId, ledgerId, period.id()).blockers().stream()
-                    .anyMatch(value -> value.contains("失效") || value.toLowerCase().contains("stale"))) {
-                closing.updateStep(ledgerId, periodId, type, PeriodClosingStepStatus.STALE, record.amount(),
-                        record.fingerprint(), record.voucherId(), "PERIOD_CLOSING_STALE", "固定资产输入发生变化，请重新生成折旧凭证");
-                record = closing.step(ledgerId, periodId, type).orElse(record);
-            }
-            String currentFingerprint = fingerprint(actorId, ledgerId, period, type);
-            if (type != PeriodClosingStepType.DEPRECIATION
-                    && record.status() == PeriodClosingStepStatus.GENERATED
-                    && record.fingerprint() != null
-                    && currentFingerprint != null
-                    && !record.fingerprint().equals(currentFingerprint)) {
-                closing.updateStep(ledgerId, periodId, type, PeriodClosingStepStatus.STALE, record.amount(),
-                        record.fingerprint(), record.voucherId(), "PERIOD_CLOSING_STALE",
-                        "参与计算的业务事实已经变化，请重新生成凭证");
-                record = closing.step(ledgerId, periodId, type).orElse(record);
-            }
-            if (record.status() == PeriodClosingStepStatus.GENERATED && record.voucherId() == null) {
-                closing.updateStep(ledgerId, periodId, type, PeriodClosingStepStatus.BLOCKED,
-                        record.amount(), record.fingerprint(), null,
-                        "PERIOD_CLOSING_INCOMPLETE", "生成步骤缺少已记账凭证");
-                record = closing.step(ledgerId, periodId, type).orElse(record);
-            }
-            if (record.status() == PeriodClosingStepStatus.GENERATED && record.voucherId() != null) {
-                try {
-                    if (!"POSTED".equals(vouchers.find(actorId, ledgerId, record.voucherId()).status())) {
-                        closing.updateStep(ledgerId, periodId, type, PeriodClosingStepStatus.BLOCKED,
-                                record.amount(), record.fingerprint(), record.voucherId(),
-                                "PERIOD_CLOSING_INCOMPLETE", "生成凭证已失效或尚未记账");
-                        record = closing.step(ledgerId, periodId, type).orElse(record);
-                    }
-                } catch (ApiProblemException ignored) {
-                    closing.updateStep(ledgerId, periodId, type, PeriodClosingStepStatus.BLOCKED,
-                            record.amount(), record.fingerprint(), record.voucherId(),
-                            "PERIOD_CLOSING_INCOMPLETE", "生成凭证不存在或已失效");
-                    record = closing.step(ledgerId, periodId, type).orElse(record);
-                }
-            }
+            PeriodClosingRepository.StepRecord record = closing.step(ledgerId, periodId, type)
+                    .orElseGet(() -> pendingRecord(ledgerId, periodId, type));
+            record = currentStep(actorId, ledgerId, period, record);
             PeriodClosingResponses.Step response = step(record);
             steps.add(response);
         }
@@ -147,6 +116,44 @@ public class DefaultPeriodClosingService implements PeriodClosingService, Period
     }
 
     @Override
+    @Transactional
+    public PeriodClosingResponses.Step resetStep(UUID actorId, UUID ledgerId, UUID periodId,
+                                                 PeriodClosingStepType type, String reason) {
+        requireRole(actorId, ledgerId, WRITE_ROLES);
+        PeriodClosingRepository.PeriodRecord period = period(ledgerId, periodId);
+        if (!"OPEN".equals(period.status())) {
+            throw problem(409, "PERIOD_STATE_INVALID", "期间状态无效", "只能在开放期间重置结账步骤");
+        }
+        if (!requiredSteps(period.code()).contains(type)) {
+            throw problem(409, "PERIOD_CLOSING_STEP_NOT_ALLOWED", "结账步骤无效",
+                    "当前期间不包含该结账步骤");
+        }
+        String resetReason = normalizeResetReason(reason);
+        PeriodClosingRepository.StepRecord record = closing.stepForUpdate(ledgerId, periodId, type)
+                .orElseThrow(() -> problem(404, "PERIOD_CLOSING_STEP_NOT_FOUND", "结账步骤不存在",
+                        "该步骤尚未生成，无需重置"));
+        if (record.voucherId() == null) {
+            throw problem(409, "PERIOD_CLOSING_STEP_NOT_GENERATED", "结账步骤尚未生成",
+                    "该步骤没有可重置的来源凭证");
+        }
+        if (type == PeriodClosingStepType.DEPRECIATION) {
+            UUID runId = closing.depreciationRunId(ledgerId, periodId, record.voucherId())
+                    .orElseThrow(() -> problem(409, "PERIOD_CLOSING_DEPRECIATION_SOURCE_MISMATCH",
+                            "折旧来源不匹配", "结账步骤没有对应的有效固定资产折旧批次"));
+            closing.updateStep(ledgerId, periodId, type, PeriodClosingStepStatus.PENDING,
+                    BigDecimal.ZERO, null, null, null, null);
+            depreciationCancellation.cancelDepreciation(actorId, ledgerId, runId, resetReason);
+        } else {
+            VoucherResponses.Voucher voucher = vouchers.find(actorId, ledgerId, record.voucherId());
+            closing.updateStep(ledgerId, periodId, type, PeriodClosingStepStatus.PENDING,
+                    BigDecimal.ZERO, null, null, null, null);
+            generatedVouchers.deleteGenerated(actorId, ledgerId, voucher.id(), "PERIOD_CLOSING",
+                    record.id(), voucher.version(), resetReason);
+        }
+        return step(closing.step(ledgerId, periodId, type).orElseThrow());
+    }
+
+    @Override
     @Transactional(readOnly = true)
     public PeriodClosingResponses.Settings settings(UUID actorId, UUID ledgerId) {
         requireRole(actorId, ledgerId, READ_ROLES);
@@ -170,7 +177,7 @@ public class DefaultPeriodClosingService implements PeriodClosingService, Period
     }
 
     @Override
-    @Transactional
+    @Transactional(readOnly = true)
     public List<String> blockers(UUID actorId, UUID ledgerId, UUID periodId) {
         PeriodClosingResponses.Status status = status(actorId, ledgerId, periodId);
         return status.blockers().stream().map(b -> b.code() + ": " + b.detail()).toList();
@@ -179,6 +186,26 @@ public class DefaultPeriodClosingService implements PeriodClosingService, Period
     private PeriodClosingResponses.Step generateDepreciation(UUID actorId, UUID ledgerId,
                                                               PeriodClosingRepository.PeriodRecord period,
                                                               PeriodClosingRepository.StepRecord record) {
+        if (record.voucherId() != null) {
+            if (closing.depreciationRunId(ledgerId, period.id(), record.voucherId()).isEmpty()) {
+                return blocked(ledgerId, period.id(), record,
+                        "PERIOD_CLOSING_DEPRECIATION_SOURCE_MISMATCH",
+                        "结账步骤没有对应的有效固定资产折旧批次");
+            }
+            PeriodClosingRepository.StepRecord current = currentStep(actorId, ledgerId, period, record);
+            if (current.status() == PeriodClosingStepStatus.GENERATED) {
+                return step(current);
+            }
+            if (current.status() != PeriodClosingStepStatus.STALE) {
+                return step(current);
+            }
+            FixedAssetResponses.DepreciationRun regenerated = fixedAssets.regenerateDepreciation(
+                    actorId, ledgerId,
+                    new FixedAssetRequests.DepreciationAction(period.id(), "期末结账重新生成折旧"));
+            closing.updateStep(ledgerId, period.id(), record.type(), PeriodClosingStepStatus.GENERATED,
+                    regenerated.totalAmount(), regenerated.inputFingerprint(), regenerated.voucherId(), null, null);
+            return step(closing.step(ledgerId, period.id(), record.type()).orElseThrow());
+        }
         FixedAssetResponses.DepreciationPreview preview = fixedAssets.previewDepreciation(actorId, ledgerId, period.id());
         if (!preview.blockers().isEmpty()) {
             return blocked(ledgerId, period.id(), record, "PERIOD_CLOSING_AUXILIARY_DETAIL_MISSING",
@@ -187,12 +214,9 @@ public class DefaultPeriodClosingService implements PeriodClosingService, Period
         if (preview.pendingCount() == 0) {
             closing.updateStep(ledgerId, period.id(), record.type(), PeriodClosingStepStatus.NOT_REQUIRED,
                     BigDecimal.ZERO, fingerprint(actorId, ledgerId, period, record.type()), null, null, null);
-            return step(closing.step(ledgerId, period.id(), record.type()).orElse(record));
+            return step(closing.step(ledgerId, period.id(), record.type()).orElseThrow());
         }
-        FixedAssetResponses.DepreciationRun run = record.voucherId() != null
-                ? fixedAssets.regenerateDepreciation(actorId, ledgerId,
-                new FixedAssetRequests.DepreciationAction(period.id(), "期末结账重新生成折旧"))
-                : fixedAssets.generateDepreciation(actorId, ledgerId,
+        FixedAssetResponses.DepreciationRun run = fixedAssets.generateDepreciation(actorId, ledgerId,
                 new FixedAssetRequests.DepreciationAction(period.id(), "期末结账计提折旧"));
         closing.updateStep(ledgerId, period.id(), record.type(), PeriodClosingStepStatus.GENERATED,
                 run.totalAmount(), run.inputFingerprint(), run.voucherId(), null, null);
@@ -210,7 +234,7 @@ public class DefaultPeriodClosingService implements PeriodClosingService, Period
         if (nonZero.isEmpty()) {
             closing.updateStep(ledgerId, period.id(), record.type(), PeriodClosingStepStatus.NOT_REQUIRED,
                     BigDecimal.ZERO, fingerprint(actorId, ledgerId, period, record.type()), null, null, null);
-            return step(closing.step(ledgerId, period.id(), record.type()).orElse(record));
+            return step(closing.step(ledgerId, period.id(), record.type()).orElseThrow());
         }
         requireConfigured(profitAccount, "PERIOD_CLOSING_ACCOUNT_CONFIG_MISSING", "请先配置本年利润科目");
         if (nonZero.stream().anyMatch(amount -> closing.hasRequiredDimensions(ledgerId, amount.accountId())
@@ -254,7 +278,7 @@ public class DefaultPeriodClosingService implements PeriodClosingService, Period
         if (net.signum() == 0) {
             closing.updateStep(ledgerId, period.id(), record.type(), PeriodClosingStepStatus.NOT_REQUIRED,
                     BigDecimal.ZERO, fingerprint(actorId, ledgerId, period, record.type()), null, null, null);
-            return step(closing.step(ledgerId, period.id(), record.type()).orElse(record));
+            return step(closing.step(ledgerId, period.id(), record.type()).orElseThrow());
         }
         String fp = fingerprint(List.of(amount), retainedAccount, false);
         if (record.status() == PeriodClosingStepStatus.GENERATED && fp.equals(record.fingerprint())) return step(record);
@@ -296,16 +320,11 @@ public class DefaultPeriodClosingService implements PeriodClosingService, Period
                                                 String code, String detail) {
         closing.updateStep(ledgerId, periodId, record.type(), PeriodClosingStepStatus.BLOCKED,
                 record.amount(), record.fingerprint(), record.voucherId(), code, detail);
-        return step(closing.step(ledgerId, periodId, record.type()).orElse(record));
+        return step(closing.step(ledgerId, periodId, record.type()).orElseThrow());
     }
 
     private PeriodClosingRepository.StepRecord ensureStep(UUID ledgerId, UUID periodId, PeriodClosingStepType type) {
-        return closing.step(ledgerId, periodId, type).orElseGet(() -> {
-            UUID id = UUID.randomUUID();
-            closing.createStep(id, ledgerId, periodId, type, PeriodClosingStepStatus.PENDING,
-                    BigDecimal.ZERO, null, null, null, null);
-            return closing.step(ledgerId, periodId, type).orElseThrow();
-        });
+        return closing.ensureStep(UUID.randomUUID(), ledgerId, periodId, type);
     }
 
     private PeriodClosingResponses.Step step(PeriodClosingRepository.StepRecord record) {
@@ -358,32 +377,127 @@ public class DefaultPeriodClosingService implements PeriodClosingService, Period
         return digest(revenue + ":" + accountId + ":" + amounts);
     }
 
-    private PeriodClosingRepository.StepRecord normalizeNotRequired(UUID actorId, UUID ledgerId,
-                                                                     PeriodClosingRepository.PeriodRecord period,
-                                                                     PeriodClosingRepository.StepRecord record) {
-        if (record.status() != PeriodClosingStepStatus.PENDING) return record;
-        boolean noAmount = switch (record.type()) {
-            case DEPRECIATION -> fixedAssets.previewDepreciation(actorId, ledgerId, period.id()).pendingCount() == 0;
-            case EXPENSE_TRANSFER -> transferNetAmounts(ledgerId, period.id(), false).stream()
-                    .noneMatch(a -> a.debit().subtract(a.credit()).signum() != 0);
-            case REVENUE_TRANSFER -> transferNetAmounts(ledgerId, period.id(), true).stream()
-                    .noneMatch(a -> a.debit().subtract(a.credit()).signum() != 0);
-            case YEAR_END_PROFIT_TRANSFER -> {
-                if (!period.code().endsWith("-12")) {
-                    yield true;
-                }
-                UUID profitAccount = effectiveProfitAccount(actorId, ledgerId);
-                yield profitAccount != null && closing.amountThrough(ledgerId, period.code(), profitAccount, record.voucherId())
-                        .map(amount -> amount.debit().subtract(amount.credit()).signum() == 0)
-                        .orElse(true);
+    private PeriodClosingRepository.StepRecord currentStep(
+            UUID actorId, UUID ledgerId, PeriodClosingRepository.PeriodRecord period,
+            PeriodClosingRepository.StepRecord record) {
+        if (record.voucherId() != null || record.status() == PeriodClosingStepStatus.GENERATED) {
+            if (record.voucherId() == null) {
+                return transientState(record, PeriodClosingStepStatus.BLOCKED, record.amount(),
+                        record.fingerprint(), "PERIOD_CLOSING_INCOMPLETE", "生成步骤缺少已记账凭证");
             }
-        };
-        if (noAmount) {
-            closing.updateStep(ledgerId, period.id(), record.type(), PeriodClosingStepStatus.NOT_REQUIRED,
-                    BigDecimal.ZERO, fingerprint(actorId, ledgerId, period, record.type()), null, null, null);
-            return closing.step(ledgerId, period.id(), record.type()).orElse(record);
+            try {
+                if (!"POSTED".equals(vouchers.find(actorId, ledgerId, record.voucherId()).status())) {
+                    return transientState(record, PeriodClosingStepStatus.BLOCKED, record.amount(),
+                            record.fingerprint(), "PERIOD_CLOSING_INCOMPLETE", "生成凭证已失效或尚未记账");
+                }
+            } catch (ApiProblemException ignored) {
+                return transientState(record, PeriodClosingStepStatus.BLOCKED, record.amount(),
+                        record.fingerprint(), "PERIOD_CLOSING_INCOMPLETE", "生成凭证不存在或已失效");
+            }
+            if (record.type() == PeriodClosingStepType.DEPRECIATION) {
+                FixedAssetResponses.DepreciationPreview preview =
+                        fixedAssets.previewDepreciation(actorId, ledgerId, period.id());
+                boolean stale = preview.blockers().stream()
+                        .anyMatch(value -> value.contains("失效") || value.toLowerCase().contains("stale"));
+                if (stale) {
+                    return transientState(record, PeriodClosingStepStatus.STALE, record.amount(),
+                            record.fingerprint(), "PERIOD_CLOSING_STALE", "固定资产输入发生变化，请重新生成折旧凭证");
+                }
+                if (!preview.blockers().isEmpty()) {
+                    return transientState(record, PeriodClosingStepStatus.BLOCKED, record.amount(),
+                            record.fingerprint(), "PERIOD_CLOSING_AUXILIARY_DETAIL_MISSING",
+                            String.join("；", preview.blockers()));
+                }
+            } else {
+                String currentFingerprint = fingerprint(actorId, ledgerId, period, record.type());
+                if (record.fingerprint() != null && currentFingerprint != null
+                        && !record.fingerprint().equals(currentFingerprint)) {
+                    return transientState(record, PeriodClosingStepStatus.STALE, record.amount(),
+                            record.fingerprint(), "PERIOD_CLOSING_STALE", "参与计算的业务事实已经变化，请重新生成凭证");
+                }
+            }
+            return transientState(record, PeriodClosingStepStatus.GENERATED, record.amount(),
+                    record.fingerprint(), null, null);
         }
-        return record;
+
+        return switch (record.type()) {
+            case DEPRECIATION -> currentDepreciationStep(actorId, ledgerId, period, record);
+            case EXPENSE_TRANSFER -> currentTransferStep(actorId, ledgerId, period, record, false);
+            case REVENUE_TRANSFER -> currentTransferStep(actorId, ledgerId, period, record, true);
+            case YEAR_END_PROFIT_TRANSFER -> currentProfitTransferStep(actorId, ledgerId, period, record);
+        };
+    }
+
+    private PeriodClosingRepository.StepRecord currentDepreciationStep(
+            UUID actorId, UUID ledgerId, PeriodClosingRepository.PeriodRecord period,
+            PeriodClosingRepository.StepRecord record) {
+        FixedAssetResponses.DepreciationPreview preview = fixedAssets.previewDepreciation(actorId, ledgerId, period.id());
+        if (!preview.blockers().isEmpty()) {
+            return transientState(record, PeriodClosingStepStatus.BLOCKED, preview.totalAmount(), null,
+                    "PERIOD_CLOSING_AUXILIARY_DETAIL_MISSING", String.join("；", preview.blockers()));
+        }
+        return transientState(record, preview.pendingCount() == 0
+                        ? PeriodClosingStepStatus.NOT_REQUIRED : PeriodClosingStepStatus.PENDING,
+                preview.totalAmount(), null, null, null);
+    }
+
+    private PeriodClosingRepository.StepRecord currentTransferStep(
+            UUID actorId, UUID ledgerId, PeriodClosingRepository.PeriodRecord period,
+            PeriodClosingRepository.StepRecord record, boolean revenue) {
+        List<PeriodClosingRepository.AccountAmount> nonZero = transferNetAmounts(ledgerId, period.id(), revenue)
+                .stream().filter(value -> value.debit().subtract(value.credit()).signum() != 0).toList();
+        String currentFingerprint = fingerprint(actorId, ledgerId, period, record.type());
+        if (nonZero.isEmpty()) {
+            return transientState(record, PeriodClosingStepStatus.NOT_REQUIRED, BigDecimal.ZERO,
+                    currentFingerprint, null, null);
+        }
+        UUID profitAccount = effectiveProfitAccount(actorId, ledgerId);
+        if (profitAccount == null) {
+            return transientState(record, PeriodClosingStepStatus.BLOCKED, BigDecimal.ZERO,
+                    currentFingerprint, "PERIOD_CLOSING_ACCOUNT_CONFIG_MISSING", "请先配置本年利润科目");
+        }
+        if (nonZero.stream().anyMatch(amount -> closing.hasRequiredDimensions(ledgerId, amount.accountId()))
+                || closing.hasRequiredDimensions(ledgerId, profitAccount)) {
+            return transientState(record, PeriodClosingStepStatus.BLOCKED, BigDecimal.ZERO,
+                    currentFingerprint, "PERIOD_CLOSING_AUXILIARY_DETAIL_MISSING",
+                    "结转科目要求辅助核算，但结转规则无法提供明细");
+        }
+        return transientState(record, PeriodClosingStepStatus.PENDING, BigDecimal.ZERO,
+                currentFingerprint, null, null);
+    }
+
+    private PeriodClosingRepository.StepRecord currentProfitTransferStep(
+            UUID actorId, UUID ledgerId, PeriodClosingRepository.PeriodRecord period,
+            PeriodClosingRepository.StepRecord record) {
+        UUID profitAccount = effectiveProfitAccount(actorId, ledgerId);
+        UUID retainedAccount = effectiveRetainedEarningsAccount(actorId, ledgerId);
+        String currentFingerprint = fingerprint(actorId, ledgerId, period, record.type());
+        if (profitAccount == null || retainedAccount == null) {
+            return transientState(record, PeriodClosingStepStatus.BLOCKED, BigDecimal.ZERO,
+                    currentFingerprint, "PERIOD_CLOSING_ACCOUNT_CONFIG_MISSING",
+                    "请先配置本年利润和未分配利润科目");
+        }
+        boolean noAmount = closing.amountThrough(ledgerId, period.code(), profitAccount, null)
+                .map(amount -> amount.debit().subtract(amount.credit()).signum() == 0).orElse(true);
+        return transientState(record, noAmount ? PeriodClosingStepStatus.NOT_REQUIRED
+                        : PeriodClosingStepStatus.PENDING,
+                BigDecimal.ZERO, currentFingerprint, null, null);
+    }
+
+    private PeriodClosingRepository.StepRecord pendingRecord(
+            UUID ledgerId, UUID periodId, PeriodClosingStepType type) {
+        return new PeriodClosingRepository.StepRecord(UUID.nameUUIDFromBytes(
+                (ledgerId + ":" + periodId + ":" + type).getBytes(StandardCharsets.UTF_8)),
+                ledgerId, periodId, type, PeriodClosingStepStatus.PENDING, BigDecimal.ZERO,
+                null, null, null, null, null);
+    }
+
+    private PeriodClosingRepository.StepRecord transientState(
+            PeriodClosingRepository.StepRecord record, PeriodClosingStepStatus status,
+            BigDecimal amount, String fingerprint, String blockerCode, String blockerDetail) {
+        return new PeriodClosingRepository.StepRecord(record.id(), record.ledgerId(), record.periodId(),
+                record.type(), status, amount, fingerprint, record.voucherId(), blockerCode, blockerDetail,
+                record.updatedAt());
     }
 
     private List<PeriodClosingRepository.AccountAmount> transferAmounts(
@@ -456,6 +570,15 @@ public class DefaultPeriodClosingService implements PeriodClosingService, Period
 
     private void requireConfigured(UUID accountId, String code, String detail) {
         if (accountId == null) throw problem(409, code, "结账科目配置缺失", detail);
+    }
+
+    private String normalizeResetReason(String reason) {
+        String normalized = reason == null ? "" : reason.trim();
+        if (normalized.isEmpty() || normalized.length() > 1000) {
+            throw problem(422, "PERIOD_CLOSING_RESET_REASON_INVALID", "重置原因无效",
+                    "重置原因必须包含 1 到 1000 个字符");
+        }
+        return normalized;
     }
 
     private void enforceGenerationOrder(List<PeriodClosingRepository.PeriodRecord> periods,

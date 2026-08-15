@@ -76,9 +76,23 @@ public interface LedgerService {
     List<LedgerResponses.OpeningBalance> replaceOpeningBalances(
             UUID actorId, UUID ledgerId, List<LedgerRequests.OpeningBalanceLine> lines);
 
+    default List<LedgerResponses.OpeningBalance> replaceOpeningBalances(
+            UUID actorId, UUID ledgerId, List<LedgerRequests.OpeningBalanceLine> lines, String reason) {
+        return replaceOpeningBalances(actorId, ledgerId, lines);
+    }
+
     int confirmOpeningBalances(UUID actorId, UUID ledgerId);
 
+    default int confirmOpeningBalances(UUID actorId, UUID ledgerId, String reason) {
+        return confirmOpeningBalances(actorId, ledgerId);
+    }
+
     List<LedgerResponses.OpeningBalance> importOpeningBalances(UUID actorId, UUID ledgerId, InputStream input);
+
+    default List<LedgerResponses.OpeningBalance> importOpeningBalances(
+            UUID actorId, UUID ledgerId, InputStream input, String reason) {
+        return importOpeningBalances(actorId, ledgerId, input);
+    }
 
     LedgerResponses.Member addMember(UUID actorId, UUID ledgerId, LedgerRequests.AddMember request);
 

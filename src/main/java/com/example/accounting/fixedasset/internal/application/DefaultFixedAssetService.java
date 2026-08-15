@@ -3,6 +3,7 @@ package com.example.accounting.fixedasset.internal.application;
 import com.example.accounting.fixedasset.FixedAssetRequests;
 import com.example.accounting.fixedasset.FixedAssetResponses;
 import com.example.accounting.fixedasset.FixedAssetDepreciationCancellationCommand;
+import com.example.accounting.shared.audit.AuditSnapshotSerializer;
 import com.example.accounting.fixedasset.FixedAssetDisposalReversalCommand;
 import com.example.accounting.fixedasset.FixedAssetService;
 import com.example.accounting.fixedasset.internal.port.FixedAssetRepository;
@@ -267,8 +268,8 @@ public class DefaultFixedAssetService implements FixedAssetService, FixedAssetDi
         String beforeData = null;
         String afterData = null;
         if (accountingChange) {
-            beforeData = auditSnapshots.serialize(current);
-            afterData = auditSnapshots.serialize(next);
+            beforeData = fixedAssetAuditSnapshot(current);
+            afterData = fixedAssetAuditSnapshot(next);
         }
         if (!assets.updateAsset(ledgerId, assetId, next, request.expectedVersion(), actorId)) {
             throw problem(409, "RESOURCE_VERSION_CONFLICT", "Resource version conflict", "The asset was changed by another request");
@@ -551,8 +552,8 @@ public class DefaultFixedAssetService implements FixedAssetService, FixedAssetDi
                 row.accumulatedDepreciationAccountId(), row.depreciationExpenseAccountId(), row.impairmentAccountId(),
                 row.clearingAccountId(), row.disposalGainAccountId(), row.disposalLossAccountId(), null, row.note(),
                 row.version() + 1);
-        String beforeData = auditSnapshots.serialize(row);
-        String afterData = auditSnapshots.serialize(restored);
+        String beforeData = fixedAssetAuditSnapshot(row);
+        String afterData = fixedAssetAuditSnapshot(restored);
         if (!assets.updateAsset(ledgerId, assetId, restored, expectedVersion, actorId)) {
             throw problem(409, "RESOURCE_VERSION_CONFLICT", "Resource version conflict",
                     "The asset was changed by another request");
@@ -615,6 +616,12 @@ public class DefaultFixedAssetService implements FixedAssetService, FixedAssetDi
                 run.id(), voucher.version(), cancellationReason);
         return new FixedAssetResponses.DepreciationRun(run.id(), run.periodId(), run.runType(), "CANCELLED",
                 null, run.totalAmount(), run.inputFingerprint(), run.createdAt());
+    }
+
+    private String fixedAssetAuditSnapshot(Object value) {
+        return auditSnapshots.serialize(value, "FIXED_ASSET_AUDIT_SNAPSHOT_FAILED",
+                "Fixed-asset audit snapshot failed",
+                "The fixed-asset change could not be serialized");
     }
 
     @Override

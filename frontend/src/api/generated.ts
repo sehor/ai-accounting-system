@@ -1968,6 +1968,7 @@ export interface components {
         AccountCreate: {
             code: string;
             name: string;
+            standardAccountKey?: string;
             category: string;
             normalBalance: string;
             /** Format: uuid */
@@ -1991,6 +1992,7 @@ export interface components {
             ledgerId?: string;
             code?: string;
             name?: string;
+            standardAccountKey?: string;
             category?: string;
             normalBalance?: string;
             status?: string;
@@ -2384,10 +2386,15 @@ export interface components {
             /** Format: date */
             effectiveDate?: string;
             accountCodeRule?: components["schemas"]["AccountCodeRule"];
+            standardAccountKeys?: components["schemas"]["StandardAccountKey"][];
             accounts?: components["schemas"]["Account"][];
             formulas?: components["schemas"]["Formula"][];
             cashFlowItems?: components["schemas"]["CashFlowItem"][];
             dimensionTypes?: components["schemas"]["DimensionType"][];
+        };
+        StandardAccountKey: {
+            key?: string;
+            legacyCodes?: string[];
         };
     };
     responses: never;

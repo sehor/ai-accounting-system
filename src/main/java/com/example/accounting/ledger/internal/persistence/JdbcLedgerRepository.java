@@ -45,21 +45,23 @@ public class JdbcLedgerRepository implements LedgerRepository {
     }
 
     @Override
-    public void createAccount(UUID ledgerId, String code, String name, String category, String normalBalance) {
+    public void createAccount(UUID ledgerId, String code, String name, String category, String normalBalance,
+                              String standardAccountKey) {
         jdbc.update("""
-                insert into ledger_account (id, ledger_id, code, name, category, normal_balance)
-                values (?, ?, ?, ?, ?, ?)
-                """, UUID.randomUUID(), ledgerId, code, name, category, normalBalance);
+                insert into ledger_account (id, ledger_id, code, name, category, normal_balance, standard_account_key)
+                values (?, ?, ?, ?, ?, ?, ?)
+                """, UUID.randomUUID(), ledgerId, code, name, category, normalBalance, standardAccountKey);
     }
 
     @Override
     public boolean createAccountIfAbsent(
-            UUID ledgerId, String code, String name, String category, String normalBalance) {
+            UUID ledgerId, String code, String name, String category, String normalBalance,
+            String standardAccountKey) {
         return jdbc.update("""
-                insert into ledger_account (id, ledger_id, code, name, category, normal_balance)
-                values (?, ?, ?, ?, ?, ?)
+                insert into ledger_account (id, ledger_id, code, name, category, normal_balance, standard_account_key)
+                values (?, ?, ?, ?, ?, ?, ?)
                 on conflict (ledger_id, code) do nothing
-                """, UUID.randomUUID(), ledgerId, code, name, category, normalBalance) == 1;
+                """, UUID.randomUUID(), ledgerId, code, name, category, normalBalance, standardAccountKey) == 1;
     }
 
     @Override
@@ -166,7 +168,7 @@ public class JdbcLedgerRepository implements LedgerRepository {
     @Override
     public List<LedgerResponses.Account> listAccounts(UUID ledgerId) {
         return jdbc.query("""
-                select id, ledger_id, code, name, category, normal_balance, status, created_at
+                select id, ledger_id, code, name, standard_account_key, category, normal_balance, status, created_at
                 from ledger_account where ledger_id = ? order by code
                 """, (rs, rowNum) -> mapAccount(rs), ledgerId);
     }
@@ -174,7 +176,7 @@ public class JdbcLedgerRepository implements LedgerRepository {
     @Override
     public Optional<LedgerResponses.Account> findAccount(UUID ledgerId, String code) {
         return Optional.ofNullable(jdbc.query("""
-                select id, ledger_id, code, name, category, normal_balance, status, created_at
+                select id, ledger_id, code, name, standard_account_key, category, normal_balance, status, created_at
                 from ledger_account where ledger_id = ? and code = ?
                 """, rs -> rs.next() ? mapAccount(rs) : null, ledgerId, code));
     }
@@ -301,6 +303,21 @@ public class JdbcLedgerRepository implements LedgerRepository {
                 ), ?, ?, ?::jsonb, ?::jsonb)
                 """, UUID.randomUUID(), ledgerId, aggregateType, aggregateId,
                 ledgerId, aggregateType, aggregateId, action, actorId, beforeJson, afterJson);
+    }
+
+    @Override
+    public void recordOpeningBalanceRevision(UUID ledgerId, String action, UUID actorId, String reason,
+                                             String beforeJson, String afterJson) {
+        jdbc.update("""
+                insert into audit_revision (
+                    id, ledger_id, aggregate_type, aggregate_id, revision, action,
+                    actor_id, reason, before_data, after_data)
+                values (?, ?, 'OPENING_BALANCE', ?, (
+                    select coalesce(max(revision), 0) + 1 from audit_revision
+                    where ledger_id = ? and aggregate_type = 'OPENING_BALANCE' and aggregate_id = ?
+                ), ?, ?, ?, ?::jsonb, ?::jsonb)
+                """, UUID.randomUUID(), ledgerId, ledgerId, ledgerId, ledgerId,
+                action, actorId, reason, beforeJson, afterJson);
     }
 
     @Override
@@ -508,7 +525,8 @@ public class JdbcLedgerRepository implements LedgerRepository {
     private LedgerResponses.Account mapAccount(java.sql.ResultSet rs) throws java.sql.SQLException {
         return new LedgerResponses.Account(rs.getObject("id", UUID.class),
                 rs.getObject("ledger_id", UUID.class), rs.getString("code"), rs.getString("name"),
-                rs.getString("category"), rs.getString("normal_balance"), rs.getString("status"),
+                rs.getString("standard_account_key"), rs.getString("category"),
+                rs.getString("normal_balance"), rs.getString("status"),
                 rs.getObject("created_at", OffsetDateTime.class));
     }
 

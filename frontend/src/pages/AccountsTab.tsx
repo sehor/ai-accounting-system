@@ -32,6 +32,7 @@ export const ACCOUNT_CATEGORY_LABELS: Record<AccountCategoryTab, string> = {
 type AccountForm = {
   code: string
   name: string
+  standardAccountKey?: string
   category: string
   normalBalance: string
   cashFlowRequired?: boolean
@@ -64,6 +65,20 @@ export function AccountsTab({ ledgerId, session, accounts, dimensionTypes, perio
   const [createdInPeriodId, setCreatedInPeriodId] = useState<string>()
   const [preview, setPreview] = useState<AccountImportPreview | null>(null)
   const [expandedRowKeys, setExpandedRowKeys] = useState<string[]>([])
+  const selectedCategory = Form.useWatch('category', form)
+  const standardKeyOptions = useMemo(() => {
+    const byKey = new Map<string, Account>()
+    accounts.forEach((account) => {
+      if (account.standardAccountKey && (!selectedCategory || account.category === selectedCategory) &&
+          !byKey.has(account.standardAccountKey)) {
+        byKey.set(account.standardAccountKey, account)
+      }
+    })
+    return [...byKey.entries()].sort(([left], [right]) => left.localeCompare(right)).map(([key, account]) => ({
+      value: key,
+      label: `${key} · ${account.code} ${account.name}`,
+    }))
+  }, [accounts, selectedCategory])
   useEffect(() => {
     if (!formOpen) return
     if (editing) {
@@ -81,8 +96,8 @@ export function AccountsTab({ ledgerId, session, accounts, dimensionTypes, perio
     form.setFieldsValue(parent ? {
       category: parent.category,
       normalBalance: parent.normalBalance,
-    } : { cashFlowRequired: false, quantityEnabled: false })
-  }, [editing, form, formOpen, parent])
+    } : { category, cashFlowRequired: false, quantityEnabled: false })
+  }, [category, editing, form, formOpen, parent])
   const cashFlowItems = useQuery({
     queryKey: ['cash-flow-items', ledgerId],
     queryFn: () => apiFetch<CashFlowItem[]>(`/ledgers/${ledgerId}/cash-flow-items`, session),
@@ -105,6 +120,7 @@ export function AccountsTab({ ledgerId, session, accounts, dimensionTypes, perio
       }))
       const body = {
         ...value,
+        standardAccountKey: editing || parent ? undefined : value.standardAccountKey,
         parentId: editing?.parentId || parent?.id || null,
         dimensionRequirements,
         ...(editing ? { expectedVersion: editing.version } : {}),
@@ -297,6 +313,12 @@ export function AccountsTab({ ledgerId, session, accounts, dimensionTypes, perio
           <Input disabled={Boolean(editing?.coreLocked || editing?.isTemplate)} />
         </Form.Item>
         <Form.Item name="name" label="科目名称" rules={[{ required: true }, { max: 200 }]}><Input /></Form.Item>
+        {!editing && !parent && <Form.Item name="standardAccountKey" label="法定报表归类"
+          extra="稳定归类不会随科目名称或编码修改"
+          rules={[{ required: true, message: '请选择法定报表归类' }]}>
+          <Select showSearch optionFilterProp="label" options={standardKeyOptions}
+            placeholder="选择一个已安装的准则科目归类" />
+        </Form.Item>}
         <Space style={{ width: '100%' }} align="start">
           <Form.Item name="category" label="类别" rules={[{ required: true }]}>
             <Select disabled={Boolean(parent || editing?.parentId || editing?.coreLocked || editing?.isTemplate)}

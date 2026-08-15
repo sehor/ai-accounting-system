@@ -46,6 +46,7 @@ export interface Account {
   ledgerId: string
   code: string
   name: string
+  standardAccountKey: string | null
   category: string
   normalBalance: string
   status: string
@@ -87,6 +88,12 @@ export interface AccountingStandard {
   name: string
   effectiveDate: string
   accountCodeRule: AccountCodeRule
+  standardAccountKeys: StandardAccountKey[]
+}
+
+export interface StandardAccountKey {
+  key: string
+  legacyCodes: string[]
 }
 
 export interface AccountCodeRule {

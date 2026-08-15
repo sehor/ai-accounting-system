@@ -148,7 +148,8 @@ class Stage4ReportingTest {
         LedgerResponses.DimensionValue projectValue = ledgerService.createDimensionValue(userId, ledgerId, project.id(),
                 new LedgerRequests.DimensionValueCreate("P-1", "Project 1"));
         UUID receivable = ledgerService.createAccount(userId, ledgerId,
-                new LedgerRequests.AccountCreate("1410", "Customer receivable", "CURRENT_ASSET", "DEBIT", null,
+                new LedgerRequests.AccountCreate("1410", "Customer receivable", "ASSET.ACCOUNTS_RECEIVABLE",
+                        "CURRENT_ASSET", "DEBIT", null,
                         false, null, false, null,
                         List.of(new LedgerRequests.DimensionRequirement(customer.id(), true),
                                 new LedgerRequests.DimensionRequirement(project.id(), true)))).id();
@@ -348,7 +349,8 @@ class Stage4ReportingTest {
         UUID cashId = id("select id from ledger_account where ledger_id = ? and code = '1001'", ledgerId);
         UUID revenueId = id("select id from ledger_account where ledger_id = ? and code = '5001'", ledgerId);
         UUID configuredProfit = ledgerService.createAccount(userId, ledgerId,
-                new LedgerRequests.AccountCreate("3999", "自定义本年利润", "EQUITY", "CREDIT")).id();
+                new LedgerRequests.AccountCreate("3999", "自定义本年利润",
+                        "EQUITY.CURRENT_YEAR_PROFIT", "EQUITY", "CREDIT")).id();
         jdbcTemplate.update("insert into period_closing_setting (ledger_id, profit_account_id) values (?, ?)",
                 ledgerId, configuredProfit);
 
@@ -360,6 +362,64 @@ class Stage4ReportingTest {
                 List.of(line(revenueId, "DEBIT", "100"), line(configuredProfit, "CREDIT", "100"))));
 
         assertThat(accountingRole(transfer.id())).isEqualTo("PROFIT_LOSS_TRANSFER");
+    }
+
+    @Test
+    void statutoryReportsUseStableLeafMappingsAndRejectNonZeroUnmappedAccounts() {
+        UUID userId = UUID.randomUUID();
+        UUID ledgerId = ledgerService.create(new CurrentUserResolver.ResolvedUser(
+                        userId, "statutory-mapping", userId.toString()),
+                new LedgerRequests.Create("statutory mapping", "SME", "v1", "CNY",
+                        LocalDate.of(2026, 1, 1), false)).id();
+        UUID periodId = id("select id from accounting_period where ledger_id = ? and period_code = '2026-01'", ledgerId);
+        UUID cashParent = id("select id from ledger_account where ledger_id = ? and code = '1001'", ledgerId);
+        UUID capital = id("select id from ledger_account where ledger_id = ? and code = '3001'", ledgerId);
+        LedgerResponses.Account first = ledgerService.createAccount(userId, ledgerId,
+                new LedgerRequests.AccountCreate("100101", "Cash branch A", "CURRENT_ASSET", "DEBIT"));
+        LedgerResponses.Account second = ledgerService.createAccount(userId, ledgerId,
+                new LedgerRequests.AccountCreate("100102", "Cash branch B", "CURRENT_ASSET", "DEBIT"));
+        assertThat(first.parentId()).isEqualTo(cashParent);
+        assertThat(first.standardAccountKey()).isEqualTo("ASSET.CASH");
+        assertThat(second.standardAccountKey()).isEqualTo("ASSET.CASH");
+
+        voucherService.create(userId, ledgerId, new VoucherRequests.Create(
+                periodId, LocalDate.of(2026, 1, 15), "GENERAL", "stable-key", "Stable key aggregation",
+                List.of(line(first.id(), "DEBIT", "40"), line(second.id(), "DEBIT", "60"),
+                        line(capital, "CREDIT", "100"))));
+        applyProjection(ledgerId);
+
+        LedgerResponses.Account renamed = ledgerService.updateAccount(userId, ledgerId, first.id(),
+                new LedgerRequests.AccountPatch(first.version(), null, "Renamed cash branch", null,
+                        null, null, null, null, null, null, null, null));
+        assertThat(renamed.standardAccountKey()).isEqualTo("ASSET.CASH");
+        StatutoryReportResponses.Statement statutory = reportingService.statutoryStatement(
+                userId, ledgerId, "balance-sheet", "2026-01");
+        assertThat(statutory.groups().stream().flatMap(group -> group.lines().stream())
+                .filter(row -> row.lineNo() == 1).findFirst().orElseThrow().primaryAmount())
+                .isEqualByComparingTo("100.00");
+        assertThat(statutory.checks()).allMatch(StatutoryReportResponses.Check::passed);
+
+        List<ReportResponses.TrialBalanceLine> trial = reportingService.trialBalance(
+                userId, ledgerId, "2026-01");
+        assertThat(trial.stream().map(ReportResponses.TrialBalanceLine::debit)
+                .reduce(BigDecimal.ZERO, BigDecimal::add))
+                .isEqualByComparingTo(trial.stream().map(ReportResponses.TrialBalanceLine::credit)
+                        .reduce(BigDecimal.ZERO, BigDecimal::add));
+
+        UUID unmapped = UUID.randomUUID();
+        jdbcTemplate.update("""
+                insert into ledger_account (
+                    id, ledger_id, code, name, category, normal_balance, level, standard_account_key)
+                values (?, ?, '1999', 'Unmapped legacy account', 'CURRENT_ASSET', 'DEBIT', 1, null)
+                """, unmapped, ledgerId);
+        voucherService.create(userId, ledgerId, new VoucherRequests.Create(
+                periodId, LocalDate.of(2026, 1, 20), "GENERAL", "unmapped", "Unmapped leaf",
+                List.of(line(unmapped, "DEBIT", "10"), line(capital, "CREDIT", "10"))));
+        applyProjection(ledgerId);
+        assertThatThrownBy(() -> reportingService.statutoryStatement(
+                userId, ledgerId, "balance-sheet", "2026-01"))
+                .isInstanceOfSatisfying(ApiProblemException.class,
+                        error -> assertThat(error.code()).isEqualTo("STATUTORY_ACCOUNT_MAPPING_REQUIRED"));
     }
 
     private void applyProjection(UUID ledgerId) {

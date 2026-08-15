@@ -32,6 +32,7 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 import java.util.zip.ZipOutputStream;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataAccessException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -74,17 +75,29 @@ public class LedgerBackupService {
     private final LedgerBackupRepository repository;
     private final ObjectMapper objectMapper;
     private final Path storageRoot;
+    private final AccountingStandardCatalog standards;
 
+    @Autowired
     public LedgerBackupService(
             LedgerAccessService access,
             IdentityService identities,
             LedgerBackupRepository repository,
-            @Value("${storage.local.root:./data/files}") String storageRoot) {
+            @Value("${storage.local.root:./data/files}") String storageRoot,
+            AccountingStandardCatalog standards) {
         this.access = access;
         this.identities = identities;
         this.repository = repository;
         this.objectMapper = new ObjectMapper().findAndRegisterModules();
         this.storageRoot = Path.of(storageRoot);
+        this.standards = standards;
+    }
+
+    public LedgerBackupService(
+            LedgerAccessService access,
+            IdentityService identities,
+            LedgerBackupRepository repository,
+            String storageRoot) {
+        this(access, identities, repository, storageRoot, new AccountingStandardCatalog());
     }
 
     @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
@@ -222,6 +235,7 @@ public class LedgerBackupService {
             createOwner(ledgerId, actor.id());
 
             ObjectNode tables = (ObjectNode) archive.data().path("tables");
+            backfillBackupStandardAccountKeys(source, tables);
             Map<UUID, UUID> idMap = idMap(tables, archive.tables());
             idMap.put(uuid(source, "id"), ledgerId);
             restoreAttachments((ArrayNode) tables.path("document"), archive.entries());
@@ -247,6 +261,66 @@ public class LedgerBackupService {
             throw problem(422, "LEDGER_RESTORE_FAILED", "Ledger restore failed",
                     "The backup data is incompatible with the current database schema");
         }
+    }
+
+    private void backfillBackupStandardAccountKeys(ObjectNode source, ObjectNode tables) {
+        if (!(tables.path("ledger_account") instanceof ArrayNode accountRows)) {
+            return;
+        }
+        String standardCode = requiredText(source, "accounting_standard_code");
+        String standardVersion = requiredText(source, "accounting_standard_version");
+        Map<String, ObjectNode> accountsById = new LinkedHashMap<>();
+        for (JsonNode value : accountRows) {
+            if (value instanceof ObjectNode account) {
+                accountsById.put(account.path("id").asText(), account);
+                if (!account.hasNonNull("standard_account_key") && account.path("is_template").asBoolean()) {
+                    standards.packageAccountKey(standardCode, standardVersion, account.path("code").asText())
+                            .ifPresent(key -> account.put("standard_account_key", key));
+                }
+            }
+        }
+
+        Map<String, JsonNode> earliestCreates = new HashMap<>();
+        Map<String, Integer> earliestRevisions = new HashMap<>();
+        if (tables.path("audit_revision") instanceof ArrayNode revisions) {
+            for (JsonNode revision : revisions) {
+                if (!"ACCOUNT".equals(revision.path("aggregate_type").asText())
+                        || !"CREATE".equals(revision.path("action").asText())) {
+                    continue;
+                }
+                String accountId = revision.path("aggregate_id").asText();
+                int number = revision.path("revision").asInt(Integer.MAX_VALUE);
+                if (number < earliestRevisions.getOrDefault(accountId, Integer.MAX_VALUE)) {
+                    earliestRevisions.put(accountId, number);
+                    earliestCreates.put(accountId, revision.path("after_data"));
+                }
+            }
+        }
+        for (Map.Entry<String, ObjectNode> entry : accountsById.entrySet()) {
+            ObjectNode account = entry.getValue();
+            if (account.hasNonNull("standard_account_key") || account.path("is_template").asBoolean()) {
+                continue;
+            }
+            JsonNode created = earliestCreates.get(entry.getKey());
+            String originalCode = created == null ? "" : created.path("code").asText();
+            standards.resolveLegacyCode(standardCode, standardVersion, originalCode)
+                    .ifPresent(key -> account.put("standard_account_key", key));
+        }
+
+        boolean changed;
+        do {
+            changed = false;
+            for (ObjectNode account : accountsById.values()) {
+                if (account.hasNonNull("standard_account_key") || !account.hasNonNull("parent_id")) {
+                    continue;
+                }
+                ObjectNode parent = accountsById.get(account.path("parent_id").asText());
+                if (parent != null && parent.hasNonNull("standard_account_key")) {
+                    account.put("standard_account_key", parent.path("standard_account_key").asText());
+                    changed = true;
+                }
+            }
+        } while (changed);
     }
 
     private String restoreName(String requestedName, String sourceName) {
