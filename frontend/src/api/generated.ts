@@ -228,6 +228,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/ledgers/{ledgerId}/period-closings/{periodId}/steps/{step}:generate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["generate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/ledgers/{ledgerId}/opening-balances:import-csv": {
         parameters: {
             query?: never;
@@ -324,6 +340,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/ledgers/{ledgerId}/fixed-assets/{assetId}:cancel-disposal": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["cancelDisposal"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/ledgers/{ledgerId}/fixed-assets/import": {
         parameters: {
             query?: never;
@@ -365,7 +397,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        post: operations["generate"];
+        post: operations["generate_1"];
         delete?: never;
         options?: never;
         head?: never;
@@ -500,6 +532,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/ledgers/{ledgerId}/books/dimension-ledger:query": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["dimensionLedger"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/ledgers/{ledgerId}/balance-rebuilds": {
         parameters: {
             query?: never;
@@ -628,6 +676,22 @@ export interface paths {
         patch: operations["update_1"];
         trace?: never;
     };
+    "/v1/ledgers/{ledgerId}/period-closing-settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["settings"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch: operations["updateSettings"];
+        trace?: never;
+    };
     "/v1/ledgers/{ledgerId}/members/{userId}": {
         parameters: {
             query?: never;
@@ -674,6 +738,38 @@ export interface paths {
         options?: never;
         head?: never;
         patch: operations["updateCategory"];
+        trace?: never;
+    };
+    "/v1/ledgers/{ledgerId}/dimension-types/{typeId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch: operations["updateDimensionType"];
+        trace?: never;
+    };
+    "/v1/ledgers/{ledgerId}/dimension-types/{typeId}/values/{valueId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch: operations["updateDimensionValue"];
         trace?: never;
     };
     "/v1/ledgers/{ledgerId}/accounts/{accountId}": {
@@ -772,14 +868,14 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/ledgers/{ledgerId}/reports/income-statement": {
+    "/v1/ledgers/{ledgerId}/reports/statutory/{reportType}": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        get: operations["incomeStatement"];
+        get: operations["statutory"];
         put?: never;
         post?: never;
         delete?: never;
@@ -788,14 +884,14 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/ledgers/{ledgerId}/reports/statutory/{reportType}": {
+    "/v1/ledgers/{ledgerId}/reports/income-statement": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        get: operations["statutoryReport"];
+        get: operations["incomeStatement"];
         put?: never;
         post?: never;
         delete?: never;
@@ -844,6 +940,22 @@ export interface paths {
             cookie?: never;
         };
         get: operations["listPeriods"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/ledgers/{ledgerId}/period-closings/{periodId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["status"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1264,10 +1376,10 @@ export interface components {
         };
         Line: {
             /** Format: uuid */
-            accountId: string;
+            accountId?: string;
             side: string;
             currency: string;
-            originalAmount: number;
+            originalAmount?: number;
             exchangeRate: number;
             summary?: string;
             /** Format: uuid */
@@ -1309,6 +1421,12 @@ export interface components {
             /** Format: uuid */
             sourceId?: string;
         };
+        OpeningBalanceDimension: {
+            /** Format: uuid */
+            dimensionTypeId: string;
+            /** Format: uuid */
+            dimensionValueId: string;
+        };
         OpeningBalanceLine: {
             /** Format: uuid */
             accountId: string;
@@ -1319,6 +1437,7 @@ export interface components {
             debitOriginal: number;
             creditOriginal: number;
             exchangeRate: number;
+            dimensions?: components["schemas"]["OpeningBalanceDimension"][];
         };
         OpeningBalances: {
             lines: components["schemas"]["OpeningBalanceLine"][];
@@ -1340,6 +1459,7 @@ export interface components {
             debitBase?: number;
             creditBase?: number;
             confirmed?: boolean;
+            dimensions?: components["schemas"]["OpeningBalanceDimension"][];
         };
         Decision: {
             action?: string;
@@ -1442,6 +1562,24 @@ export interface components {
             endDate?: string;
             status?: string;
             hasVouchers?: boolean;
+        };
+        Blocker: {
+            code?: string;
+            title?: string;
+            detail?: string;
+        };
+        Step: {
+            /** @enum {string} */
+            step?: "DEPRECIATION" | "EXPENSE_TRANSFER" | "REVENUE_TRANSFER" | "YEAR_END_PROFIT_TRANSFER";
+            /** @enum {string} */
+            status?: "NOT_REQUIRED" | "PENDING" | "GENERATED" | "STALE" | "BLOCKED";
+            amount?: number;
+            /** Format: uuid */
+            voucherId?: string;
+            inputFingerprint?: string;
+            blockers?: components["schemas"]["Blocker"][];
+            /** Format: date-time */
+            updatedAt?: string;
         };
         AddMember: {
             /** Format: uuid */
@@ -1569,6 +1707,11 @@ export interface components {
             /** Format: uuid */
             inputTaxAccountId?: string;
         };
+        DisposalCancellation: {
+            reason: string;
+            /** Format: int64 */
+            expectedVersion: number;
+        };
         ImportResult: {
             /** Format: int32 */
             rowCount?: number;
@@ -1645,9 +1788,16 @@ export interface components {
             /** Format: int64 */
             version?: number;
         };
+        DimensionValue: {
+            /** Format: uuid */
+            dimensionTypeId?: string;
+            /** Format: uuid */
+            dimensionValueId?: string;
+        };
         Filters: {
             accountCodes?: string[];
             currency?: string;
+            dimensionValues?: components["schemas"]["DimensionValue"][];
         };
         Query: {
             metric: string;
@@ -1655,10 +1805,26 @@ export interface components {
             periodTo?: string;
             groupBy: string[];
             filters?: components["schemas"]["Filters"];
+            dimensionGroupTypeIds?: string[];
+        };
+        FinanceQueryDimension: {
+            /** Format: uuid */
+            dimensionTypeId?: string;
+            /** Format: uuid */
+            dimensionValueId?: string;
+            dimensionTypeCode?: string;
+            dimensionTypeName?: string;
+            dimensionValueCode?: string;
+            dimensionValueName?: string;
         };
         FinanceQueryLine: {
             groupKey?: string;
             amount?: number;
+            dimensionKey?: string;
+            dimensions?: components["schemas"]["FinanceQueryDimension"][];
+            currency?: string;
+            periodCode?: string;
+            accountCode?: string;
         };
         Document: {
             /** Format: uuid */
@@ -1699,21 +1865,79 @@ export interface components {
             name?: string;
             required?: boolean;
             status?: string;
+            /** Format: int64 */
+            version?: number;
         };
         DimensionValueCreate: {
             code: string;
             name: string;
         };
-        DimensionValue: {
+        DimensionLedgerAmounts: {
+            openingDebit?: number;
+            openingCredit?: number;
+            periodDebit?: number;
+            periodCredit?: number;
+            closingDebit?: number;
+            closingCredit?: number;
+        };
+        DimensionLedgerBalance: {
             /** Format: uuid */
-            id?: string;
+            combinationId?: string;
+            dimensionKey?: string;
+            combinationKind?: string;
+            groupKey?: string;
+            currency?: string;
+            dimensions?: components["schemas"]["FinanceQueryDimension"][];
+            original?: components["schemas"]["DimensionLedgerAmounts"];
+            base?: components["schemas"]["DimensionLedgerAmounts"];
+        };
+        DimensionLedgerEntry: {
             /** Format: uuid */
-            ledgerId?: string;
+            voucherId?: string;
+            voucherNumber?: string;
+            /** Format: date */
+            voucherDate?: string;
+            /** Format: int32 */
+            lineNo?: number;
             /** Format: uuid */
-            dimensionTypeId?: string;
-            code?: string;
-            name?: string;
-            status?: string;
+            lineId?: string;
+            /** Format: uuid */
+            accountId?: string;
+            accountCode?: string;
+            accountName?: string;
+            /** Format: uuid */
+            combinationId?: string;
+            dimensionKey?: string;
+            combinationKind?: string;
+            groupKey?: string;
+            dimensions?: components["schemas"]["FinanceQueryDimension"][];
+            currency?: string;
+            side?: string;
+            originalDebit?: number;
+            originalCredit?: number;
+            baseDebit?: number;
+            baseCredit?: number;
+            runningOriginalDebit?: number;
+            runningOriginalCredit?: number;
+            runningBaseDebit?: number;
+            runningBaseCredit?: number;
+        };
+        DimensionLedgerPage: {
+            projectionStatus?: string;
+            warnings?: string[];
+            balances?: components["schemas"]["DimensionLedgerBalance"][];
+            entries?: components["schemas"]["DimensionLedgerEntry"][];
+            pagination?: components["schemas"]["Pagination"];
+        };
+        Pagination: {
+            /** Format: int32 */
+            page?: number;
+            /** Format: int32 */
+            pageSize?: number;
+            /** Format: int64 */
+            totalItems?: number;
+            /** Format: int32 */
+            totalPages?: number;
         };
         Job: {
             /** Format: uuid */
@@ -1754,8 +1978,6 @@ export interface components {
             quantityEnabled?: boolean;
             unitName?: string;
             dimensionRequirements?: components["schemas"]["DimensionRequirement"][];
-            /** Format: date-time */
-            createdAt?: string;
         };
         DimensionRequirement: {
             /** Format: uuid */
@@ -1789,6 +2011,8 @@ export interface components {
             quantityEnabled?: boolean;
             unitName?: string;
             dimensionRequirements?: components["schemas"]["DimensionRequirement"][];
+            /** Format: date-time */
+            createdAt?: string;
         };
         User: {
             /** Format: uuid */
@@ -1806,6 +2030,26 @@ export interface components {
         Rename: {
             name: string;
             description?: string;
+        };
+        SettingsPatch: {
+            /** Format: uuid */
+            profitAccountId?: string;
+            /** Format: uuid */
+            retainedEarningsAccountId?: string;
+        };
+        Settings: {
+            /** Format: uuid */
+            ledgerId?: string;
+            /** Format: uuid */
+            profitAccountId?: string;
+            /** Format: uuid */
+            retainedEarningsAccountId?: string;
+            /** Format: uuid */
+            defaultProfitAccountId?: string;
+            /** Format: uuid */
+            defaultRetainedEarningsAccountId?: string;
+            /** Format: int64 */
+            version?: number;
         };
         UpdateMember: {
             /** @enum {string} */
@@ -1845,7 +2089,7 @@ export interface components {
             /** Format: uuid */
             disposalLossAccountId?: string;
             /** Format: uuid */
-            effectivePeriodId?: string;
+            changePeriodId?: string;
             reason?: string;
             note?: string;
         };
@@ -1870,6 +2114,19 @@ export interface components {
             disposalGainAccountId?: string;
             /** Format: uuid */
             disposalLossAccountId?: string;
+            status?: string;
+        };
+        DimensionTypePatch: {
+            /** Format: int64 */
+            expectedVersion: number;
+            name?: string;
+            status?: string;
+            required?: boolean;
+        };
+        DimensionValuePatch: {
+            /** Format: int64 */
+            expectedVersion: number;
+            name?: string;
             status?: string;
         };
         AccountPatch: {
@@ -1942,17 +2199,18 @@ export interface components {
             amount?: number;
             dimensionKey?: string;
         };
-        Statement: {
-            /** Format: int32 */
-            totalLines?: number;
-            lines?: components["schemas"]["StatementLine"][];
-        };
-        StatementLine: {
-            code?: string;
+        Check: {
+            key?: string;
             name?: string;
-            amount?: number;
+            passed?: boolean;
+            difference?: number;
         };
-        StatutoryStatement: {
+        Group: {
+            key?: string;
+            title?: string;
+            lines?: components["schemas"]["Line"][];
+        };
+        Statement: {
             reportType?: string;
             templateCode?: string;
             standardCode?: string;
@@ -1960,28 +2218,31 @@ export interface components {
             periodCode?: string;
             primaryColumn?: string;
             comparativeColumn?: string;
-            groups?: components["schemas"]["StatutoryGroup"][];
-            checks?: components["schemas"]["StatutoryCheck"][];
+            groups?: components["schemas"]["Group"][];
+            checks?: components["schemas"]["Check"][];
         };
-        StatutoryGroup: {
-            key?: string;
-            title?: string;
-            lines?: components["schemas"]["StatutoryLine"][];
+        Status: {
+            /** Format: uuid */
+            ledgerId?: string;
+            /** Format: uuid */
+            periodId?: string;
+            periodCode?: string;
+            steps?: components["schemas"]["Step"][];
+            blockers?: components["schemas"]["Blocker"][];
+            trialBalance?: components["schemas"]["TrialBalanceTotals"];
+            canClose?: boolean;
         };
-        StatutoryLine: {
-            key?: string;
-            lineNo?: number;
-            name?: string;
-            indent?: number;
-            rowType?: string;
-            primaryAmount?: number;
-            comparativeAmount?: number;
-        };
-        StatutoryCheck: {
-            key?: string;
-            name?: string;
-            passed?: boolean;
-            difference?: number;
+        TrialBalanceTotals: {
+            openingDebit?: number;
+            openingCredit?: number;
+            periodDebit?: number;
+            periodCredit?: number;
+            closingDebit?: number;
+            closingCredit?: number;
+            openingDifference?: number;
+            periodDifference?: number;
+            closingDifference?: number;
+            balanced?: boolean;
         };
         Page: {
             data?: components["schemas"]["Asset"][];
@@ -2027,16 +2288,6 @@ export interface components {
             name?: string;
             status?: string;
             template?: boolean;
-        };
-        Pagination: {
-            /** Format: int32 */
-            page?: number;
-            /** Format: int32 */
-            pageSize?: number;
-            /** Format: int64 */
-            totalItems?: number;
-            /** Format: int32 */
-            totalPages?: number;
         };
         SubLedgerEntry: {
             /** Format: uuid */
@@ -2622,6 +2873,30 @@ export interface operations {
             };
         };
     };
+    generate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ledgerId: string;
+                periodId: string;
+                step: "DEPRECIATION" | "EXPENSE_TRANSFER" | "REVENUE_TRANSFER" | "YEAR_END_PROFIT_TRANSFER";
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["Step"];
+                };
+            };
+        };
+    };
     importOpeningBalances: {
         parameters: {
             query?: never;
@@ -2829,6 +3104,33 @@ export interface operations {
             };
         };
     };
+    cancelDisposal: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ledgerId: string;
+                assetId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DisposalCancellation"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["Asset"];
+                };
+            };
+        };
+    };
     importAssets: {
         parameters: {
             query?: never;
@@ -2884,7 +3186,7 @@ export interface operations {
             };
         };
     };
-    generate: {
+    generate_1: {
         parameters: {
             query?: never;
             header?: never;
@@ -3213,6 +3515,32 @@ export interface operations {
             };
         };
     };
+    dimensionLedger: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ledgerId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Query"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["DimensionLedgerPage"];
+                };
+            };
+        };
+    };
     request: {
         parameters: {
             query?: never;
@@ -3462,6 +3790,54 @@ export interface operations {
             };
         };
     };
+    settings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ledgerId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["Settings"];
+                };
+            };
+        };
+    };
+    updateSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ledgerId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SettingsPatch"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["Settings"];
+                };
+            };
+        };
+    };
     removeMember: {
         parameters: {
             query?: never;
@@ -3629,6 +4005,61 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["Category"];
+                };
+            };
+        };
+    };
+    updateDimensionType: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ledgerId: string;
+                typeId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DimensionTypePatch"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["DimensionType"];
+                };
+            };
+        };
+    };
+    updateDimensionValue: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ledgerId: string;
+                typeId: string;
+                valueId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DimensionValuePatch"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["DimensionValue"];
                 };
             };
         };
@@ -3824,6 +4255,31 @@ export interface operations {
             };
         };
     };
+    statutory: {
+        parameters: {
+            query: {
+                periodCode: string;
+            };
+            header?: never;
+            path: {
+                ledgerId: string;
+                reportType: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["Statement"];
+                };
+            };
+        };
+    };
     incomeStatement: {
         parameters: {
             query?: {
@@ -3846,31 +4302,6 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["Statement"];
-                };
-            };
-        };
-    };
-    statutoryReport: {
-        parameters: {
-            query?: {
-                periodCode: string;
-            };
-            header?: never;
-            path: {
-                ledgerId: string;
-                reportType: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "*/*": components["schemas"]["StatutoryStatement"];
                 };
             };
         };
@@ -3943,6 +4374,29 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["Period"][];
+                };
+            };
+        };
+    };
+    status: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ledgerId: string;
+                periodId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["Status"];
                 };
             };
         };
@@ -4381,8 +4835,8 @@ export interface operations {
     export: {
         parameters: {
             query: {
-                createdInPeriodId?: string;
                 format: "STANDARD" | "KINGDEE";
+                createdInPeriodId?: string;
             };
             header?: never;
             path: {

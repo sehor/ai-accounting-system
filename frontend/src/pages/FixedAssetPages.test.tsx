@@ -106,6 +106,7 @@ describe('fixed asset presentation', () => {
     expect(payload).not.toHaveProperty('openingDepreciatedMonths')
     expect(payload).not.toHaveProperty('currentDepreciation')
     expect(payload).not.toHaveProperty('currentAccumulatedDepreciation')
+    expect(payload).toHaveProperty('changePeriodId', period.id)
   })
 })
 

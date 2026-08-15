@@ -89,7 +89,7 @@ public final class FixedAssetRequests {
             UUID clearingAccountId,
             UUID disposalGainAccountId,
             UUID disposalLossAccountId,
-            UUID effectivePeriodId,
+            UUID changePeriodId,
             @Size(max = 1000) String reason,
             @Size(max = 2000) String note) {
     }
@@ -109,5 +109,10 @@ public final class FixedAssetRequests {
             UUID paymentAccountId,
             UUID outputTaxAccountId,
             UUID inputTaxAccountId) {
+    }
+
+    public record DisposalCancellation(
+            @NotBlank @Size(max = 1000) String reason,
+            @NotNull Long expectedVersion) {
     }
 }

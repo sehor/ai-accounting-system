@@ -20,6 +20,7 @@ import com.example.accounting.ledger.LedgerResponses;
 import com.example.accounting.ledger.LedgerRole;
 import com.example.accounting.ledger.LedgerService;
 import com.example.accounting.shared.web.ApiProblemException;
+import com.example.accounting.voucher.GeneratedVoucherCommandService;
 import com.example.accounting.voucher.VoucherService;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -53,19 +54,19 @@ class DefaultFixedAssetServiceAuditSnapshotTest {
         when(fixture.assets().findAsset(fixture.ledgerId(), fixture.assetId()))
                 .thenReturn(Optional.of(fixture.current()), Optional.of(persisted));
         when(fixture.ledgers().listPeriods(fixture.actorId(), fixture.ledgerId())).thenReturn(List.of(
-                new LedgerResponses.Period(fixture.effectivePeriodId(), fixture.ledgerId(), "2026-01",
+                new LedgerResponses.Period(fixture.changePeriodId(), fixture.ledgerId(), "2026-01",
                         LocalDate.of(2026, 1, 1), LocalDate.of(2026, 1, 31), "OPEN")));
         when(fixture.assets().depreciationBefore(eq(fixture.ledgerId()), eq(fixture.assetId()), any()))
                 .thenReturn(new DepreciationHistory(BigDecimal.ZERO, 0));
         when(fixture.assets().periodDepreciation(fixture.ledgerId(), fixture.assetId(),
-                fixture.effectivePeriodId())).thenReturn(BigDecimal.ZERO);
+                fixture.changePeriodId())).thenReturn(BigDecimal.ZERO);
         ArgumentCaptor<String> beforeData = ArgumentCaptor.forClass(String.class);
         ArgumentCaptor<String> afterData = ArgumentCaptor.forClass(String.class);
 
         fixture.service().updateAsset(fixture.actorId(), fixture.ledgerId(), fixture.assetId(), fixture.request());
 
         verify(fixture.assets()).insertChange(eq(fixture.ledgerId()), eq(fixture.assetId()),
-                eq(fixture.effectivePeriodId()), eq("correction"), eq(fixture.actorId()),
+                eq(fixture.changePeriodId()), eq("correction"), eq(fixture.actorId()),
                 beforeData.capture(), afterData.capture());
         ObjectMapper mapper = new ObjectMapper();
         JsonNode before = mapper.readTree(beforeData.getValue());
@@ -76,6 +77,33 @@ class DefaultFixedAssetServiceAuditSnapshotTest {
         assertThat(after.path("originalCost").decimalValue()).isEqualByComparingTo("120.00");
         assertThat(after.path("id").asText()).isEqualTo(fixture.assetId().toString());
         assertThat(after.path("ledgerId").asText()).isEqualTo(fixture.ledgerId().toString());
+    }
+
+    @Test
+    void rejectsPastAndFutureOpenChangePeriodsBeforeWriting() {
+        Fixture fixture = fixture(new AuditSnapshotSerializer());
+        UUID currentPeriodId = UUID.randomUUID();
+        UUID pastPeriodId = UUID.randomUUID();
+        UUID futurePeriodId = UUID.randomUUID();
+        when(fixture.ledgers().listPeriods(fixture.actorId(), fixture.ledgerId())).thenReturn(List.of(
+                period(currentPeriodId, fixture.ledgerId(), "2026-02", "2026-02-01", "2026-02-28", "OPEN"),
+                period(pastPeriodId, fixture.ledgerId(), "2026-01", "2026-01-01", "2026-01-31", "OPEN"),
+                period(futurePeriodId, fixture.ledgerId(), "2026-03", "2026-03-01", "2026-03-31", "OPEN")));
+
+        assertChangePeriodRejected(fixture, pastPeriodId, 422, "FIXED_ASSET_CHANGE_PERIOD_PAST");
+        assertChangePeriodRejected(fixture, futurePeriodId, 422, "FIXED_ASSET_CHANGE_PERIOD_FUTURE");
+        verify(fixture.assets(), never()).updateAsset(any(), any(), any(), anyLong(), any());
+    }
+
+    @Test
+    void rejectsClosedChangePeriodBeforeWriting() {
+        Fixture fixture = fixture(new AuditSnapshotSerializer());
+        UUID closedPeriodId = UUID.randomUUID();
+        when(fixture.ledgers().listPeriods(fixture.actorId(), fixture.ledgerId())).thenReturn(List.of(
+                period(closedPeriodId, fixture.ledgerId(), "2026-01", "2026-01-01", "2026-01-31", "CLOSED")));
+
+        assertChangePeriodRejected(fixture, closedPeriodId, 409, "FIXED_ASSET_CHANGE_PERIOD_CLOSED");
+        verify(fixture.assets(), never()).updateAsset(any(), any(), any(), anyLong(), any());
     }
 
     private void assertSerializationFailureRollsBack(int failingCall) {
@@ -102,26 +130,49 @@ class DefaultFixedAssetServiceAuditSnapshotTest {
         verify(fixture.assets(), never()).insertChange(any(), any(), any(), any(), any(), any(), any());
     }
 
+    private void assertChangePeriodRejected(Fixture fixture, UUID periodId, int status, String code) {
+        FixedAssetRequests.AssetPatch request = new FixedAssetRequests.AssetPatch(
+                0L, null, null, null, new BigDecimal("120.00"), null, null, null, null,
+                null, null, null, null, null, null, null, null, null, periodId, "correction", null);
+        assertThatThrownBy(() -> fixture.service().updateAsset(
+                fixture.actorId(), fixture.ledgerId(), fixture.assetId(), request))
+                .isInstanceOf(ApiProblemException.class)
+                .satisfies(exception -> {
+                    ApiProblemException problem = (ApiProblemException) exception;
+                    assertThat(problem.status()).isEqualTo(status);
+                    assertThat(problem.code()).isEqualTo(code);
+                });
+    }
+
+    private LedgerResponses.Period period(UUID id, UUID ledgerId, String code, String start, String end,
+                                          String status) {
+        return new LedgerResponses.Period(id, ledgerId, code, LocalDate.parse(start), LocalDate.parse(end), status);
+    }
+
     private Fixture fixture(AuditSnapshotSerializer serializer) {
         UUID actorId = UUID.randomUUID();
         UUID ledgerId = UUID.randomUUID();
         UUID assetId = UUID.randomUUID();
-        UUID effectivePeriodId = UUID.randomUUID();
+        UUID changePeriodId = UUID.randomUUID();
         FixedAssetRepository assets = mock(FixedAssetRepository.class);
         LedgerAccessService ledgerAccess = mock(LedgerAccessService.class);
         LedgerService ledgers = mock(LedgerService.class);
         VoucherService vouchers = mock(VoucherService.class);
+        GeneratedVoucherCommandService generatedVouchers = mock(GeneratedVoucherCommandService.class);
         AssetRecord current = asset(assetId, ledgerId, new BigDecimal("100.00"), 0L);
         when(ledgerAccess.requireMembership(actorId, ledgerId)).thenReturn(LedgerRole.OWNER);
         when(assets.findAsset(ledgerId, assetId)).thenReturn(Optional.of(current));
         when(assets.hasAssetUsage(ledgerId, assetId)).thenReturn(false);
         when(ledgers.listAccounts(actorId, ledgerId)).thenReturn(List.of());
+        when(ledgers.listPeriods(actorId, ledgerId)).thenReturn(List.of(
+                new LedgerResponses.Period(changePeriodId, ledgerId, "2026-01",
+                        LocalDate.of(2026, 1, 1), LocalDate.of(2026, 1, 31), "OPEN")));
         DefaultFixedAssetService service = new DefaultFixedAssetService(
-                assets, ledgerAccess, ledgers, vouchers, serializer);
+                assets, ledgerAccess, ledgers, vouchers, generatedVouchers, serializer);
         FixedAssetRequests.AssetPatch request = new FixedAssetRequests.AssetPatch(
                 0L, null, null, null, new BigDecimal("120.00"), null, null, null, null,
-                null, null, null, null, null, null, null, null, null, effectivePeriodId, "correction", null);
-        return new Fixture(actorId, ledgerId, assetId, effectivePeriodId, assets, ledgers, current, request, service);
+                null, null, null, null, null, null, null, null, null, changePeriodId, "correction", null);
+        return new Fixture(actorId, ledgerId, assetId, changePeriodId, assets, ledgers, current, request, service);
     }
 
     private AssetRecord asset(UUID assetId, UUID ledgerId, BigDecimal originalCost, long version) {
@@ -136,7 +187,7 @@ class DefaultFixedAssetServiceAuditSnapshotTest {
                 "Fixed-asset audit snapshot failed", "The fixed-asset change could not be serialized", false);
     }
 
-    private record Fixture(UUID actorId, UUID ledgerId, UUID assetId, UUID effectivePeriodId,
+    private record Fixture(UUID actorId, UUID ledgerId, UUID assetId, UUID changePeriodId,
                            FixedAssetRepository assets, LedgerService ledgers, AssetRecord current,
                            FixedAssetRequests.AssetPatch request, DefaultFixedAssetService service) {
     }
