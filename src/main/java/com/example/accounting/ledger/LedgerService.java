@@ -65,6 +65,9 @@ public interface LedgerService {
 
     List<LedgerResponses.DimensionValue> listDimensionValues(UUID actorId, UUID ledgerId, UUID typeId);
 
+    LedgerResponses.DimensionValuesBatch listDimensionValues(
+            UUID actorId, UUID ledgerId, LedgerRequests.DimensionValuesBatch request);
+
     LedgerResponses.DimensionValue createDimensionValue(UUID actorId, UUID ledgerId, UUID typeId,
                                                          LedgerRequests.DimensionValueCreate request);
 

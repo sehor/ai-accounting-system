@@ -1,7 +1,9 @@
 package com.example.accounting.ledger;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 import java.util.Optional;
 
+@Schema(name = "AccountCodeRule", requiredProperties = {"level2Width", "level3Width", "level4Width"})
 public record AccountCodeRule(int level2Width, int level3Width, int level4Width) {
 
     public static final AccountCodeRule DEFAULT = new AccountCodeRule(2, 2, 2);

@@ -4,13 +4,19 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { apiFetch } from '../api/client'
-import type { DimensionType, DimensionValue } from '../api/types'
+import { installLegacyOpenApiBridge } from '../test/openApiLegacyBridge'
+import type { components } from '../api/generated'
 import { DimensionsTab, OPENING_BALANCE_CSV_HEADER, OpeningsTab, openingBalanceAmountPattern } from './SettingsPage'
+
+type DimensionType = components['schemas']['DimensionType']
+type DimensionValue = components['schemas']['LedgerDimensionValue']
 
 vi.mock('../api/client', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../api/client')>()
   return { ...actual, apiFetch: vi.fn() }
 })
+
+installLegacyOpenApiBridge(apiFetch)
 
 Object.defineProperty(window, 'matchMedia', {
   writable: true,
@@ -45,7 +51,7 @@ afterEach(() => {
 })
 
 const account = {
-  id: 'account-1', ledgerId: 'ledger-1', code: '1001', name: '库存现金', category: 'CURRENT_ASSET',
+  id: 'account-1', ledgerId: 'ledger-1', code: '1001', name: '库存现金', standardAccountKey: null, category: 'CURRENT_ASSET',
   normalBalance: 'DEBIT', status: 'ACTIVE', parentId: null, level: 1, isLeaf: true, isTemplate: true,
   hasBusinessUsage: false, coreLocked: false, legacyCode: false, version: 0, cashFlowRequired: false,
   defaultCashFlowItemId: null, quantityEnabled: false, unitName: null, dimensionRequirements: [], createdAt: null,

@@ -3,12 +3,17 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Alert, App as AntApp, Button, Card, Checkbox, Empty, Input, Modal, Pagination, Space, Table, Typography, Upload } from 'antd'
 import { useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { ApiError, apiFetch, apiFetchWithHeaders, createIdempotencyKey, jsonBody } from '../api/client'
-import type { Account, KingdeeImportResult, Voucher, VoucherLine } from '../api/types'
+import { ApiError, apiData, apiHeaders, apiResponse, createIdempotencyKey, openApiClient } from '../api/client'
+import type { components } from '../api/generated'
 import { useAuth } from '../auth/AuthProvider'
 import { PeriodRangeSelector, usePeriodRangeFilter } from '../components/PeriodSelector'
 import { useWorkspaceSearchParams } from '../components/workspaceSearch'
 import { useWorkspaceTabs } from '../components/workspaceTabs'
+
+type Account = components['schemas']['Account']
+type KingdeeImportResult = components['schemas']['KingdeeImportResult']
+type Voucher = components['schemas']['Voucher']
+type VoucherLine = components['schemas']['VoucherLineResponse']
 
 type DisplayRow = {
   key: string
@@ -57,20 +62,17 @@ export function VoucherListPage() {
   const query = useQuery({
     queryKey: ['vouchers', ledgerId, periodFrom, periodTo, effectiveStartDate, effectiveEndDate, keyword, limit, offset],
     queryFn: async () => {
-      const params = new URLSearchParams({ limit: String(limit), offset: String(offset) })
-      if (effectiveStartDate) params.set('startDate', effectiveStartDate)
-      if (effectiveEndDate) params.set('endDate', effectiveEndDate)
-      if (keyword) params.set('keyword', keyword)
-      const response = await apiFetchWithHeaders<Voucher[]>(
-        `/ledgers/${ledgerId}/vouchers?${params}`, session!,
-      )
-      return { data: response.data, total: Number(response.headers.get('X-Total-Count') || response.data.length) }
+      const response = await apiResponse(openApiClient.GET('/v1/ledgers/{ledgerId}/vouchers', {
+        headers: apiHeaders(session!),
+        params: { path: { ledgerId }, query: { limit, offset, startDate: effectiveStartDate, endDate: effectiveEndDate, keyword } },
+      }))
+      return { data: response.data, total: Number(response.response.headers.get('X-Total-Count') || response.data.length) }
     },
     enabled: Boolean(session && ledgerId && periodFrom && periodTo && effectiveStartDate && effectiveEndDate),
   })
   const accounts = useQuery({
     queryKey: ['accounts', ledgerId],
-    queryFn: () => apiFetch<Account[]>(`/ledgers/${ledgerId}/accounts`, session!),
+    queryFn: () => apiData(openApiClient.GET('/v1/ledgers/{ledgerId}/accounts', { headers: apiHeaders(session!), params: { path: { ledgerId } } })),
     enabled: Boolean(session && ledgerId),
   })
   const accountById = useMemo(
@@ -97,11 +99,13 @@ export function VoucherListPage() {
     mutationFn: async ({ action, selectedVouchers, comment }: {
       action: 'approve' | 'post'; selectedVouchers: Voucher[]; comment?: string
     }) => {
-      const results = await Promise.allSettled(selectedVouchers.map((voucher) => apiFetch<Voucher>(
-        `/ledgers/${ledgerId}/vouchers/${voucher.id}:${action}`, session!, {
-          method: 'POST', body: action === 'approve' ? jsonBody({ comment }) : undefined,
-        },
-      )))
+      const results = await Promise.allSettled(selectedVouchers.map((voucher) => action === 'approve'
+        ? apiData(openApiClient.POST('/v1/ledgers/{ledgerId}/vouchers/{voucherId}:approve', {
+            headers: apiHeaders(session!), params: { path: { ledgerId, voucherId: voucher.id } }, body: { comment: comment! },
+          }))
+        : apiData(openApiClient.POST('/v1/ledgers/{ledgerId}/vouchers/{voucherId}:post', {
+            headers: apiHeaders(session!), params: { path: { ledgerId, voucherId: voucher.id } },
+          }))))
       return {
         succeeded: results.filter((result) => result.status === 'fulfilled').length,
         failed: results.filter((result) => result.status === 'rejected').length,
@@ -120,9 +124,12 @@ export function VoucherListPage() {
     mutationFn: (file: File) => {
       const body = new FormData()
       body.append('file', file)
-      return apiFetch<KingdeeImportResult>(`/ledgers/${ledgerId}/data-exchange/kingdee:import`, session!, {
-        method: 'POST', headers: { 'Idempotency-Key': createIdempotencyKey() }, body,
-      })
+      return apiData(openApiClient.POST('/v1/ledgers/{ledgerId}/data-exchange/kingdee:import', {
+        headers: { ...apiHeaders(session!), 'Idempotency-Key': createIdempotencyKey() },
+        params: { path: { ledgerId } },
+        body: { file: file as unknown as string },
+        bodySerializer: () => body,
+      }))
     },
     onSuccess: (result) => {
       message.success(`已导入 ${result.voucherCount} 张凭证、${result.rowCount} 条分录`)
@@ -133,10 +140,11 @@ export function VoucherListPage() {
   })
   const exportKingdee = useMutation({
     mutationFn: (shouldMerge: boolean) => {
-      const params = new URLSearchParams({ mergeEntries: String(shouldMerge) })
-      if (effectiveStartDate) params.set('startDate', effectiveStartDate)
-      if (effectiveEndDate) params.set('endDate', effectiveEndDate)
-      return apiFetch<Blob>(`/ledgers/${ledgerId}/data-exchange/kingdee:export?${params}`, session!)
+      return apiData(openApiClient.GET('/v1/ledgers/{ledgerId}/data-exchange/kingdee:export', {
+        headers: apiHeaders(session!),
+        params: { path: { ledgerId }, query: { mergeEntries: shouldMerge, startDate: effectiveStartDate, endDate: effectiveEndDate } },
+        parseAs: 'blob',
+      }))
     },
     onSuccess: (blob) => {
       setExportOpen(false)
@@ -150,9 +158,9 @@ export function VoucherListPage() {
     onError: (error) => message.error(error instanceof ApiError ? error.message : '金蝶凭证导出失败'),
   })
   const removeVoucher = useMutation({
-    mutationFn: (voucher: Voucher) => apiFetch<void>(
-      `/ledgers/${ledgerId}/vouchers/${voucher.id}`, session!, { method: 'DELETE' },
-    ),
+    mutationFn: (voucher: Voucher) => apiData(openApiClient.DELETE('/v1/ledgers/{ledgerId}/vouchers/{voucherId}', {
+      headers: apiHeaders(session!), params: { path: { ledgerId, voucherId: voucher.id } },
+    })),
     onSuccess: (_, voucher) => {
       setSelectedKeys((current) => current.filter((key) => key !== voucher.id))
       client.removeQueries({ queryKey: ['voucher', ledgerId, voucher.id], exact: true })

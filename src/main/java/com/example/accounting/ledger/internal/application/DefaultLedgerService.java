@@ -476,6 +476,21 @@ public class DefaultLedgerService implements LedgerService {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public LedgerResponses.DimensionValuesBatch listDimensionValues(
+            UUID actorId, UUID ledgerId, LedgerRequests.DimensionValuesBatch request) {
+        List<LedgerResponses.DimensionValueGroup> groups = request.dimensionTypeIds().stream()
+                .distinct()
+                .map(typeId -> {
+                    requireDimensionType(actorId, ledgerId, typeId, false);
+                    return new LedgerResponses.DimensionValueGroup(
+                            typeId, ledgers.listDimensionValues(ledgerId, typeId));
+                })
+                .toList();
+        return new LedgerResponses.DimensionValuesBatch(groups);
+    }
+
+    @Override
     @Transactional
     public LedgerResponses.DimensionValue createDimensionValue(
             UUID actorId, UUID ledgerId, UUID typeId, LedgerRequests.DimensionValueCreate request) {

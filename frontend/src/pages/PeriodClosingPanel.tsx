@@ -2,8 +2,13 @@ import { Alert, Button, Card, Form, Select, Space, Tag, Typography, message } fr
 import { SettingOutlined } from '@ant-design/icons'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useRef, useState } from 'react'
-import { apiFetch, ApiError, jsonBody, type ApiAuth } from '../api/client'
-import type { Account, Period, PeriodClosingSettings, PeriodClosingStatus, PeriodClosingStep, PeriodClosingStepType } from '../api/types'
+import { apiData, apiHeaders, openApiClient, ApiError, type ApiAuth } from '../api/client'
+import type { components } from '../api/generated'
+
+type Account = components['schemas']['Account']
+type Period = Omit<components['schemas']['Period'], 'hasVouchers'> & { hasVouchers?: boolean }
+type PeriodClosingStep = components['schemas']['PeriodClosingStep']
+type PeriodClosingStepType = PeriodClosingStep['step']
 
 const labels: Record<PeriodClosingStepType, string> = {
   DEPRECIATION: '计提固定资产折旧',
@@ -17,10 +22,10 @@ export function PeriodClosingPanel({ ledgerId, session, period, accounts, onConf
 }) {
   const client = useQueryClient(); const [showSettings, setShowSettings] = useState(false); const [activeStep, setActiveStep] = useState<PeriodClosingStepType | null>(null); const generatingRef = useRef(false)
   const [messageApi, contextHolder] = message.useMessage()
-  const status = useQuery({ queryKey: ['period-closing', ledgerId, period.id], queryFn: () => apiFetch<PeriodClosingStatus>(`/ledgers/${ledgerId}/period-closings/${period.id}`, session), retry: false })
-  const settings = useQuery({ queryKey: ['period-closing-settings', ledgerId], queryFn: () => apiFetch<PeriodClosingSettings>(`/ledgers/${ledgerId}/period-closing-settings`, session), retry: false })
-  const generate = useMutation({ mutationFn: (step: PeriodClosingStepType) => apiFetch<PeriodClosingStep>(`/ledgers/${ledgerId}/period-closings/${period.id}/steps/${step}:generate`, session, { method: 'POST' }), onSuccess: () => { void client.invalidateQueries({ queryKey: ['period-closing', ledgerId, period.id] }); void client.invalidateQueries({ queryKey: ['periods', ledgerId] }); void client.invalidateQueries({ queryKey: ['vouchers', ledgerId] }) }, onError: (error) => messageApi.error(error instanceof ApiError ? error.message : '生成结账凭证失败'), onSettled: () => { generatingRef.current = false; setActiveStep(null) } })
-  const saveSettings = useMutation({ mutationFn: (value: { profitAccountId: string | null; retainedEarningsAccountId: string | null }) => apiFetch<PeriodClosingSettings>(`/ledgers/${ledgerId}/period-closing-settings`, session, { method: 'PATCH', body: jsonBody(value) }), onSuccess: () => { setShowSettings(false); void client.invalidateQueries({ queryKey: ['period-closing-settings', ledgerId] }); void client.invalidateQueries({ queryKey: ['period-closing', ledgerId, period.id] }) }, onError: (error) => messageApi.error(error instanceof ApiError ? error.message : '科目配置保存失败') })
+  const status = useQuery({ queryKey: ['period-closing', ledgerId, period.id], queryFn: () => apiData(openApiClient.GET('/v1/ledgers/{ledgerId}/period-closings/{periodId}', { params: { path: { ledgerId, periodId: period.id } }, headers: apiHeaders(session) })), retry: false })
+  const settings = useQuery({ queryKey: ['period-closing-settings', ledgerId], queryFn: () => apiData(openApiClient.GET('/v1/ledgers/{ledgerId}/period-closing-settings', { params: { path: { ledgerId } }, headers: apiHeaders(session) })), retry: false })
+  const generate = useMutation({ mutationFn: (step: PeriodClosingStepType) => apiData(openApiClient.POST('/v1/ledgers/{ledgerId}/period-closings/{periodId}/steps/{step}:generate', { params: { path: { ledgerId, periodId: period.id, step } }, headers: apiHeaders(session) })), onSuccess: () => { void client.invalidateQueries({ queryKey: ['period-closing', ledgerId, period.id] }); void client.invalidateQueries({ queryKey: ['periods', ledgerId] }); void client.invalidateQueries({ queryKey: ['vouchers', ledgerId] }) }, onError: (error) => messageApi.error(error instanceof ApiError ? error.message : '生成结账凭证失败'), onSettled: () => { generatingRef.current = false; setActiveStep(null) } })
+  const saveSettings = useMutation({ mutationFn: (value: { profitAccountId: string | null; retainedEarningsAccountId: string | null }) => apiData(openApiClient.PATCH('/v1/ledgers/{ledgerId}/period-closing-settings', { params: { path: { ledgerId } }, headers: apiHeaders(session), body: { profitAccountId: value.profitAccountId || undefined, retainedEarningsAccountId: value.retainedEarningsAccountId || undefined } })), onSuccess: () => { setShowSettings(false); void client.invalidateQueries({ queryKey: ['period-closing-settings', ledgerId] }); void client.invalidateQueries({ queryKey: ['period-closing', ledgerId, period.id] }) }, onError: (error) => messageApi.error(error instanceof ApiError ? error.message : '科目配置保存失败') })
   const data = status.data
   const equityLeaves = accounts.filter((account) => account.category === 'EQUITY' && account.isLeaf && account.status === 'ACTIVE')
   const selected = settings.data

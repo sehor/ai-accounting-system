@@ -6,6 +6,7 @@ import com.example.accounting.shared.web.ApiProblemException;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.swagger.v3.oas.annotations.media.Schema;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -1100,21 +1101,42 @@ public class AccountExchangeService {
         STANDARD, KINGDEE
     }
 
-    public record Decision(String action, UUID targetAccountId, String accountCode) {
+    @Schema(name = "AccountImportDecision")
+    public record Decision(
+            @Schema(requiredMode = Schema.RequiredMode.REQUIRED, nullable = true) String action,
+            @Schema(requiredMode = Schema.RequiredMode.REQUIRED, nullable = true) UUID targetAccountId,
+            @Schema(requiredMode = Schema.RequiredMode.REQUIRED, nullable = true) String accountCode) {
     }
 
     public record RowDecision(int rowNo, Decision decision) {
     }
 
+    @Schema(name = "AccountImportPreview")
     public record Preview(
-            UUID id, UUID ledgerId, Format format, String status, long ledgerVersion,
-            String filename, int rowCount, int errorCount, String aiStatus, List<PreviewRow> rows) {
+            @Schema(requiredMode = Schema.RequiredMode.REQUIRED) UUID id,
+            @Schema(requiredMode = Schema.RequiredMode.REQUIRED) UUID ledgerId,
+            @Schema(requiredMode = Schema.RequiredMode.REQUIRED) Format format,
+            @Schema(requiredMode = Schema.RequiredMode.REQUIRED) String status,
+            @Schema(requiredMode = Schema.RequiredMode.REQUIRED) long ledgerVersion,
+            @Schema(requiredMode = Schema.RequiredMode.REQUIRED) String filename,
+            @Schema(requiredMode = Schema.RequiredMode.REQUIRED) int rowCount,
+            @Schema(requiredMode = Schema.RequiredMode.REQUIRED) int errorCount,
+            @Schema(requiredMode = Schema.RequiredMode.REQUIRED) String aiStatus,
+            @Schema(requiredMode = Schema.RequiredMode.REQUIRED) List<PreviewRow> rows) {
     }
 
+    @Schema(name = "AccountImportPreviewRow")
     public record PreviewRow(
-            int rowNo, Map<String, String> rawData, Map<String, String> cleanedData,
-            String accountCode, UUID targetAccountId, Long expectedAccountVersion,
-            String action, boolean confirmed, BigDecimal confidence, List<String> issues) {
+            @Schema(requiredMode = Schema.RequiredMode.REQUIRED) int rowNo,
+            @Schema(requiredMode = Schema.RequiredMode.REQUIRED) Map<String, String> rawData,
+            @Schema(requiredMode = Schema.RequiredMode.REQUIRED) Map<String, String> cleanedData,
+            @Schema(requiredMode = Schema.RequiredMode.REQUIRED) String accountCode,
+            @Schema(requiredMode = Schema.RequiredMode.REQUIRED, nullable = true) UUID targetAccountId,
+            @Schema(requiredMode = Schema.RequiredMode.REQUIRED, nullable = true) Long expectedAccountVersion,
+            @Schema(requiredMode = Schema.RequiredMode.REQUIRED, nullable = true) String action,
+            @Schema(requiredMode = Schema.RequiredMode.REQUIRED) boolean confirmed,
+            @Schema(requiredMode = Schema.RequiredMode.REQUIRED, nullable = true) BigDecimal confidence,
+            @Schema(requiredMode = Schema.RequiredMode.REQUIRED) List<String> issues) {
     }
 
     private record ParsedAccount(

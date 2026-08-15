@@ -1,5 +1,6 @@
 package com.example.accounting.agent;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.UUID;
@@ -14,6 +15,7 @@ public final class ExperienceResponses {
                              OffsetDateTime createdAt, OffsetDateTime updatedAt) {
     }
 
+    @Schema(name = "ExperiencePage")
     public record Page(List<Experience> items, int page, int pageSize, long totalItems, int totalPages) {
     }
 }

@@ -6,6 +6,7 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import jakarta.validation.Valid;
+import io.swagger.v3.oas.annotations.media.Schema;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
@@ -21,6 +22,7 @@ public final class LedgerRequests {
         FUZZY
     }
 
+    @Schema(name = "LedgerCreateRequest")
     public record Create(@NotBlank @Size(max = 200) String name,
                          @Size(max = 2000) String description,
                          @NotBlank String accountingStandardCode,
@@ -112,6 +114,7 @@ public final class LedgerRequests {
             List<@Valid DimensionRequirement> dimensionRequirements) {
     }
 
+    @Schema(name = "AccountDimensionRequirementRequest")
     public record DimensionRequirement(@NotNull UUID dimensionTypeId, boolean required) {
     }
 
@@ -145,6 +148,10 @@ public final class LedgerRequests {
                                       @Pattern(regexp = "ACTIVE|INACTIVE") String status) {
     }
 
+    @Schema(name = "DimensionValuesBatchRequest")
+    public record DimensionValuesBatch(@NotEmpty List<@NotNull UUID> dimensionTypeIds) {
+    }
+
     public record OpeningBalances(@NotEmpty List<@Valid OpeningBalanceLine> lines,
                                   @Size(max = 1000) String reason) {
 
@@ -174,6 +181,7 @@ public final class LedgerRequests {
         }
     }
 
+    @Schema(name = "OpeningBalanceDimensionRequest")
     public record OpeningBalanceDimension(@NotNull UUID dimensionTypeId,
                                           @NotNull UUID dimensionValueId) {
     }

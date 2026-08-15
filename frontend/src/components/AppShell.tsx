@@ -9,11 +9,14 @@ import { useQuery } from '@tanstack/react-query'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { useLocation, useNavigate, useOutlet } from 'react-router-dom'
-import { apiFetch } from '../api/client'
-import type { Ledger, User } from '../api/types'
+import { apiData, apiHeaders, openApiClient } from '../api/client'
+import type { components } from '../api/generated'
 import { useAuth } from '../auth/AuthProvider'
 import { logoutOidc, isOidcConfigured } from '../auth/session'
 import { clearWorkspaceTabDirty, isWorkspaceTabDirty } from './workspaceDirty'
+
+type Ledger = components['schemas']['LedgerResponse']
+type User = components['schemas']['CurrentUser']
 import { WorkspaceTabSearchProvider } from './workspaceSearch'
 import { WorkspaceTabsProvider } from './workspaceTabs'
 
@@ -94,12 +97,12 @@ export function AppShell() {
 
   const ledgers = useQuery({
     queryKey: ['ledgers'],
-    queryFn: () => apiFetch<Ledger[]>('/ledgers', session!),
+    queryFn: () => apiData(openApiClient.GET('/v1/ledgers', { headers: apiHeaders(session!) })),
     enabled: Boolean(session),
   })
   const me = useQuery({
     queryKey: ['me'],
-    queryFn: () => apiFetch<User>('/me', session!),
+    queryFn: () => apiData(openApiClient.GET('/v1/me', { headers: apiHeaders(session!) })),
     enabled: Boolean(session),
   })
 

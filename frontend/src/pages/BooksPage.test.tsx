@@ -5,6 +5,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import type { ReactNode } from 'react'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { apiFetch, apiFetchWithHeaders } from '../api/client'
+import { installLegacyOpenApiBridge } from '../test/openApiLegacyBridge'
 import { BooksPage } from './BooksPage'
 import { ReportsPage } from './ReportsPage'
 
@@ -176,9 +177,11 @@ describe('independent book and report periods', () => {
       expect(call).toBeDefined()
       expect(call?.[2]).toEqual(expect.objectContaining({ method: 'POST' }))
       expect(JSON.parse(String(call?.[2]?.body))).toEqual({
-        periodFrom: '2026-06', periodTo: '2026-06', accountId: 'account-2', currency: null,
+        periodFrom: '2026-06', periodTo: '2026-06', accountId: 'account-2',
         dimensionValues: [], groupDimensionTypeIds: [], page: 1, pageSize: 50,
       })
     })
   })
 })
+
+installLegacyOpenApiBridge(apiFetch, apiFetchWithHeaders)

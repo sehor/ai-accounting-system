@@ -1,5 +1,6 @@
 package com.example.accounting.reporting;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
@@ -12,6 +13,7 @@ public final class FinanceQueryRequests {
     private FinanceQueryRequests() {
     }
 
+    @Schema(name = "FinanceQueryRequest")
     public record Query(@NotBlank @Pattern(regexp = "DEBIT|CREDIT|NET|BALANCE") String metric,
                         String periodFrom,
                         String periodTo,
@@ -41,6 +43,7 @@ public final class FinanceQueryRequests {
         }
     }
 
+    @Schema(name = "FinanceQueryDimensionValue")
     public record DimensionValue(UUID dimensionTypeId, UUID dimensionValueId) {
     }
 }

@@ -4,12 +4,15 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { apiFetch } from '../api/client'
+import { installLegacyOpenApiBridge } from '../test/openApiLegacyBridge'
 import { LedgerListPage } from './LedgerListPage'
 
-vi.mock('../api/client', () => ({
-  apiFetch: vi.fn(),
-  jsonBody: vi.fn((value) => JSON.stringify(value)),
-}))
+vi.mock('../api/client', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../api/client')>()
+  return { ...actual, apiFetch: vi.fn() }
+})
+
+installLegacyOpenApiBridge(apiFetch)
 
 vi.mock('../auth/AuthProvider', () => ({
   useAuth: () => ({ session: { localUserId: 'user-1', localUserName: 'admin' } }),

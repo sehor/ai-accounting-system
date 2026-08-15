@@ -1,5 +1,6 @@
 package com.example.accounting.reporting;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 
@@ -8,6 +9,7 @@ public final class BalanceRebuildRequests {
     private BalanceRebuildRequests() {
     }
 
+    @Schema(name = "BalanceRebuildCreateRequest")
     public record Create(
             @Pattern(regexp = "^$|\\d{4}-\\d{2}", message = "periodFrom must use YYYY-MM") String periodFrom,
             @Pattern(regexp = "^$|\\d{4}-\\d{2}", message = "periodTo must use YYYY-MM") String periodTo,

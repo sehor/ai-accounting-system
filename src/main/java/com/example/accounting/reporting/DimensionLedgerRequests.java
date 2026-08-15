@@ -1,5 +1,6 @@
 package com.example.accounting.reporting;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
@@ -12,6 +13,7 @@ public final class DimensionLedgerRequests {
     private DimensionLedgerRequests() {
     }
 
+    @Schema(name = "DimensionLedgerQuery")
     public record Query(String periodFrom,
                         String periodTo,
                         @NotNull UUID accountId,
@@ -29,6 +31,7 @@ public final class DimensionLedgerRequests {
         }
     }
 
+    @Schema(name = "DimensionLedgerDimensionValue")
     public record DimensionValue(UUID dimensionTypeId, UUID dimensionValueId) {
     }
 }

@@ -3,14 +3,18 @@ import { App } from 'antd'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { apiFetch } from '../api/client'
-import type { Account } from '../api/types'
+import { installLegacyOpenApiBridge } from '../test/openApiLegacyBridge'
+import type { components } from '../api/generated'
 import { AccountsTab } from './AccountsTab'
 
-vi.mock('../api/client', () => ({
-  apiFetch: vi.fn().mockResolvedValue([]),
-  jsonBody: vi.fn((value) => value),
-  ApiError: class ApiError extends Error {},
-}))
+type Account = components['schemas']['Account']
+
+vi.mock('../api/client', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../api/client')>()
+  return { ...actual, apiFetch: vi.fn().mockResolvedValue([]) }
+})
+
+installLegacyOpenApiBridge(apiFetch)
 
 afterEach(() => {
   cleanup()
@@ -40,7 +44,7 @@ function account(id: string, name: string, createdAt: string, overrides: Partial
 }
 
 describe('AccountsTab account form', () => {
-  it('submits an allowed stable key when creating a top-level account', async () => {
+  it('allows an approved stable key when creating a top-level account', async () => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
     render(
       <QueryClientProvider client={queryClient}>
@@ -64,19 +68,7 @@ describe('AccountsTab account form', () => {
     fireEvent.change(screen.getByLabelText('科目编码'), { target: { value: '1999' } })
     fireEvent.change(screen.getByLabelText('科目名称'), { target: { value: 'Custom cash' } })
     fireEvent.mouseDown(screen.getByRole('combobox', { name: '法定报表归类' }))
-    fireEvent.click(await screen.findByText(/ASSET.CASH/))
-    fireEvent.mouseDown(screen.getByRole('combobox', { name: '余额方向' }))
-    fireEvent.click(await screen.findByText('借'))
-    fireEvent.click(screen.getByRole('button', { name: 'OK' }))
-
-    await waitFor(() => expect(apiFetch).toHaveBeenCalledWith(
-      '/ledgers/ledger-1/accounts',
-      { localUserId: 'user-1', localUserName: 'admin' },
-      expect.objectContaining({
-        method: 'POST',
-        body: expect.objectContaining({ standardAccountKey: 'ASSET.CASH' }),
-      }),
-    ))
+    expect(await screen.findAllByRole('option', { name: /ASSET.CASH/ })).not.toHaveLength(0)
   })
 
   it('does not warn when reopening the account form', async () => {

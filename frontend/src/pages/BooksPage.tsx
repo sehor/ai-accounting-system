@@ -1,10 +1,19 @@
 import { Alert, Card, Empty, Input, Pagination, Select, Space, Table, Tag, Tree, Typography } from 'antd'
 import type { DataNode } from 'antd/es/tree'
-import { useQueries, useQuery } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { apiFetch, jsonBody } from '../api/client'
-import type { Account, DimensionLedgerPage, DimensionType, DimensionValue, GeneralLedgerAccount, GeneralLedgerPage, SubLedgerEntry, SubLedgerPage, TrialBalanceLine } from '../api/types'
+import { apiData, apiHeaders, openApiClient } from '../api/client'
+import type { components } from '../api/generated'
+
+type Account = components['schemas']['Account']
+type DimensionLedgerPage = components['schemas']['DimensionLedgerPage']
+type DimensionType = components['schemas']['DimensionType']
+type GeneralLedgerAccount = components['schemas']['GeneralLedgerAccount']
+type GeneralLedgerPage = components['schemas']['GeneralLedgerPage']
+type SubLedgerEntry = components['schemas']['SubLedgerEntry']
+type SubLedgerPage = components['schemas']['SubLedgerPage']
+type TrialBalanceLine = components['schemas']['TrialBalanceLine']
 import { useAuth } from '../auth/AuthProvider'
 import { PeriodRangeSelector, usePeriodRangeFilter } from '../components/PeriodSelector'
 import { useWorkspaceSearchParams } from '../components/workspaceSearch'
@@ -53,12 +62,12 @@ function DimensionLedgerPageView() {
   const [groupTypeIds, setGroupTypeIds] = useState<string[]>([])
   const accounts = useQuery({
     queryKey: ['accounts', ledgerId],
-    queryFn: () => apiFetch<Account[]>(`/ledgers/${ledgerId}/accounts`, session!),
+    queryFn: () => apiData(openApiClient.GET('/v1/ledgers/{ledgerId}/accounts', { params: { path: { ledgerId } }, headers: apiHeaders(session!) })),
     enabled: Boolean(session && ledgerId),
   })
   const types = useQuery({
     queryKey: ['dimension-types', ledgerId],
-    queryFn: () => apiFetch<DimensionType[]>(`/ledgers/${ledgerId}/dimension-types`, session!),
+    queryFn: () => apiData(openApiClient.GET('/v1/ledgers/{ledgerId}/dimension-types', { params: { path: { ledgerId } }, headers: apiHeaders(session!) })),
     enabled: Boolean(session && ledgerId),
   })
   const firstLeaf = accounts.data?.find((account) => account.status === 'ACTIVE' && account.isLeaf)?.id
@@ -70,15 +79,21 @@ function DimensionLedgerPageView() {
   }, [accountId, firstLeaf, search, setSearch])
   const account = accounts.data?.find((candidate) => candidate.id === accountId)
   const requirements = account?.dimensionRequirements || []
-  const valueQueries = useQueries({
-    queries: requirements.map((requirement) => ({
-      queryKey: ['dimension-values', ledgerId, requirement.dimensionTypeId],
-      queryFn: () => apiFetch<DimensionValue[]>(
-        `/ledgers/${ledgerId}/dimension-types/${requirement.dimensionTypeId}/values`, session!,
-      ),
-      enabled: Boolean(session && ledgerId && accountId),
+  const dimensionTypeIds = useMemo(
+    () => [...new Set(requirements.map((requirement) => requirement.dimensionTypeId))].sort(),
+    [requirements],
+  )
+  const values = useQuery({
+    queryKey: ['dimension-values', ledgerId, dimensionTypeIds],
+    queryFn: () => apiData(openApiClient.POST('/v1/ledgers/{ledgerId}/dimension-values:batch', {
+      params: { path: { ledgerId } }, headers: apiHeaders(session!), body: { dimensionTypeIds },
     })),
+    enabled: Boolean(session && ledgerId && accountId && dimensionTypeIds.length),
   })
+  const valuesByType = useMemo(
+    () => new Map((values.data?.groups || []).map((group) => [group.dimensionTypeId, group.values])),
+    [values.data],
+  )
   useEffect(() => {
     setDimensionValues({})
     setGroupTypeIds([])
@@ -90,14 +105,12 @@ function DimensionLedgerPageView() {
   const query = useQuery({
     queryKey: ['book', ledgerId, 'dimension-ledger', periodFrom, periodTo, accountId, currency,
       selectedDimensions, groupTypeIds, page],
-    queryFn: () => apiFetch<DimensionLedgerPage>(
-      `/ledgers/${ledgerId}/books/dimension-ledger:query`, session!, {
-        method: 'POST', body: jsonBody({
-          periodFrom, periodTo, accountId, currency: currency || null,
-          dimensionValues: selectedDimensions, groupDimensionTypeIds: groupTypeIds, page, pageSize: 50,
-        }),
+    queryFn: () => apiData(openApiClient.POST('/v1/ledgers/{ledgerId}/books/dimension-ledger:query', {
+      params: { path: { ledgerId } }, headers: apiHeaders(session!), body: {
+        periodFrom: periodFrom!, periodTo: periodTo!, accountId: accountId!, currency: currency || undefined,
+        dimensionValues: selectedDimensions, groupDimensionTypeIds: groupTypeIds, page, pageSize: 50,
       },
-    ),
+    })),
     enabled: Boolean(session && ledgerId && periodFrom && periodTo && accountId && account?.isLeaf),
   })
   const updateAccount = (value: string) => {
@@ -130,8 +143,8 @@ function DimensionLedgerPageView() {
           key={requirement.dimensionTypeId} aria-label={`筛选${requirement.name}`} allowClear showSearch
           optionFilterProp="label" style={{ minWidth: 180 }} placeholder={`全部${requirement.name}`}
           value={dimensionValues[requirement.dimensionTypeId]}
-          loading={valueQueries[index]?.isLoading}
-          options={(valueQueries[index]?.data || []).map((value) => ({
+          loading={values.isLoading}
+          options={(valuesByType.get(requirement.dimensionTypeId) || []).map((value) => ({
             value: value.id, label: `${value.code} ${value.name}${value.status === 'INACTIVE' ? '（停用）' : ''}`,
           }))}
           onChange={(value) => {
@@ -212,9 +225,9 @@ function TrialBalancePage() {
   const { periodFrom, periodTo } = usePeriodRangeFilter(ledgerId)
   const query = useQuery({
     queryKey: ['report', ledgerId, 'trial-balance', periodFrom, periodTo],
-    queryFn: () => apiFetch<TrialBalanceLine[]>(
-      `/ledgers/${ledgerId}/reports/trial-balance?periodFrom=${periodFrom}&periodTo=${periodTo}`, session!,
-    ),
+    queryFn: () => apiData(openApiClient.GET('/v1/ledgers/{ledgerId}/reports/trial-balance', {
+      params: { path: { ledgerId }, query: { periodFrom: periodFrom!, periodTo: periodTo! } }, headers: apiHeaders(session!),
+    })),
     enabled: Boolean(session && ledgerId && periodFrom && periodTo),
   })
   return <section className="financial-page">
@@ -247,9 +260,9 @@ function GeneralLedgerPageView() {
   const page = Number(search.get('page') || 1)
   const query = useQuery({
     queryKey: ['book', ledgerId, 'general-ledger', periodFrom, periodTo, page],
-    queryFn: () => apiFetch<GeneralLedgerPage>(
-      `/ledgers/${ledgerId}/books/general-ledger?periodFrom=${periodFrom}&periodTo=${periodTo}&page=${page}&pageSize=50`, session!,
-    ),
+    queryFn: () => apiData(openApiClient.GET('/v1/ledgers/{ledgerId}/books/general-ledger', {
+      params: { path: { ledgerId }, query: { periodFrom: periodFrom!, periodTo: periodTo!, page, pageSize: 50 } }, headers: apiHeaders(session!),
+    })),
     enabled: Boolean(session && ledgerId && periodFrom && periodTo),
   })
   const rows = useMemo(() => (query.data?.data || []).flatMap((account) => [
@@ -332,7 +345,7 @@ function SubLedgerPageView() {
   const [expandedKeys, setExpandedKeys] = useState<string[]>([])
   const accounts = useQuery({
     queryKey: ['accounts', ledgerId],
-    queryFn: () => apiFetch<Account[]>(`/ledgers/${ledgerId}/accounts`, session!),
+    queryFn: () => apiData(openApiClient.GET('/v1/ledgers/{ledgerId}/accounts', { params: { path: { ledgerId } }, headers: apiHeaders(session!) })),
     enabled: Boolean(session && ledgerId),
   })
   const firstAsset = accounts.data?.find((account) =>
@@ -349,9 +362,9 @@ function SubLedgerPageView() {
   useEffect(() => setExpandedKeys([]), [ledgerId])
   const query = useQuery({
     queryKey: ['book', ledgerId, 'sub-ledger', periodFrom, periodTo, accountId, page],
-    queryFn: () => apiFetch<SubLedgerPage>(
-      `/ledgers/${ledgerId}/books/sub-ledger?periodFrom=${periodFrom}&periodTo=${periodTo}&accountId=${accountId}&page=${page}&pageSize=50`, session!,
-    ),
+    queryFn: () => apiData(openApiClient.GET('/v1/ledgers/{ledgerId}/books/sub-ledger', {
+      params: { path: { ledgerId }, query: { periodFrom: periodFrom!, periodTo: periodTo!, accountId: accountId!, page, pageSize: 50 } }, headers: apiHeaders(session!),
+    })),
     enabled: Boolean(session && ledgerId && periodFrom && periodTo && accountId),
   })
   const tree = useMemo(() => filterTree(accountTree(accounts.data || []), keyword), [accounts.data, keyword])

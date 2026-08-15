@@ -177,6 +177,13 @@ public class LedgerController {
         return ledgerService.listDimensionValues(user(request), ledgerId, typeId);
     }
 
+    @PostMapping("/{ledgerId}/dimension-values:batch")
+    public LedgerResponses.DimensionValuesBatch listDimensionValues(
+            HttpServletRequest request, @PathVariable UUID ledgerId,
+            @Valid @RequestBody LedgerRequests.DimensionValuesBatch body) {
+        return ledgerService.listDimensionValues(user(request), ledgerId, body);
+    }
+
     @PostMapping("/{ledgerId}/dimension-types/{typeId}/values")
     @ResponseStatus(HttpStatus.CREATED)
     public LedgerResponses.DimensionValue createDimensionValue(HttpServletRequest request,

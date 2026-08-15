@@ -1,5 +1,6 @@
 package com.example.accounting.fixedasset;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Max;
@@ -97,6 +98,7 @@ public final class FixedAssetRequests {
     public record DepreciationAction(@NotNull UUID periodId, String reason) {
     }
 
+    @Schema(name = "FixedAssetDisposalRequest")
     public record Disposal(
             @NotNull UUID periodId,
             @NotNull LocalDate disposalDate,

@@ -1,12 +1,12 @@
 import { Alert, App as AntApp, Button, Card, DatePicker, Empty, Form, Input, Modal, Select, Space, Spin, Table, Typography } from 'antd'
 import type { FormInstance } from 'antd'
 import { DeleteOutlined, PlusOutlined } from '@ant-design/icons'
-import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import dayjs, { type Dayjs } from 'dayjs'
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { apiFetch, createIdempotencyKey, jsonBody, ApiError } from '../api/client'
-import type { Account, DimensionType, DimensionValue, Period, Voucher } from '../api/types'
+import { apiData, apiHeaders, createIdempotencyKey, openApiClient, ApiError } from '../api/client'
+import type { components } from '../api/generated'
 import { useAuth } from '../auth/AuthProvider'
 import { clearWorkspaceTabDirty, setWorkspaceTabDirty } from '../components/workspaceDirty'
 import { useWorkspaceTabs } from '../components/workspaceTabs'
@@ -14,32 +14,50 @@ import { voucherTotals } from '../features/vouchers/money'
 
 export { VoucherListPage } from './VoucherListPage'
 
+type Account = components['schemas']['Account']
+type DimensionType = components['schemas']['DimensionType']
+type DimensionValue = components['schemas']['LedgerDimensionValue']
+type Period = components['schemas']['Period']
+type Voucher = components['schemas']['Voucher']
+type VoucherCreateRequest = components['schemas']['VoucherCreateRequest']
+type VoucherUpdateRequest = components['schemas']['VoucherUpdateRequest']
+
 type VoucherForm = { periodId?: string; voucherDate: Dayjs; voucherType: string; voucherNumber?: string; summary?: string; lines: Array<{ accountId?: string; side: 'DEBIT' | 'CREDIT'; currency: string; originalAmount: string; exchangeRate: string; summary?: string; cashFlowItemId?: string; quantity?: string; unitPrice?: string; dimensionValues?: Record<string, string> }> }
 const emptyLines: VoucherForm['lines'] = []
 const blankLine = (): VoucherForm['lines'][number] => ({ side: 'DEBIT', currency: 'CNY', originalAmount: '', exchangeRate: '1' })
 const fiveBlankLines = () => Array.from({ length: 5 }, blankLine)
 export const voucherAmountPattern = /^-?\d+(?:\.\d+)?$/
-export const dateBelongsToPeriod = (period: Period | undefined, date: Dayjs | undefined) => {
+type PeriodDateRange = Pick<Period, 'startDate' | 'endDate' | 'status'>
+
+export const dateBelongsToPeriod = (period: PeriodDateRange | undefined, date: Dayjs | undefined) => {
   const value = date?.format('YYYY-MM-DD')
   return Boolean(value && period && period.startDate <= value && value <= period.endDate)
 }
-export const openPeriodForDate = (periods: Period[], date: Dayjs | undefined) => {
+export const openPeriodForDate = <T extends PeriodDateRange>(periods: T[], date: Dayjs | undefined) => {
   return periods.find((period) => period.status === 'OPEN' && dateBelongsToPeriod(period, date))
 }
-export const buildVoucherRequestBody = (value: VoucherForm, existingVoucher: boolean, expectedVersion?: number) => ({
-  ...(existingVoucher ? { expectedVersion, voucherNumber: value.voucherNumber, periodId: value.periodId } : {}),
-  voucherDate: value.voucherDate.format('YYYY-MM-DD'),
-  voucherType: value.voucherType,
-  summary: value.summary,
-  lines: value.lines.map(({ dimensionValues, ...line }) => ({
+export function buildVoucherRequestBody(value: VoucherForm, existingVoucher: false): VoucherCreateRequest
+export function buildVoucherRequestBody(value: VoucherForm, existingVoucher: true, expectedVersion: number): VoucherUpdateRequest
+export function buildVoucherRequestBody(value: VoucherForm, existingVoucher: boolean, expectedVersion?: number): VoucherCreateRequest | VoucherUpdateRequest {
+  const common = {
+    voucherDate: value.voucherDate.format('YYYY-MM-DD'),
+    voucherType: value.voucherType,
+    summary: value.summary,
+    lines: value.lines.map(({ dimensionValues, ...line }) => ({
     ...line,
     originalAmount: String(line.originalAmount),
     exchangeRate: String(line.exchangeRate),
     dimensions: Object.entries(dimensionValues || {})
       .filter(([, dimensionValueId]) => Boolean(dimensionValueId))
       .map(([dimensionTypeId, dimensionValueId]) => ({ dimensionTypeId, dimensionValueId })),
-  })),
-})
+    })),
+  }
+  if (!existingVoucher) return common
+  if (expectedVersion === undefined || !value.periodId || !value.voucherNumber) {
+    throw new Error('已保存凭证缺少版本、会计期间或凭证号。')
+  }
+  return { ...common, expectedVersion, periodId: value.periodId, voucherNumber: value.voucherNumber }
+}
 
 function VoucherAmountCell({ form, fieldName, side, onChange }: {
   form: FormInstance<VoucherForm>
@@ -69,7 +87,7 @@ function VoucherDimensionFields({ form, fieldName, accountsById, dimensionTypesB
   dimensionValuesByType: Map<string, DimensionValue[]>
 }) {
   const accountId = Form.useWatch(['lines', fieldName, 'accountId'], form)
-  const requirements = accountsById.get(accountId)?.dimensionRequirements || []
+  const requirements = accountsById.get(accountId ?? '')?.dimensionRequirements || []
 
   if (requirements.length === 0) return <Typography.Text type="secondary">—</Typography.Text>
 
@@ -103,27 +121,29 @@ export function VoucherEditorPage() {
   const { ledgerId = '', voucherId } = useParams(); const { session } = useAuth(); const client = useQueryClient(); const navigate = useNavigate(); const { modal, message } = AntApp.useApp(); const { closeTab } = useWorkspaceTabs(); const [form] = Form.useForm<VoucherForm>(); const [commentAction, setCommentAction] = useState<'approve' | 'reject' | null>(null); const [pendingAction, setPendingAction] = useState<string | null>(null)
   const [savedVoucher, setSavedVoucher] = useState<Voucher | null>(null)
   const tabId = voucherId === 'new' ? 'voucher-new' : `voucher-${voucherId}`; const [dirty, setDirty] = useState(false)
-  const accounts = useQuery({ queryKey: ['accounts', ledgerId], queryFn: () => apiFetch<Account[]>(`/ledgers/${ledgerId}/accounts`, session!), enabled: Boolean(session && ledgerId) })
-  const dimensionTypes = useQuery({ queryKey: ['dimension-types', ledgerId], queryFn: () => apiFetch<DimensionType[]>(`/ledgers/${ledgerId}/dimension-types`, session!), enabled: Boolean(session && ledgerId) })
-  const periods = useQuery({ queryKey: ['periods', ledgerId], queryFn: () => apiFetch<Period[]>(`/ledgers/${ledgerId}/periods`, session!), enabled: Boolean(session && ledgerId) })
-  const voucher = useQuery({ queryKey: ['voucher', ledgerId, voucherId], queryFn: () => apiFetch<Voucher>(`/ledgers/${ledgerId}/vouchers/${voucherId}`, session!), enabled: Boolean(session && ledgerId && voucherId && voucherId !== 'new') })
+  const accounts = useQuery({ queryKey: ['accounts', ledgerId], queryFn: () => apiData(openApiClient.GET('/v1/ledgers/{ledgerId}/accounts', { headers: apiHeaders(session!), params: { path: { ledgerId } } })), enabled: Boolean(session && ledgerId) })
+  const dimensionTypes = useQuery({ queryKey: ['dimension-types', ledgerId], queryFn: () => apiData(openApiClient.GET('/v1/ledgers/{ledgerId}/dimension-types', { headers: apiHeaders(session!), params: { path: { ledgerId } } })), enabled: Boolean(session && ledgerId) })
+  const periods = useQuery({ queryKey: ['periods', ledgerId], queryFn: () => apiData(openApiClient.GET('/v1/ledgers/{ledgerId}/periods', { headers: apiHeaders(session!), params: { path: { ledgerId } } })), enabled: Boolean(session && ledgerId) })
+  const voucher = useQuery({ queryKey: ['voucher', ledgerId, voucherId], queryFn: () => apiData(openApiClient.GET('/v1/ledgers/{ledgerId}/vouchers/{voucherId}', { headers: apiHeaders(session!), params: { path: { ledgerId, voucherId: voucherId! } } })), enabled: Boolean(session && ledgerId && voucherId && voucherId !== 'new') })
   const watchedLines = Form.useWatch('lines', form)
   const lines = watchedLines ?? emptyLines
   const accountsById = useMemo(() => new Map((accounts.data || []).map((account) => [account.id, account])), [accounts.data])
   const dimensionTypesById = useMemo(() => new Map((dimensionTypes.data || []).map((type) => [type.id, type])), [dimensionTypes.data])
   const requiredDimensionTypeIds = useMemo(() => Array.from(new Set(lines.flatMap((line) => (
     accountsById.get(line.accountId || '')?.dimensionRequirements.map((requirement) => requirement.dimensionTypeId) || []
-  )))), [accountsById, lines])
-  const dimensionValueQueries = useQueries({
-    queries: requiredDimensionTypeIds.map((dimensionTypeId) => ({
-      queryKey: ['dimension-values', ledgerId, dimensionTypeId],
-      queryFn: () => apiFetch<DimensionValue[]>(`/ledgers/${ledgerId}/dimension-types/${dimensionTypeId}/values`, session!),
-      enabled: Boolean(session && ledgerId),
+  )))).sort(), [accountsById, lines])
+  const dimensionValues = useQuery({
+    queryKey: ['dimension-values', ledgerId, requiredDimensionTypeIds],
+    queryFn: () => apiData(openApiClient.POST('/v1/ledgers/{ledgerId}/dimension-values:batch', {
+      headers: apiHeaders(session!),
+      params: { path: { ledgerId } },
+      body: { dimensionTypeIds: requiredDimensionTypeIds },
     })),
+    enabled: Boolean(session && ledgerId && requiredDimensionTypeIds.length),
   })
-  const dimensionValuesByType = new Map(requiredDimensionTypeIds.map((dimensionTypeId, index) => (
-    [dimensionTypeId, dimensionValueQueries[index]?.data || []]
-  )))
+  const dimensionValuesByType = new Map<string, DimensionValue[]>(
+    (dimensionValues.data?.groups || []).map((group) => [group.dimensionTypeId, group.values]),
+  )
   const totals = useMemo(() => voucherTotals(lines), [lines])
   const hasDebitAmount = lines.some((line) => line.side === 'DEBIT' && Boolean(line.originalAmount) && Number(line.originalAmount) !== 0)
   const hasCreditAmount = lines.some((line) => line.side === 'CREDIT' && Boolean(line.originalAmount) && Number(line.originalAmount) !== 0)
@@ -136,7 +156,6 @@ export function VoucherEditorPage() {
     mutationFn: async (value: VoucherForm) => {
       const targetVoucher = persistedVoucher
       const targetVoucherId = targetVoucher?.id
-      const updating = Boolean(targetVoucherId)
       const openPeriod = targetVoucher ? undefined : openPeriodForDate(periods.data || [], value.voucherDate)
       if (!targetVoucher && !openPeriod) {
         throw new Error('凭证日期不属于任何开放会计期间，请选择未结账期间内的日期。')
@@ -145,12 +164,14 @@ export function VoucherEditorPage() {
         throw new Error(`凭证保存后不能修改会计期间，日期必须保留在 ${voucherPeriod?.periodCode || '原会计期间'}。`)
       }
       const requestValue = targetVoucher
-        ? { ...value, periodId: targetVoucher.periodId, voucherNumber: targetVoucher.voucherNumber, voucherType: targetVoucher.voucherType }
+        ? { ...value, periodId: targetVoucher.periodId, voucherNumber: targetVoucher.voucherNumber ?? undefined, voucherType: targetVoucher.voucherType }
         : value
-      const body = buildVoucherRequestBody(requestValue, updating, targetVoucher?.version)
-      return updating
-        ? apiFetch<Voucher>(`/ledgers/${ledgerId}/vouchers/${targetVoucherId}`, session!, { method: 'PUT', body: jsonBody(body) })
-        : apiFetch<Voucher>(`/ledgers/${ledgerId}/vouchers`, session!, { method: 'POST', headers: { 'Idempotency-Key': createIdempotencyKey() }, body: jsonBody(body) })
+      if (targetVoucher && targetVoucherId) {
+        const body = buildVoucherRequestBody(requestValue, true, targetVoucher.version)
+        return apiData(openApiClient.PUT('/v1/ledgers/{ledgerId}/vouchers/{voucherId}', { headers: apiHeaders(session!), params: { path: { ledgerId, voucherId: targetVoucherId } }, body }))
+      }
+      const body = buildVoucherRequestBody(requestValue, false)
+      return apiData(openApiClient.POST('/v1/ledgers/{ledgerId}/vouchers', { headers: { ...apiHeaders(session!), 'Idempotency-Key': createIdempotencyKey() }, params: { path: { ledgerId } }, body }))
     },
     onSuccess: (value) => {
       const wasExisting = voucherId !== 'new' || savedVoucher !== null
@@ -167,8 +188,8 @@ export function VoucherEditorPage() {
         ? '凭证保存后不能修改会计期间。'
         : error instanceof ApiError || error instanceof Error ? error.message : '凭证保存失败，请稍后重试。'),
   })
-  const action = async (name: string, body?: unknown): Promise<boolean> => { if (!voucherId || voucherId === 'new' || pendingAction) return false; setPendingAction(name); try { await apiFetch<Voucher>(`/ledgers/${ledgerId}/vouchers/${voucherId}:${name}`, session!, { method: 'POST', body: body ? jsonBody(body) : undefined }); await voucher.refetch(); void client.invalidateQueries({ queryKey: ['vouchers', ledgerId] }); return true } catch (error) { modal.error(error instanceof ApiError && error.problem.code === 'RESOURCE_VERSION_CONFLICT' ? { title: '凭证已被其他人修改', content: '请刷新后确认是否放弃本地修改。' } : { title: '凭证操作失败', content: error instanceof ApiError ? error.message : '请稍后重试。' }); return false } finally { setPendingAction(null) } }
-  const removeVoucher = async () => { if (!voucherId || voucherId === 'new' || pendingAction) return; setPendingAction('delete'); try { await apiFetch<void>(`/ledgers/${ledgerId}/vouchers/${voucherId}`, session!, { method: 'DELETE' }); clearWorkspaceTabDirty(tabId); client.removeQueries({ queryKey: ['voucher', ledgerId, voucherId], exact: true }); void client.invalidateQueries({ queryKey: ['vouchers', ledgerId] }); message.success('凭证删除成功'); closeTab(tabId, { discardChanges: true }); navigate(`/ledgers/${ledgerId}/vouchers`) } catch (error) { message.error(error instanceof ApiError ? error.message : '删除凭证失败，请稍后重试。'); throw error } finally { setPendingAction(null) } }
+  const action = async (name: 'validate' | 'submit' | 'approve' | 'reject' | 'post', body?: { comment: string }): Promise<boolean> => { if (!voucherId || voucherId === 'new' || pendingAction) return false; setPendingAction(name); try { const request = { headers: apiHeaders(session!), params: { path: { ledgerId, voucherId } } }; if (name === 'validate') await apiData(openApiClient.POST('/v1/ledgers/{ledgerId}/vouchers/{voucherId}:validate', request)); if (name === 'submit') await apiData(openApiClient.POST('/v1/ledgers/{ledgerId}/vouchers/{voucherId}:submit', request)); if (name === 'approve') await apiData(openApiClient.POST('/v1/ledgers/{ledgerId}/vouchers/{voucherId}:approve', { ...request, body: body! })); if (name === 'reject') await apiData(openApiClient.POST('/v1/ledgers/{ledgerId}/vouchers/{voucherId}:reject', { ...request, body: body! })); if (name === 'post') await apiData(openApiClient.POST('/v1/ledgers/{ledgerId}/vouchers/{voucherId}:post', request)); await voucher.refetch(); void client.invalidateQueries({ queryKey: ['vouchers', ledgerId] }); return true } catch (error) { modal.error(error instanceof ApiError && error.problem.code === 'RESOURCE_VERSION_CONFLICT' ? { title: '凭证已被其他人修改', content: '请刷新后确认是否放弃本地修改。' } : { title: '凭证操作失败', content: error instanceof ApiError ? error.message : '请稍后重试。' }); return false } finally { setPendingAction(null) } }
+  const removeVoucher = async () => { if (!voucherId || voucherId === 'new' || pendingAction) return; setPendingAction('delete'); try { await apiData(openApiClient.DELETE('/v1/ledgers/{ledgerId}/vouchers/{voucherId}', { headers: apiHeaders(session!), params: { path: { ledgerId, voucherId } } })); clearWorkspaceTabDirty(tabId); client.removeQueries({ queryKey: ['voucher', ledgerId, voucherId], exact: true }); void client.invalidateQueries({ queryKey: ['vouchers', ledgerId] }); message.success('凭证删除成功'); closeTab(tabId, { discardChanges: true }); navigate(`/ledgers/${ledgerId}/vouchers`) } catch (error) { message.error(error instanceof ApiError ? error.message : '删除凭证失败，请稍后重试。'); throw error } finally { setPendingAction(null) } }
   const initial = voucher.data ? { ...voucher.data, voucherDate: dayjs(voucher.data.voucherDate), lines: voucher.data.lines.map((line) => ({ ...line, originalAmount: line.originalAmount, exchangeRate: line.exchangeRate, dimensionValues: Object.fromEntries(line.dimensions.map((dimension) => [dimension.dimensionTypeId, dimension.dimensionValueId])) })) } : { voucherDate: dayjs(), voucherType: '记', lines: fiveBlankLines() }
   useEffect(() => { if (voucher.data) form.setFieldsValue({ ...voucher.data, voucherDate: dayjs(voucher.data.voucherDate), lines: voucher.data.lines.map((line) => ({ ...line, originalAmount: line.originalAmount, exchangeRate: line.exchangeRate, dimensionValues: Object.fromEntries(line.dimensions.map((dimension) => [dimension.dimensionTypeId, dimension.dimensionValueId])) })) } as VoucherForm) }, [voucher.data, form])
   useEffect(() => { setWorkspaceTabDirty(tabId, dirty); if (!dirty) return; const beforeUnload = (event: BeforeUnloadEvent) => { event.preventDefault() }; window.addEventListener('beforeunload', beforeUnload); return () => window.removeEventListener('beforeunload', beforeUnload) }, [dirty, tabId])
