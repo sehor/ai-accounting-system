@@ -1,7 +1,5 @@
 package com.example.accounting.fixedasset.internal.application;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.example.accounting.fixedasset.FixedAssetRequests;
 import com.example.accounting.fixedasset.FixedAssetResponses;
 import com.example.accounting.fixedasset.FixedAssetService;
@@ -56,14 +54,16 @@ public class DefaultFixedAssetService implements FixedAssetService {
     private final LedgerAccessService ledgerAccess;
     private final LedgerService ledgers;
     private final VoucherService vouchers;
-    private final ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
+    private final AuditSnapshotSerializer auditSnapshots;
 
     public DefaultFixedAssetService(FixedAssetRepository assets, LedgerAccessService ledgerAccess,
-                                    LedgerService ledgers, VoucherService vouchers) {
+                                    LedgerService ledgers, VoucherService vouchers,
+                                    AuditSnapshotSerializer auditSnapshots) {
         this.assets = assets;
         this.ledgerAccess = ledgerAccess;
         this.ledgers = ledgers;
         this.vouchers = vouchers;
+        this.auditSnapshots = auditSnapshots;
     }
 
     @Override
@@ -245,7 +245,7 @@ public class DefaultFixedAssetService implements FixedAssetService {
                 request.clearingAccountId() == null ? current.clearingAccountId() : request.clearingAccountId(),
                 request.disposalGainAccountId() == null ? current.disposalGainAccountId() : request.disposalGainAccountId(),
                 request.disposalLossAccountId() == null ? current.disposalLossAccountId() : request.disposalLossAccountId(),
-                current.disposalDate(), request.note() == null ? current.note() : request.note(), current.version());
+                current.disposalDate(), request.note() == null ? current.note() : request.note(), current.version() + 1);
         validateRate(next.residualRate());
         validateAmounts(next.originalCost(), next.residualRate(), next.openingAccumulatedDepreciation(), next.impairmentAmount(),
                 next.usefulLifeMonths(), next.openingDepreciatedMonths());
@@ -254,12 +254,18 @@ public class DefaultFixedAssetService implements FixedAssetService {
                 next.disposalGainAccountId(), next.disposalLossAccountId());
         validateAcquisitionVoucher(actorId, ledgerId, next.acquisitionVoucherId());
         validateDepartment(actorId, ledgerId, next.departmentValueId());
+        String beforeData = null;
+        String afterData = null;
+        if (accountingChange) {
+            beforeData = auditSnapshots.serialize(current);
+            afterData = auditSnapshots.serialize(next);
+        }
         if (!assets.updateAsset(ledgerId, assetId, next, request.expectedVersion(), actorId)) {
             throw problem(409, "RESOURCE_VERSION_CONFLICT", "Resource version conflict", "The asset was changed by another request");
         }
         if (accountingChange) {
             assets.insertChange(ledgerId, assetId, request.effectivePeriodId(), request.reason().trim(), actorId,
-                    json(current), json(next));
+                    beforeData, afterData);
         }
         return asset(actorId, ledgerId, assetRow(ledgerId, assetId), currentPeriod(actorId, ledgerId).id());
     }
@@ -791,7 +797,6 @@ public class DefaultFixedAssetService implements FixedAssetService {
         try { return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8))); }
         catch (Exception exception) { throw problem(500, "FIXED_ASSET_FINGERPRINT_FAILED", "Depreciation fingerprint failed", "The depreciation input could not be fingerprinted"); }
     }
-    private String json(Object value) { try { return objectMapper.writeValueAsString(value); } catch (JsonProcessingException e) { return "{}"; } }
     private void requireRole(UUID actorId, UUID ledgerId, Set<LedgerRole> roles) { if (!roles.contains(ledgerAccess.requireMembership(actorId, ledgerId))) throw problem(403, "INSUFFICIENT_LEDGER_ROLE", "Insufficient ledger role", "The current user cannot perform this operation"); }
     private ApiProblemException problem(int status, String code, String title, String detail) { return new ApiProblemException(status, code, title, detail, false); }
     private FixedAssetResponses.Category category(CategoryRecord row) { return new FixedAssetResponses.Category(row.id(), row.ledgerId(), row.code(), row.name(), row.usefulLifeMonths(), row.residualRate(), row.assetAccountId(), row.accumulatedDepreciationAccountId(), row.depreciationExpenseAccountId(), row.impairmentAccountId(), row.clearingAccountId(), row.disposalGainAccountId(), row.disposalLossAccountId(), row.status(), row.version()); }
