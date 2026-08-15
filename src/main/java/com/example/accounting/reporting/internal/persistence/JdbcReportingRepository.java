@@ -321,44 +321,21 @@ public class JdbcReportingRepository implements ReportingRepository {
             markFallback(ledgerId, range);
             openingPosition = fallbackOpeningPosition(ledgerId, range.periodFrom(), accountId, account[2]);
         }
-        long[] totalItems = {0};
-        long offset = (long) (page - 1) * pageSize;
+        CheckpointMetadata checkpoint = ensureSubLedgerCheckpoint(ledgerId, range, accountId);
+        long anchor = (long) (page - 1) * pageSize;
         List<ReportResponses.SubLedgerEntry> data = jdbc.query("""
-                with recursive account_scope as (
-                    select id from ledger_account where ledger_id = ? and id = ?
-                    union all
-                    select child.id from ledger_account child
-                    join account_scope parent on parent.id = child.parent_id
-                    where child.ledger_id = ?
-                ), entries as (
-                    select v.id voucher_id, v.voucher_number, v.voucher_date,
-                        vl.account_id posting_account_id, account.code posting_account_code,
-                        account.name posting_account_name,
-                        coalesce(vl.summary, v.summary, '') summary, vl.line_no, vl.id line_id,
-                        case when vl.side = 'DEBIT' then vl.base_amount else 0 end debit,
-                        case when vl.side = 'CREDIT' then vl.base_amount else 0 end credit
-                    from voucher_line vl
-                    join voucher v on v.ledger_id = vl.ledger_id and v.id = vl.voucher_id
-                    join accounting_period p on p.ledger_id = v.ledger_id and p.id = v.period_id
-                    join ledger_account account on account.ledger_id = vl.ledger_id and account.id = vl.account_id
-                    where v.ledger_id = ? and p.period_code between ? and ?
-                      and vl.account_id in (select id from account_scope)
-                      and v.status = 'POSTED' and v.deleted_at is null
-                ), running as (
-                    select *, count(*) over() total_items,
-                        sum(debit) over (
-                            order by voucher_date, voucher_number, line_no, line_id) running_debit,
-                        sum(credit) over (
-                            order by voucher_date, voucher_number, line_no, line_id) running_credit
-                    from entries
-                )
-                select * from running
-                order by voucher_date, voucher_number, line_no, line_id limit ? offset ?
+                select checkpoint.*, account.code posting_account_code, account.name posting_account_name
+                from sub_ledger_checkpoint checkpoint
+                join ledger_account account on account.ledger_id = checkpoint.ledger_id
+                    and account.id = checkpoint.posting_account_id
+                where checkpoint.ledger_id = ? and checkpoint.account_id = ?
+                  and checkpoint.period_from = ? and checkpoint.period_to = ?
+                  and checkpoint.row_ordinal > ?
+                order by checkpoint.row_ordinal limit ?
                 """, (rs, rowNum) -> {
-            totalItems[0] = rs.getLong("total_items");
             BalancePosition balance = position(account[2],
-                    openingPosition.debit().add(rs.getBigDecimal("running_debit")),
-                    openingPosition.credit().add(rs.getBigDecimal("running_credit")));
+                    openingPosition.debit().add(rs.getBigDecimal("cumulative_debit")),
+                    openingPosition.credit().add(rs.getBigDecimal("cumulative_credit")));
             return new ReportResponses.SubLedgerEntry(
                     rs.getObject("voucher_id", UUID.class), rs.getString("voucher_number"),
                     rs.getObject("voucher_date", LocalDate.class),
@@ -366,32 +343,88 @@ public class JdbcReportingRepository implements ReportingRepository {
                     rs.getString("posting_account_name"), rs.getString("summary"),
                     rs.getBigDecimal("debit"), rs.getBigDecimal("credit"),
                     balance.direction(), balance.amount());
-        }, ledgerId, accountId, ledgerId, ledgerId, range.periodFrom(), range.periodTo(), pageSize, offset);
-        BigDecimal[] totals = jdbc.queryForObject("""
-                with recursive account_scope as (
-                    select id from ledger_account where ledger_id = ? and id = ?
-                    union all
-                    select child.id from ledger_account child
-                    join account_scope parent on parent.id = child.parent_id
-                    where child.ledger_id = ?
-                )
-                select coalesce(sum(case when vl.side = 'DEBIT' then vl.base_amount else 0 end), 0) debit,
-                    coalesce(sum(case when vl.side = 'CREDIT' then vl.base_amount else 0 end), 0) credit
-                from voucher_line vl
-                join voucher v on v.ledger_id = vl.ledger_id and v.id = vl.voucher_id
-                join accounting_period p on p.ledger_id = v.ledger_id and p.id = v.period_id
-                where v.ledger_id = ? and p.period_code between ? and ?
-                  and vl.account_id in (select id from account_scope)
-                  and v.status = 'POSTED' and v.deleted_at is null
-                """, (rs, rowNum) -> new BigDecimal[]{rs.getBigDecimal("debit"), rs.getBigDecimal("credit")},
-                ledgerId, accountId, ledgerId, ledgerId, range.periodFrom(), range.periodTo());
+        }, ledgerId, accountId, range.periodFrom(), range.periodTo(), anchor, pageSize);
+        BigDecimal[] totals = {checkpoint.totalDebit(), checkpoint.totalCredit()};
         BalancePosition ending = position(account[2],
                 openingPosition.debit().add(totals[0]), openingPosition.credit().add(totals[1]));
         return new ReportResponses.SubLedgerPage(
                 range.periodFrom(), range.periodTo(), range.periodCode(),
                 accountId, account[0], account[1], openingPosition.direction(), openingPosition.amount(), data,
                 totals[0], totals[1], ending.direction(), ending.amount(),
-                pagination(page, pageSize, totalItems[0]));
+                pagination(page, pageSize, checkpoint.totalItems()));
+    }
+
+    private CheckpointMetadata ensureSubLedgerCheckpoint(UUID ledgerId, PeriodRange range, UUID accountId) {
+        return ensureSubLedgerCheckpoint(ledgerId, range, accountId, 0);
+    }
+
+    private CheckpointMetadata ensureSubLedgerCheckpoint(UUID ledgerId, PeriodRange range, UUID accountId, int attempt) {
+        jdbc.update("insert into sub_ledger_checkpoint_epoch (ledger_id, epoch) values (?, 0) on conflict (ledger_id) do nothing",
+                ledgerId);
+        jdbc.update("""
+                insert into sub_ledger_checkpoint_state (ledger_id, account_id, period_from, period_to)
+                values (?, ?, ?, ?) on conflict (ledger_id, account_id, period_from, period_to) do nothing
+                """, ledgerId, accountId, range.periodFrom(), range.periodTo());
+        Boolean dirty = jdbc.queryForObject("""
+                select dirty from sub_ledger_checkpoint_state
+                where ledger_id = ? and account_id = ? and period_from = ? and period_to = ? for update
+                """, Boolean.class, ledgerId, accountId, range.periodFrom(), range.periodTo());
+        if (Boolean.TRUE.equals(dirty)) {
+            long startEpoch = jdbc.queryForObject("select epoch from sub_ledger_checkpoint_epoch where ledger_id = ?",
+                    Long.class, ledgerId);
+            jdbc.update("delete from sub_ledger_checkpoint where ledger_id = ? and account_id = ? and period_from = ? and period_to = ?",
+                    ledgerId, accountId, range.periodFrom(), range.periodTo());
+            jdbc.update("""
+                    insert into sub_ledger_checkpoint (ledger_id, account_id, period_from, period_to, row_ordinal,
+                        voucher_id, voucher_number, voucher_date, posting_account_id, line_no, line_id, summary,
+                        debit, credit, cumulative_debit, cumulative_credit)
+                    with recursive account_scope as (
+                        select id from ledger_account where ledger_id = ? and id = ?
+                        union all
+                        select child.id from ledger_account child join account_scope parent on parent.id = child.parent_id
+                        where child.ledger_id = ?
+                    ), entries as (
+                        select v.id voucher_id, v.voucher_number, v.voucher_date, vl.account_id posting_account_id,
+                            vl.line_no, vl.id line_id, coalesce(vl.summary, v.summary, '') summary,
+                            case when vl.side = 'DEBIT' then vl.base_amount else 0 end debit,
+                            case when vl.side = 'CREDIT' then vl.base_amount else 0 end credit
+                        from voucher_line vl join voucher v on v.ledger_id = vl.ledger_id and v.id = vl.voucher_id
+                        join accounting_period p on p.ledger_id = v.ledger_id and p.id = v.period_id
+                        where v.ledger_id = ? and p.period_code between ? and ?
+                          and vl.account_id in (select id from account_scope)
+                          and v.status = 'POSTED' and v.deleted_at is null
+                    ) select ?, ?, ?, ?, row_number() over ordering, voucher_id, voucher_number, voucher_date,
+                        posting_account_id, line_no, line_id, summary, debit, credit,
+                        sum(debit) over ordering, sum(credit) over ordering
+                    from entries
+                    window ordering as (order by voucher_date, voucher_number, line_no, line_id)
+                    """, ledgerId, accountId, ledgerId, ledgerId, range.periodFrom(), range.periodTo(),
+                    ledgerId, accountId, range.periodFrom(), range.periodTo());
+            int cleaned = jdbc.update("""
+                    update sub_ledger_checkpoint_state state set dirty = false, refreshed_at = now(),
+                        source_epoch = ?, total_items = totals.total_items, total_debit = totals.total_debit, total_credit = totals.total_credit
+                    from (select count(*) total_items, coalesce(sum(debit), 0) total_debit, coalesce(sum(credit), 0) total_credit
+                        from sub_ledger_checkpoint where ledger_id = ? and account_id = ? and period_from = ? and period_to = ?) totals
+                    where state.ledger_id = ? and state.account_id = ? and state.period_from = ? and state.period_to = ?
+                      and (select epoch from sub_ledger_checkpoint_epoch where ledger_id = ?) = ?
+                    """, startEpoch, ledgerId, accountId, range.periodFrom(), range.periodTo(), ledgerId, accountId,
+                    range.periodFrom(), range.periodTo(), ledgerId, startEpoch);
+            if (cleaned == 0) {
+                if (attempt < 2) {
+                    return ensureSubLedgerCheckpoint(ledgerId, range, accountId, attempt + 1);
+                }
+                throw new IllegalStateException("Sub-ledger changed while rebuilding its checkpoint; retry the request");
+            }
+        }
+        return jdbc.queryForObject("""
+                select total_items, total_debit, total_credit from sub_ledger_checkpoint_state
+                where ledger_id = ? and account_id = ? and period_from = ? and period_to = ?
+                """, (rs, row) -> new CheckpointMetadata(rs.getLong("total_items"),
+                        rs.getBigDecimal("total_debit"), rs.getBigDecimal("total_credit")),
+                ledgerId, accountId, range.periodFrom(), range.periodTo());
+    }
+
+    private record CheckpointMetadata(long totalItems, BigDecimal totalDebit, BigDecimal totalCredit) {
     }
 
     private BalancePosition projectedOpeningPosition(

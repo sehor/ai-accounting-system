@@ -262,7 +262,7 @@ public class DefaultReportingService implements ReportingService {
     }
 
     @Override
-    @Transactional(readOnly = true)
+    @Transactional
     public ReportResponses.SubLedgerPage subLedgerBook(
             UUID actorId, UUID ledgerId, String periodCode, UUID accountId, int page, int pageSize) {
         requireView(actorId, ledgerId);
@@ -276,7 +276,7 @@ public class DefaultReportingService implements ReportingService {
     }
 
     @Override
-    @Transactional(readOnly = true)
+    @Transactional
     public ReportResponses.SubLedgerPage subLedgerBook(
             UUID actorId, UUID ledgerId, PeriodRange range, UUID accountId, int page, int pageSize) {
         requireView(actorId, ledgerId);

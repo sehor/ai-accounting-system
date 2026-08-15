@@ -17,7 +17,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
 
-@SpringBootTest
+@SpringBootTest(properties = "accounting.balance.worker-enabled=false")
 class VoucherAccountControlsIntegrationTest {
 
     @Autowired
@@ -43,7 +43,7 @@ class VoucherAccountControlsIntegrationTest {
         LedgerResponses.CashFlowItem cashFlow = ledgers.listCashFlowItems(owner, ledgerId).getFirst();
         LedgerResponses.Account controlled = ledgers.createAccount(owner, ledgerId,
                 new LedgerRequests.AccountCreate(
-                        "1410", "受控资产", "CURRENT_ASSET", "DEBIT", null,
+                        "1410", "受控资产", "ASSET.ACCOUNTS_RECEIVABLE", "CURRENT_ASSET", "DEBIT", null,
                         true, cashFlow.id(), true, "件",
                         List.of(new LedgerRequests.DimensionRequirement(customer.id(), true))));
         LedgerResponses.Account cash = ledgers.listAccounts(owner, ledgerId).stream()
@@ -97,7 +97,7 @@ class VoucherAccountControlsIntegrationTest {
         LedgerResponses.CashFlowItem cashFlow = ledgers.listCashFlowItems(owner, ledgerId).getFirst();
         LedgerResponses.Account controlled = ledgers.createAccount(owner, ledgerId,
                 new LedgerRequests.AccountCreate(
-                        "1411", "Controlled asset", "CURRENT_ASSET", "DEBIT", null,
+                        "1411", "Controlled asset", "ASSET.ACCOUNTS_RECEIVABLE", "CURRENT_ASSET", "DEBIT", null,
                         true, cashFlow.id(), false, null,
                         List.of(new LedgerRequests.DimensionRequirement(customer.id(), true))));
         LedgerResponses.Account cash = ledgers.listAccounts(owner, ledgerId).stream()

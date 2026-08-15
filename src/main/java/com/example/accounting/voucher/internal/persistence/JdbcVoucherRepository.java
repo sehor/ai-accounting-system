@@ -11,8 +11,10 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.BatchPreparedStatementSetter;
 import org.springframework.stereotype.Repository;
 
 @Repository
@@ -106,6 +108,118 @@ public class JdbcVoucherRepository implements VoucherRepository {
                         select dimension_type_id from ledger_account_dimension
                         where ledger_id = ? and account_id = ?
                         """, UUID.class, ledgerId, accountId)) : null, ledgerId, accountId));
+    }
+
+    @Override
+    public Map<UUID, AccountControls> accountControlsByAccounts(UUID ledgerId, List<UUID> accountIds) {
+        if (accountIds.isEmpty()) {
+            return Map.of();
+        }
+        String placeholders = String.join(",", java.util.Collections.nCopies(accountIds.size(), "?"));
+        List<Object> args = new ArrayList<>();
+        args.add(ledgerId);
+        args.addAll(accountIds);
+        Map<UUID, AccountControlAccumulator> accumulators = new HashMap<>();
+        jdbcTemplate.query("""
+                select account.id, account.cash_flow_required, account.default_cash_flow_item_id,
+                    account.quantity_enabled, account.unit_name, required.dimension_type_id
+                from ledger_account account
+                left join ledger_account_dimension required
+                  on required.ledger_id = account.ledger_id and required.account_id = account.id
+                where account.ledger_id = ? and account.id in (""" + placeholders + ")",
+                (org.springframework.jdbc.core.ResultSetExtractor<Void>) rs -> {
+                    while (rs.next()) {
+                        UUID accountId = rs.getObject("id", UUID.class);
+                        boolean cashFlowRequired = rs.getBoolean("cash_flow_required");
+                        UUID defaultCashFlowItemId = rs.getObject("default_cash_flow_item_id", UUID.class);
+                        boolean quantityEnabled = rs.getBoolean("quantity_enabled");
+                        String unitName = rs.getString("unit_name");
+                        AccountControlAccumulator accumulator = accumulators.computeIfAbsent(accountId, ignored ->
+                                new AccountControlAccumulator(cashFlowRequired, defaultCashFlowItemId,
+                                        quantityEnabled, unitName));
+                        UUID typeId = rs.getObject("dimension_type_id", UUID.class);
+                        if (typeId != null) {
+                            accumulator.dimensionTypeIds.add(typeId);
+                        }
+                    }
+                    return null;
+                }
+        , args.toArray());
+        Map<UUID, AccountControls> result = new HashMap<>();
+        accumulators.forEach((id, value) -> result.put(id, value.freeze()));
+        return result;
+    }
+
+    @Override
+    public Set<UUID> activeAccountIds(UUID ledgerId, List<UUID> accountIds) {
+        if (accountIds.isEmpty()) {
+            return Set.of();
+        }
+        String placeholders = String.join(",", java.util.Collections.nCopies(accountIds.size(), "?"));
+        List<Object> args = new ArrayList<>();
+        args.add(ledgerId);
+        args.addAll(accountIds);
+        String sql = "select account.id from ledger_account account "
+                + "where account.ledger_id = ? and account.id in (" + placeholders + ") "
+                + "and account.status = 'ACTIVE' "
+                + "and not exists (select 1 from ledger_account child "
+                + "where child.ledger_id = account.ledger_id and child.parent_id = account.id)";
+        return new java.util.HashSet<>(jdbcTemplate.query(sql,
+                (rs, row) -> rs.getObject(1, UUID.class), args.toArray()));
+    }
+
+    @Override
+    public Set<UUID> activeCashFlowItemIds(UUID ledgerId, Set<UUID> itemIds) {
+        if (itemIds.isEmpty()) {
+            return Set.of();
+        }
+        String placeholders = String.join(",", java.util.Collections.nCopies(itemIds.size(), "?"));
+        List<Object> args = new ArrayList<>();
+        args.add(ledgerId);
+        args.addAll(itemIds);
+        String sql = "select id from cash_flow_item where ledger_id = ? and status = 'ACTIVE' "
+                + "and id in (" + placeholders + ")";
+        return new java.util.HashSet<>(jdbcTemplate.query(sql,
+                (rs, row) -> rs.getObject(1, UUID.class), args.toArray()));
+    }
+
+    @Override
+    public Set<String> activeDimensionBindings(UUID ledgerId, Set<String> requestedBindings) {
+        if (requestedBindings.isEmpty()) {
+            return Set.of();
+        }
+        String placeholders = String.join(",", java.util.Collections.nCopies(requestedBindings.size(), "?"));
+        List<Object> args = new ArrayList<>();
+        args.add(ledgerId);
+        args.addAll(requestedBindings);
+        String sql = "select type.id::text || ':' || value.id::text "
+                + "from dimension_type type join dimension_value value "
+                + "on value.ledger_id = type.ledger_id and value.dimension_type_id = type.id "
+                + "where type.ledger_id = ? and type.status = 'ACTIVE' and value.status = 'ACTIVE' "
+                + "and (type.id::text || ':' || value.id::text) in (" + placeholders + ")";
+        return new java.util.HashSet<>(jdbcTemplate.query(sql,
+                (rs, row) -> rs.getString(1), args.toArray()));
+    }
+
+    private static final class AccountControlAccumulator {
+        private final boolean cashFlowRequired;
+        private final UUID defaultCashFlowItemId;
+        private final boolean quantityEnabled;
+        private final String unitName;
+        private final Set<UUID> dimensionTypeIds = new java.util.HashSet<>();
+
+        private AccountControlAccumulator(boolean cashFlowRequired, UUID defaultCashFlowItemId,
+                                          boolean quantityEnabled, String unitName) {
+            this.cashFlowRequired = cashFlowRequired;
+            this.defaultCashFlowItemId = defaultCashFlowItemId;
+            this.quantityEnabled = quantityEnabled;
+            this.unitName = unitName;
+        }
+
+        private AccountControls freeze() {
+            return new AccountControls(cashFlowRequired, defaultCashFlowItemId, quantityEnabled,
+                    unitName, List.copyOf(dimensionTypeIds));
+        }
     }
 
     @Override
@@ -206,6 +320,41 @@ public class JdbcVoucherRepository implements VoucherRepository {
     }
 
     @Override
+    public void createLines(List<LineInsert> lines) {
+        jdbcTemplate.batchUpdate("""
+                insert into voucher_line (id, ledger_id, voucher_id, line_no, account_id, side, currency,
+                    original_amount, exchange_rate, base_amount, summary, cash_flow_item_id, quantity, unit_price,
+                    dimension_combination_id)
+                values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, new BatchPreparedStatementSetter() {
+            @Override
+            public void setValues(java.sql.PreparedStatement ps, int index) throws java.sql.SQLException {
+                LineInsert line = lines.get(index);
+                ps.setObject(1, line.lineId());
+                ps.setObject(2, line.ledgerId());
+                ps.setObject(3, line.voucherId());
+                ps.setInt(4, line.lineNo());
+                ps.setObject(5, line.accountId());
+                ps.setString(6, line.side());
+                ps.setString(7, line.currency());
+                ps.setBigDecimal(8, line.originalAmount());
+                ps.setBigDecimal(9, line.exchangeRate());
+                ps.setBigDecimal(10, line.baseAmount());
+                ps.setString(11, line.summary());
+                ps.setObject(12, line.cashFlowItemId());
+                ps.setBigDecimal(13, line.quantity());
+                ps.setBigDecimal(14, line.unitPrice());
+                ps.setObject(15, line.dimensionCombinationId());
+            }
+
+            @Override
+            public int getBatchSize() {
+                return lines.size();
+            }
+        });
+    }
+
+    @Override
     public void createLineDimensions(
             UUID lineId, UUID ledgerId, List<com.example.accounting.voucher.VoucherRequests.Dimension> dimensions) {
         for (com.example.accounting.voucher.VoucherRequests.Dimension dimension : dimensions) {
@@ -215,6 +364,32 @@ public class JdbcVoucherRepository implements VoucherRepository {
                     values (?, ?, ?, ?)
                     """, lineId, ledgerId, dimension.dimensionTypeId(), dimension.dimensionValueId());
         }
+    }
+
+    @Override
+    public void createLineDimensionsBatch(List<LineDimensionInsert> dimensions) {
+        if (dimensions.isEmpty()) {
+            return;
+        }
+        jdbcTemplate.batchUpdate("""
+                insert into voucher_line_dimension (
+                    voucher_line_id, ledger_id, dimension_type_id, dimension_value_id)
+                values (?, ?, ?, ?)
+                """, new BatchPreparedStatementSetter() {
+            @Override
+            public void setValues(java.sql.PreparedStatement ps, int index) throws java.sql.SQLException {
+                LineDimensionInsert dimension = dimensions.get(index);
+                ps.setObject(1, dimension.lineId());
+                ps.setObject(2, dimension.ledgerId());
+                ps.setObject(3, dimension.dimensionTypeId());
+                ps.setObject(4, dimension.dimensionValueId());
+            }
+
+            @Override
+            public int getBatchSize() {
+                return dimensions.size();
+            }
+        });
     }
 
     @Override

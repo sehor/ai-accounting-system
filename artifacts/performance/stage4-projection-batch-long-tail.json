@@ -1,0 +1,1 @@
+{"runs":5,"periods":5,"voucherLinesPerPeriod":100,"metric":"transaction duration proxy, not database lock wait","legacyP50Ms":22,"legacyP95Ms":87,"batchP50Ms":12,"batchP95Ms":23}

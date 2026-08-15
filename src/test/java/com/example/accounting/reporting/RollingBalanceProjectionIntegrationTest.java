@@ -174,7 +174,7 @@ class RollingBalanceProjectionIntegrationTest {
         LedgerResponses.DimensionType customer = customerType(actorId, ledgerId);
         LedgerResponses.DimensionType project = projectType(actorId, ledgerId);
         UUID controlled = ledgers.createAccount(actorId, ledgerId,
-                new LedgerRequests.AccountCreate("1410", "客户往来", "CURRENT_ASSET", "DEBIT", null,
+                new LedgerRequests.AccountCreate("1410", "客户往来", "ASSET.ACCOUNTS_RECEIVABLE", "CURRENT_ASSET", "DEBIT", null,
                         false, null, false, null, List.of(new LedgerRequests.DimensionRequirement(
                                 customer.id(), true), new LedgerRequests.DimensionRequirement(project.id(), true)))).id();
         UUID capital = account(ledgerId, "3001");

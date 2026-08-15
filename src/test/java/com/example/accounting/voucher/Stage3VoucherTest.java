@@ -19,7 +19,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
 
-@SpringBootTest
+@SpringBootTest(properties = "accounting.balance.worker-enabled=false")
 class Stage3VoucherTest {
 
     @Autowired
@@ -304,7 +304,7 @@ class Stage3VoucherTest {
                 customer.id(), new LedgerRequests.DimensionValueCreate("DELETE-C001", "Delete audit customer"));
         LedgerResponses.CashFlowItem cashFlow = ledgerService.listCashFlowItems(userId, ledgerId).getFirst();
         LedgerResponses.Account controlled = ledgerService.createAccount(userId, ledgerId,
-                new LedgerRequests.AccountCreate("1410", "Delete audit asset", "CURRENT_ASSET", "DEBIT", null,
+                new LedgerRequests.AccountCreate("1410", "Delete audit asset", "ASSET.ACCOUNTS_RECEIVABLE", "CURRENT_ASSET", "DEBIT", null,
                         true, cashFlow.id(), true, "unit",
                         List.of(new LedgerRequests.DimensionRequirement(customer.id(), true))));
         VoucherRequests.Line controlledLine = new VoucherRequests.Line(controlled.id(), "DEBIT", "CNY",

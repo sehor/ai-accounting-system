@@ -37,9 +37,35 @@ public interface BalanceProjectionRepository {
 
     BigDecimal openingBalance(UUID ledgerId, String periodCode, UUID accountId);
 
-    boolean applyPendingBatch(int maxEvents, int maxEventLines);
+    BatchResult applyPendingBatchDetailed(int maxPeriods, boolean legacyTail);
+
+    default boolean applyPendingBatch(int maxPeriods) {
+        return applyPendingBatchDetailed(maxPeriods, false).processed();
+    }
+
+    /** Compatibility entry point retained for existing callers; event limits are no longer used. */
+    default boolean applyPendingBatch(int maxEvents, int maxEventLines) {
+        return applyPendingBatchDetailed(Integer.MAX_VALUE, true).processed();
+    }
 
     void recordFailure();
 
-    int cleanupAppliedEvents(OffsetDateTime cutoff);
+    int cleanupAppliedEvents(OffsetDateTime cutoff, int batchSize);
+
+    default int cleanupAppliedEvents(OffsetDateTime cutoff) {
+        return cleanupAppliedEvents(cutoff, 1000);
+    }
+
+    CleanupMetrics cleanupMetrics(OffsetDateTime cutoff);
+
+    ProjectionMetrics projectionMetrics();
+
+    record BatchResult(boolean processed, int processedPeriods, int rebuiltRows) {
+    }
+
+    record CleanupMetrics(long pendingEvents, OffsetDateTime oldestCreatedAt) {
+    }
+
+    record ProjectionMetrics(long remainingDirtyPeriods, OffsetDateTime oldestPendingAt) {
+    }
 }

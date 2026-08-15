@@ -10,22 +10,26 @@ public class DimensionBalanceSnapshotRebuilder {
 
     private static final String REBUILD_SQL = """
             with recursive input as (
-                select cast(? as uuid) ledger_id, cast(? as uuid) source_period_id
+                select cast(? as uuid) ledger_id, cast(? as uuid) source_period_id,
+                    cast(? as uuid) through_period_id
             ), source_period as (
-                select p.ledger_id, p.period_code
+                select p.ledger_id, p.period_code source_period_code, through.period_code through_period_code
                 from accounting_period p
                 join input i on i.ledger_id = p.ledger_id and i.source_period_id = p.id
+                join accounting_period through
+                  on through.ledger_id = i.ledger_id and through.id = i.through_period_id
             ), periods as materialized (
                 select p.ledger_id, p.id period_id, p.period_code, p.status,
                     row_number() over (order by p.period_code) period_no
                 from accounting_period p
                 join source_period source on source.ledger_id = p.ledger_id
-                where p.period_code >= source.period_code
+                where p.period_code >= source.source_period_code
+                  and p.period_code <= source.through_period_code
             ), previous_period as (
                 select p.id period_id
                 from accounting_period p
                 join source_period source on source.ledger_id = p.ledger_id
-                where p.period_code < source.period_code
+                where p.period_code < source.source_period_code
                 order by p.period_code desc limit 1
             ), leaf_accounts as (
                 select a.id account_id
@@ -195,13 +199,22 @@ public class DimensionBalanceSnapshotRebuilder {
     }
 
     public int rebuildFrom(UUID ledgerId, UUID sourcePeriodId) {
+        UUID throughPeriodId = jdbc.query("""
+                select id from accounting_period where ledger_id = ? order by period_code desc limit 1
+                """, rs -> rs.next() ? rs.getObject(1, UUID.class) : null, ledgerId);
+        return rebuildFrom(ledgerId, sourcePeriodId, throughPeriodId);
+    }
+
+    public int rebuildFrom(UUID ledgerId, UUID sourcePeriodId, UUID throughPeriodId) {
         jdbc.update("""
                 delete from dimension_period_balance b
                 using accounting_period target, accounting_period source
                 where b.ledger_id = ? and target.ledger_id = b.ledger_id and target.id = b.period_id
                   and source.ledger_id = b.ledger_id and source.id = ?
                   and target.period_code >= source.period_code
-                """, ledgerId, sourcePeriodId);
-        return jdbc.update(REBUILD_SQL, ledgerId, sourcePeriodId);
+                  and target.period_code <= (select period_code from accounting_period
+                                               where ledger_id = ? and id = ?)
+                """, ledgerId, sourcePeriodId, ledgerId, throughPeriodId);
+        return jdbc.update(REBUILD_SQL, ledgerId, sourcePeriodId, throughPeriodId);
     }
 }

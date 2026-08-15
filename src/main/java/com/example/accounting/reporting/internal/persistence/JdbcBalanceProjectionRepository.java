@@ -357,7 +357,7 @@ public class JdbcBalanceProjectionRepository implements BalanceProjectionReposit
 
     @Override
     @Transactional
-    public boolean applyPendingBatch(int maxEvents, int maxEventLines) {
+    public BalanceProjectionRepository.BatchResult applyPendingBatchDetailed(int maxPeriods, boolean legacyTail) {
         UUID ledgerId = jdbc.query("""
                 select l.id
                 from ledger l
@@ -373,7 +373,7 @@ public class JdbcBalanceProjectionRepository implements BalanceProjectionReposit
                 for update skip locked limit 1
                 """, rs -> rs.next() ? rs.getObject(1, UUID.class) : null);
         if (ledgerId == null) {
-            return false;
+            return new BalanceProjectionRepository.BatchResult(false, 0, 0);
         }
         attemptedLedger.set(ledgerId);
         UUID sourcePeriodId = jdbc.query("""
@@ -386,19 +386,59 @@ public class JdbcBalanceProjectionRepository implements BalanceProjectionReposit
                 """, rs -> rs.next() ? rs.getObject(1, UUID.class) : null, ledgerId);
         if (sourcePeriodId == null) {
             attemptedLedger.remove();
-            return false;
+            return new BalanceProjectionRepository.BatchResult(false, 0, 0);
         }
-        snapshots.rebuildFrom(ledgerId, sourcePeriodId);
+        UUID throughPeriodId = legacyTail ? jdbc.query("""
+                select id from accounting_period where ledger_id = ? order by period_code desc limit 1
+                """, rs -> rs.next() ? rs.getObject(1, UUID.class) : null, ledgerId) : jdbc.query("""
+                select id from accounting_period
+                where ledger_id = ? and period_code >= (
+                    select period_code from accounting_period where ledger_id = ? and id = ?)
+                  and period_code <= (
+                    select max(pending.period_code)
+                    from balance_projection_state state
+                    join accounting_period pending
+                      on pending.ledger_id = state.ledger_id and pending.id = state.period_id
+                    where state.ledger_id = ?
+                      and coalesce(state.last_applied_event_id, 0) < coalesce(state.last_enqueued_event_id, 0))
+                order by period_code limit ?
+                """, rs -> {
+                    UUID value = null;
+                    while (rs.next()) {
+                        value = rs.getObject(1, UUID.class);
+                    }
+                    return value;
+                }, ledgerId, ledgerId, sourcePeriodId, ledgerId, Math.max(1, maxPeriods));
+        if (throughPeriodId == null) {
+            attemptedLedger.remove();
+            return new BalanceProjectionRepository.BatchResult(false, 0, 0);
+        }
+        BalanceSnapshotRebuilder.RebuildResult rebuilt = snapshots.rebuildFromWithStats(
+                ledgerId, sourcePeriodId, throughPeriodId);
         jdbc.update("""
                 update balance_projection_state set last_applied_event_id = last_enqueued_event_id,
                     projected_at = now(),
                     status = 'READY', attempts = 0, last_error_code = null, last_error_message = null,
                     next_attempt_at = now(), updated_at = now()
                 where ledger_id = ?
+                  and period_id in (
+                      select state.period_id
+                      from balance_projection_state state
+                      join accounting_period period
+                        on period.ledger_id = state.ledger_id and period.id = state.period_id
+                      join accounting_period through
+                        on through.ledger_id = state.ledger_id and through.id = ?
+                      where state.ledger_id = ? and period.period_code <= through.period_code)
                   and coalesce(last_applied_event_id, 0) < coalesce(last_enqueued_event_id, 0)
-                """, ledgerId);
+                """, ledgerId, throughPeriodId, ledgerId);
         attemptedLedger.remove();
-        return true;
+        int processedPeriods = jdbc.queryForObject("""
+                select count(*) from accounting_period p
+                where p.ledger_id = ? and p.period_code between
+                    (select period_code from accounting_period where ledger_id = ? and id = ?)
+                    and (select period_code from accounting_period where ledger_id = ? and id = ?)
+                """, Integer.class, ledgerId, ledgerId, sourcePeriodId, ledgerId, throughPeriodId);
+        return new BalanceProjectionRepository.BatchResult(true, processedPeriods, rebuilt.totalRows());
     }
 
     @Override
@@ -424,16 +464,51 @@ public class JdbcBalanceProjectionRepository implements BalanceProjectionReposit
 
     @Override
     @Transactional
-    public int cleanupAppliedEvents(OffsetDateTime cutoff) {
+    public int cleanupAppliedEvents(OffsetDateTime cutoff, int batchSize) {
+        int boundedBatchSize = Math.max(1, Math.min(batchSize, 1000));
         return jdbc.update("""
+                with candidates as (
+                    select e.id
+                    from balance_projection_event e
+                    where e.created_at < ?
+                      and exists (
+                          select 1 from balance_projection_state s
+                          where s.ledger_id = e.ledger_id and s.period_id = e.period_id
+                            and s.status = 'READY' and coalesce(s.last_applied_event_id, 0) >= e.id
+                      )
+                    order by e.created_at, e.id
+                    for update skip locked
+                    limit ?
+                )
                 delete from balance_projection_event e
-                where e.created_at < ?
-                  and exists (
-                      select 1 from balance_projection_state s
-                      where s.ledger_id = e.ledger_id and s.period_id = e.period_id
-                        and s.status = 'READY' and coalesce(s.last_applied_event_id, 0) >= e.id
-                  )
-                """, cutoff);
+                using candidates c
+                where e.id = c.id
+                """, cutoff, boundedBatchSize);
+    }
+
+    @Override
+    public BalanceProjectionRepository.CleanupMetrics cleanupMetrics(OffsetDateTime cutoff) {
+        return jdbc.query("""
+                select count(*) pending_events, min(created_at) oldest_created_at
+                from balance_projection_event e
+                where e.created_at < ? and exists (
+                    select 1 from balance_projection_state s
+                    where s.ledger_id = e.ledger_id and s.period_id = e.period_id
+                      and s.status = 'READY' and coalesce(s.last_applied_event_id, 0) >= e.id)
+                """, rs -> rs.next() ? new BalanceProjectionRepository.CleanupMetrics(
+                rs.getLong("pending_events"), rs.getObject("oldest_created_at", OffsetDateTime.class))
+                : new BalanceProjectionRepository.CleanupMetrics(0, null), cutoff);
+    }
+
+    @Override
+    public BalanceProjectionRepository.ProjectionMetrics projectionMetrics() {
+        return jdbc.query("""
+                select count(*) remaining_dirty_periods, min(s.last_enqueued_at) oldest_pending_at
+                from balance_projection_state s
+                where coalesce(s.last_applied_event_id, 0) < coalesce(s.last_enqueued_event_id, 0)
+                """, rs -> rs.next() ? new BalanceProjectionRepository.ProjectionMetrics(
+                rs.getLong("remaining_dirty_periods"), rs.getObject("oldest_pending_at", OffsetDateTime.class))
+                : new BalanceProjectionRepository.ProjectionMetrics(0, null));
     }
 
     private ReportResponses.TrialBalanceLine projectionLine(java.sql.ResultSet rs) throws java.sql.SQLException {
