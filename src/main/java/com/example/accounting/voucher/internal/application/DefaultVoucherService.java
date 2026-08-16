@@ -5,10 +5,13 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.example.accounting.ledger.LedgerAccessService;
 import com.example.accounting.ledger.LedgerRole;
 import com.example.accounting.shared.balance.BalanceProjectionService;
+import com.example.accounting.shared.accounting.DimensionCombinationKey;
+import com.example.accounting.shared.accounting.DimensionCombinationStore;
 import com.example.accounting.shared.web.ApiProblemException;
 import com.example.accounting.voucher.VoucherRequests;
 import com.example.accounting.voucher.VoucherResponses;
 import com.example.accounting.voucher.VoucherService;
+import com.example.accounting.voucher.GeneratedVoucherCommandService;
 import com.example.accounting.voucher.internal.port.VoucherRepository;
 import com.example.accounting.voucher.internal.port.VoucherRepository.Idempotency;
 import com.example.accounting.voucher.internal.port.VoucherRepository.LedgerContext;
@@ -21,17 +24,19 @@ import java.security.MessageDigest;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.UUID;
 import java.util.HexFormat;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
-public class DefaultVoucherService implements VoucherService {
+public class DefaultVoucherService implements VoucherService, GeneratedVoucherCommandService {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(DefaultVoucherService.class);
 
@@ -41,13 +46,16 @@ public class DefaultVoucherService implements VoucherService {
     private final VoucherRepository vouchers;
     private final LedgerAccessService ledgerAccess;
     private final BalanceProjectionService balanceProjection;
+    private final DimensionCombinationStore dimensionCombinations;
     private final ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
 
     public DefaultVoucherService(VoucherRepository vouchers, LedgerAccessService ledgerAccess,
-                                 BalanceProjectionService balanceProjection) {
+                                 BalanceProjectionService balanceProjection,
+                                 DimensionCombinationStore dimensionCombinations) {
         this.vouchers = vouchers;
         this.ledgerAccess = ledgerAccess;
         this.balanceProjection = balanceProjection;
+        this.dimensionCombinations = dimensionCombinations;
     }
 
     @Transactional
@@ -135,6 +143,7 @@ public class DefaultVoucherService implements VoucherService {
                                            VoucherRequests.Update request) {
         requireRole(actorId, ledgerId, Set.of(LedgerRole.OWNER, LedgerRole.EDITOR));
         VoucherState state = stateWithVersion(ledgerId, voucherId);
+        ensureManual(state);
         VoucherSnapshot before = snapshot(ledgerId, voucherId);
         ensurePeriodUnchanged(before.periodId(), request.periodId());
         requireOpenPeriods(ledgerId, before.periodId(), request.periodId());
@@ -146,7 +155,7 @@ public class DefaultVoucherService implements VoucherService {
                     "The voucher was changed by another request");
         }
         vouchers.deleteLines(ledgerId, voucherId);
-        insertLines(ledgerId, voucherId, context, request.lines());
+        insertLines(ledgerId, voucherId, context, request.lines(), before.lines());
         vouchers.reclassifyAccountingRole(ledgerId, voucherId);
         VoucherSnapshot after = snapshot(ledgerId, voucherId);
         audit(ledgerId, voucherId, "UPDATE", actorId, null, before, after);
@@ -167,7 +176,8 @@ public class DefaultVoucherService implements VoucherService {
                                                      UUID expectedSourceId, UUID nextSourceId) {
         requireRole(actorId, ledgerId, Set.of(LedgerRole.OWNER, LedgerRole.EDITOR));
         VoucherState state = stateWithVersion(ledgerId, voucherId);
-        if (!state.generated() || !sourceType.equals(state.sourceType()) || !expectedSourceId.equals(state.sourceId())) {
+        if (!state.generated() || !Objects.equals(sourceType, state.sourceType())
+                || !Objects.equals(expectedSourceId, state.sourceId()) || nextSourceId == null) {
             throw problem(409, "VOUCHER_SOURCE_MISMATCH", "Voucher source mismatch",
                     "The generated voucher is owned by another process");
         }
@@ -183,7 +193,7 @@ public class DefaultVoucherService implements VoucherService {
                     "The generated voucher was changed by another request");
         }
         vouchers.deleteLines(ledgerId, voucherId);
-        insertLines(ledgerId, voucherId, context, request.lines());
+        insertLines(ledgerId, voucherId, context, request.lines(), before.lines());
         vouchers.reclassifyAccountingRole(ledgerId, voucherId);
         VoucherSnapshot after = snapshot(ledgerId, voucherId);
         audit(ledgerId, voucherId, "UPDATE_GENERATED", actorId, sourceType, before, after);
@@ -194,12 +204,41 @@ public class DefaultVoucherService implements VoucherService {
     }
 
     private void insertLines(UUID ledgerId, UUID voucherId, LedgerContext context, List<VoucherRequests.Line> lines) {
+        insertLines(ledgerId, voucherId, context, lines, List.of());
+    }
+
+    private void insertLines(UUID ledgerId, UUID voucherId, LedgerContext context, List<VoucherRequests.Line> lines,
+                             List<VoucherLineSnapshot> previousLines) {
         List<VoucherRequests.Line> effectiveLines = lines.stream().filter(line -> !isBlankLine(line)).toList();
         if (effectiveLines.isEmpty()) {
             throw problem(422, "VOUCHER_LINES_REQUIRED", "Voucher lines required",
                     "At least one completed voucher line is required");
         }
+        for (VoucherRequests.Line line : effectiveLines) {
+            if (line.accountId() == null || line.originalAmount() == null || line.currency() == null
+                    || line.exchangeRate() == null) {
+                throw problem(422, "INVALID_VOUCHER_LINE", "Invalid voucher line",
+                        "A non-empty voucher line requires an account, currency, amount and exchange rate");
+            }
+        }
         int lineNo = 1;
+        List<UUID> accountIds = effectiveLines.stream().map(VoucherRequests.Line::accountId).distinct().toList();
+        Map<UUID, VoucherRepository.AccountControls> controlsByAccount =
+                new HashMap<>(vouchers.accountControlsByAccounts(ledgerId, accountIds));
+        Set<UUID> activeAccounts = vouchers.activeAccountIds(ledgerId, accountIds);
+        Set<UUID> cashFlowIds = effectiveLines.stream().map(VoucherRequests.Line::cashFlowItemId)
+                .filter(Objects::nonNull).collect(java.util.stream.Collectors.toSet());
+        controlsByAccount.values().stream().map(VoucherRepository.AccountControls::defaultCashFlowItemId)
+                .filter(Objects::nonNull).forEach(cashFlowIds::add);
+        Set<UUID> activeCashFlowItems = vouchers.activeCashFlowItemIds(ledgerId, cashFlowIds);
+        Set<String> requestedDimensionBindings = effectiveLines.stream()
+                .flatMap(line -> (line.dimensions() == null ? List.<VoucherRequests.Dimension>of() : line.dimensions()).stream())
+                .map(dimension -> dimension.dimensionTypeId() + ":" + dimension.dimensionValueId())
+                .collect(java.util.stream.Collectors.toSet());
+        Set<String> activeDimensionBindings = vouchers.activeDimensionBindings(ledgerId, requestedDimensionBindings);
+        Map<String, DimensionCombinationStore.Resolved> combinations = new HashMap<>();
+        List<VoucherRepository.LineInsert> inserts = new java.util.ArrayList<>(effectiveLines.size());
+        List<VoucherRepository.LineDimensionInsert> dimensionInserts = new java.util.ArrayList<>();
         for (VoucherRequests.Line line : effectiveLines) {
             if (line.accountId() == null || line.originalAmount() == null) {
                 throw problem(422, "INVALID_VOUCHER_LINE", "Invalid voucher line",
@@ -215,20 +254,50 @@ public class DefaultVoucherService implements VoucherService {
                 throw problem(422, "INVALID_BASE_CURRENCY_RATE", "Invalid base currency rate",
                         "The base currency exchange rate must be 1");
             }
-            ensureAccount(ledgerId, line.accountId());
-            VoucherRepository.AccountControls controls = vouchers.accountControls(ledgerId, line.accountId())
-                    .orElseThrow();
+            if (!activeAccounts.contains(line.accountId())) {
+                ensureAccount(ledgerId, line.accountId());
+            }
+            VoucherRepository.AccountControls controls = controlsByAccount.get(line.accountId());
+            if (controls == null) {
+                ensureAccount(ledgerId, line.accountId());
+                throw problem(422, "INVALID_VOUCHER_ACCOUNT", "Invalid voucher account",
+                        "The voucher account could not be resolved");
+            }
             UUID cashFlowItemId = line.cashFlowItemId() == null
                     ? controls.defaultCashFlowItemId() : line.cashFlowItemId();
             List<VoucherRequests.Dimension> dimensions =
                     line.dimensions() == null ? List.of() : line.dimensions();
-            validateLineControls(ledgerId, line, original, cashFlowItemId, controls, dimensions);
+            int currentLineNo = lineNo;
+            boolean unchangedHistoricalDimensions = previousLines.stream()
+                    .filter(previous -> previous.lineNo() == currentLineNo)
+                    .anyMatch(previous -> previous.accountId().equals(line.accountId())
+                            && sameDimensionBindings(dimensions, previous.dimensions()));
+            validateLineControls(ledgerId, line, original, cashFlowItemId, controls, dimensions,
+                    unchangedHistoricalDimensions, activeCashFlowItems, activeDimensionBindings);
+            String combinationKey = (unchangedHistoricalDimensions ? "H:" : "A:")
+                    + combinationDimensions(dimensions).toString();
+            DimensionCombinationStore.Resolved combination = combinations.computeIfAbsent(combinationKey, ignored ->
+                    (unchangedHistoricalDimensions
+                            ? dimensionCombinations.resolveHistorical(ledgerId, combinationDimensions(dimensions))
+                            : dimensionCombinations.resolveActive(ledgerId, combinationDimensions(dimensions)))
+                            .orElse(null));
+            if (combination == null) {
+                throw problem(422, "INVALID_DIMENSION_VALUE", "Invalid dimension value",
+                        unchangedHistoricalDimensions
+                                ? "The historical dimension value is no longer available to this ledger"
+                                : "Every dimension value must be active and belong to its ledger and type");
+            }
             UUID lineId = UUID.randomUUID();
-            vouchers.createLine(lineId, ledgerId, voucherId, lineNo++, line.accountId(), line.side(),
-                    line.currency(), original, rate, original.multiply(rate).setScale(2, RoundingMode.HALF_UP),
-                    line.summary(), cashFlowItemId, line.quantity(), line.unitPrice());
-            vouchers.createLineDimensions(lineId, ledgerId, dimensions);
+            inserts.add(new VoucherRepository.LineInsert(lineId, ledgerId, voucherId, lineNo++, line.accountId(),
+                    line.side(), line.currency(), original, rate, original.multiply(rate).setScale(2, RoundingMode.HALF_UP),
+                    line.summary(), cashFlowItemId, line.quantity(), line.unitPrice(), combination.id()));
+            for (VoucherRequests.Dimension dimension : dimensions) {
+                dimensionInserts.add(new VoucherRepository.LineDimensionInsert(lineId, ledgerId,
+                        dimension.dimensionTypeId(), dimension.dimensionValueId()));
+            }
         }
+        vouchers.createLines(inserts);
+        vouchers.createLineDimensionsBatch(dimensionInserts);
         ensureBalancedVoucher(ledgerId, voucherId);
     }
 
@@ -255,8 +324,9 @@ public class DefaultVoucherService implements VoucherService {
     private void validateLineControls(
             UUID ledgerId, VoucherRequests.Line line, BigDecimal original,
             UUID cashFlowItemId, VoucherRepository.AccountControls controls,
-            List<VoucherRequests.Dimension> dimensions) {
-        if (!vouchers.validCashFlowItem(ledgerId, cashFlowItemId)) {
+            List<VoucherRequests.Dimension> dimensions, boolean allowInactiveHistoricalDimensions,
+            Set<UUID> activeCashFlowItems, Set<String> activeDimensionBindings) {
+        if (cashFlowItemId != null && !activeCashFlowItems.contains(cashFlowItemId)) {
             throw problem(422, "INVALID_CASH_FLOW_ITEM", "Invalid cash-flow item",
                     "The cash-flow item must be active in this ledger");
         }
@@ -278,12 +348,19 @@ public class DefaultVoucherService implements VoucherService {
         for (VoucherRequests.Dimension dimension : dimensions) {
             if (!seen.add(dimension.dimensionTypeId())
                     || !controls.dimensionTypeIds().contains(dimension.dimensionTypeId())
-                    || !vouchers.validDimensionValue(
-                    ledgerId, dimension.dimensionTypeId(), dimension.dimensionValueId())) {
+                    || (!allowInactiveHistoricalDimensions && !activeDimensionBindings.contains(
+                    dimension.dimensionTypeId() + ":" + dimension.dimensionValueId()))) {
                 throw problem(422, "INVALID_VOUCHER_DIMENSION", "Invalid voucher dimension",
                         "Dimensions must be unique bindings with active values in this ledger");
             }
         }
+    }
+
+    private boolean sameDimensionBindings(List<VoucherRequests.Dimension> dimensions,
+                                          List<VoucherResponses.Dimension> previousDimensions) {
+        return dimensions.size() == previousDimensions.size()
+                && dimensions.stream().allMatch(dimension -> previousDimensions.contains(
+                new VoucherResponses.Dimension(dimension.dimensionTypeId(), dimension.dimensionValueId())));
     }
 
     private String requestHash(VoucherRequests.Create request) {
@@ -528,15 +605,49 @@ public class DefaultVoucherService implements VoucherService {
     public void delete(UUID actorId, UUID ledgerId, UUID voucherId) {
         requireRole(actorId, ledgerId, Set.of(LedgerRole.OWNER, LedgerRole.EDITOR));
         VoucherState state = state(ledgerId, voucherId);
+        ensureManual(state);
+        deleteVoucher(actorId, ledgerId, voucherId, state, state.version(), null);
+    }
+
+    @Transactional
+    @Override
+    public void deleteGenerated(UUID actorId, UUID ledgerId, UUID voucherId, String sourceType, UUID sourceId,
+                                long expectedVersion, String reason) {
+        requireRole(actorId, ledgerId, Set.of(LedgerRole.OWNER, LedgerRole.EDITOR));
+        VoucherState state = state(ledgerId, voucherId);
+        if (!state.generated() || !Objects.equals(sourceType, state.sourceType())
+                || !Objects.equals(sourceId, state.sourceId())) {
+            throw problem(409, "VOUCHER_SOURCE_MISMATCH", "Voucher source mismatch",
+                    "The generated voucher is owned by another process");
+        }
+        if (state.version() != expectedVersion) {
+            throw problem(409, "RESOURCE_VERSION_CONFLICT", "Resource version conflict",
+                    "The generated voucher was changed by another request");
+        }
+        deleteVoucher(actorId, ledgerId, voucherId, state, expectedVersion,
+                reason == null || reason.isBlank() ? null : reason.trim());
+    }
+
+    private void deleteVoucher(UUID actorId, UUID ledgerId, UUID voucherId, VoucherState state,
+                               long expectedVersion, String reason) {
         VoucherSnapshot before = snapshot(ledgerId, voucherId);
+        String beforeData = toJson(before);
+        String afterData = toJson(VoucherDeletionTombstone.from(before));
         balanceProjection.requireOpenPeriod(ledgerId, before.periodId());
         if ("POSTED".equals(state.status())) {
             balanceProjection.publishVoucher(new BalanceProjectionService.VoucherEvent(
                     ledgerId, before.periodId(), voucherId, state.version() + 1,
                     BalanceProjectionService.EventType.UPDATE, balanceEntries(before.lines(), BigDecimal.ONE.negate())));
         }
-        if (!vouchers.deleteVoucher(ledgerId, voucherId, state.version())) {
-            throw problem(409, "VOUCHER_STATE_INVALID", "Invalid voucher state", "The voucher state has changed");
+        vouchers.recordRevision(ledgerId, voucherId, vouchers.currentRevision(ledgerId, voucherId) + 1,
+                "DELETE", actorId, reason, beforeData, afterData);
+        try {
+            if (!vouchers.deleteVoucher(ledgerId, voucherId, expectedVersion)) {
+                throw problem(409, "VOUCHER_STATE_INVALID", "Invalid voucher state", "The voucher state has changed");
+            }
+        } catch (DataIntegrityViolationException exception) {
+            throw problem(409, "VOUCHER_REFERENCED_BY_BUSINESS_RECORD", "Voucher is still referenced",
+                    "The owning business workflow must clear its voucher reference before deletion");
         }
         LOGGER.info("Voucher deleted: ledgerId={}, voucherId={}, actorId={}", ledgerId, voucherId, actorId);
     }
@@ -546,7 +657,6 @@ public class DefaultVoucherService implements VoucherService {
     public List<VoucherResponses.Revision> listRevisions(UUID actorId, UUID ledgerId, UUID voucherId) {
         requireRole(actorId, ledgerId, Set.of(LedgerRole.OWNER, LedgerRole.EDITOR, LedgerRole.REVIEWER,
                 LedgerRole.VIEWER, LedgerRole.AGENT));
-        state(ledgerId, voucherId);
         return vouchers.listRevisions(ledgerId, voucherId);
     }
 
@@ -555,6 +665,7 @@ public class DefaultVoucherService implements VoucherService {
     public VoucherResponses.Voucher restoreRevision(UUID actorId, UUID ledgerId, UUID voucherId, int revision) {
         requireRole(actorId, ledgerId, Set.of(LedgerRole.OWNER, LedgerRole.EDITOR));
         VoucherState state = state(ledgerId, voucherId);
+        ensureManual(state);
         String targetData = vouchers.findRevisionData(ledgerId, voucherId, revision).orElseThrow(() ->
                 problem(404, "REVISION_NOT_FOUND", "Revision not found",
                         "The requested voucher revision does not exist"));
@@ -592,7 +703,7 @@ public class DefaultVoucherService implements VoucherService {
 
     private void ensureManual(VoucherState state) {
         if (state.generated()) {
-            throw problem(409, "VOUCHER_MANAGED_BY_SOURCE", "Voucher is managed by a source process",
+            throw problem(409, "GENERATED_VOUCHER_MANAGED_BY_SOURCE", "Voucher is managed by a source process",
                     "Generated vouchers can only be changed by their owning asset or settlement workflow");
         }
     }
@@ -693,31 +804,44 @@ public class DefaultVoucherService implements VoucherService {
         VoucherResponses.Voucher voucher = vouchers.find(ledgerId, voucherId, true).orElseThrow(() ->
                 problem(404, "VOUCHER_NOT_FOUND", "Voucher not found",
                         "The voucher is not available to this ledger"));
-        return new VoucherSnapshot(voucher.periodId(), voucher.voucherDate(), voucher.voucherType(),
+        return new VoucherSnapshot(voucher.id(), voucher.ledgerId(), voucher.periodId(), voucher.voucherDate(), voucher.voucherType(),
                 voucher.voucherNumber(), voucher.summary(), voucher.status(), voucher.approvalRequired(),
+                voucher.version(), voucher.sourceType(), voucher.sourceId(),
                 voucher.lines().stream().map(VoucherLineSnapshot::from).toList());
     }
 
     private void insertSnapshotLines(UUID ledgerId, UUID voucherId, List<VoucherLineSnapshot> lines) {
+        int lineNo = 1;
         for (VoucherLineSnapshot line : lines) {
-            UUID lineId = UUID.randomUUID();
-            vouchers.createLine(lineId, ledgerId, voucherId, line.lineNo(), line.accountId(), line.side(),
-                    line.currency(), line.originalAmount(), line.exchangeRate(), line.baseAmount(), line.summary(),
-                    line.cashFlowItemId(), line.quantity(), line.unitPrice());
-            vouchers.createLineDimensions(lineId, ledgerId, line.dimensions().stream()
+            List<VoucherRequests.Dimension> dimensions = line.dimensions().stream()
                     .map(dimension -> new VoucherRequests.Dimension(
                             dimension.dimensionTypeId(), dimension.dimensionValueId()))
-                    .toList());
+                    .toList();
+            DimensionCombinationStore.Resolved combination = dimensionCombinations.resolveHistorical(
+                    ledgerId, combinationDimensions(dimensions)).orElseThrow(() ->
+                    problem(422, "INVALID_DIMENSION_VALUE", "Invalid dimension value",
+                            "The historical dimension value is no longer available to this ledger"));
+            UUID lineId = UUID.randomUUID();
+            vouchers.createLine(lineId, ledgerId, voucherId, lineNo++, line.accountId(), line.side(),
+                    line.currency(), line.originalAmount(), line.exchangeRate(), line.baseAmount(), line.summary(),
+                    line.cashFlowItemId(), line.quantity(), line.unitPrice(), combination.id());
+            vouchers.createLineDimensions(lineId, ledgerId, dimensions);
         }
         ensureBalancedVoucher(ledgerId, voucherId);
     }
 
-    private String toJson(VoucherSnapshot snapshot) {
-        if (snapshot == null) {
+    private List<DimensionCombinationKey.Dimension> combinationDimensions(
+            List<VoucherRequests.Dimension> dimensions) {
+        return dimensions.stream().map(dimension -> new DimensionCombinationKey.Dimension(
+                dimension.dimensionTypeId(), dimension.dimensionValueId())).toList();
+    }
+
+    private String toJson(Object value) {
+        if (value == null) {
             return null;
         }
         try {
-            return objectMapper.writeValueAsString(snapshot);
+            return objectMapper.writeValueAsString(value);
         } catch (JsonProcessingException exception) {
             throw problem(500, "VOUCHER_SNAPSHOT_FAILED", "Voucher snapshot failed",
                     "The voucher revision could not be serialized");
@@ -801,17 +925,26 @@ public class DefaultVoucherService implements VoucherService {
         return new ApiProblemException(status, code, title, detail, false);
     }
 
-    private record VoucherSnapshot(UUID periodId, LocalDate voucherDate, String voucherType, String voucherNumber,
-                                   String summary, String status, boolean approvalRequired,
+    private record VoucherSnapshot(UUID id, UUID ledgerId, UUID periodId, LocalDate voucherDate,
+                                   String voucherType, String voucherNumber, String summary, String status,
+                                   boolean approvalRequired, long version, String sourceType, UUID sourceId,
                                    List<VoucherLineSnapshot> lines) {
     }
 
-    private record VoucherLineSnapshot(int lineNo, UUID accountId, String side, String currency,
+    private record VoucherDeletionTombstone(boolean deleted, UUID id, UUID ledgerId, String status,
+                                             String previousStatus, long version, String sourceType, UUID sourceId) {
+        private static VoucherDeletionTombstone from(VoucherSnapshot snapshot) {
+            return new VoucherDeletionTombstone(true, snapshot.id(), snapshot.ledgerId(), "DELETED",
+                    snapshot.status(), snapshot.version(), snapshot.sourceType(), snapshot.sourceId());
+        }
+    }
+
+    private record VoucherLineSnapshot(UUID id, int lineNo, UUID accountId, String side, String currency,
                                        BigDecimal originalAmount, BigDecimal exchangeRate, BigDecimal baseAmount,
                                        String summary, UUID cashFlowItemId, BigDecimal quantity,
                                        BigDecimal unitPrice, List<VoucherResponses.Dimension> dimensions) {
         private static VoucherLineSnapshot from(VoucherResponses.Line line) {
-            return new VoucherLineSnapshot(line.lineNo(), line.accountId(), line.side(), line.currency(),
+            return new VoucherLineSnapshot(line.id(), line.lineNo(), line.accountId(), line.side(), line.currency(),
                     line.originalAmount(), line.exchangeRate(), line.baseAmount(), line.summary(),
                     line.cashFlowItemId(), line.quantity(), line.unitPrice(), line.dimensions());
         }

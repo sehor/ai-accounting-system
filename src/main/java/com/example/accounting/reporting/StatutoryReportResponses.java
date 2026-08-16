@@ -1,5 +1,6 @@
 package com.example.accounting.reporting;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 import java.math.BigDecimal;
 import java.util.List;
 
@@ -9,6 +10,9 @@ public final class StatutoryReportResponses {
     private StatutoryReportResponses() {
     }
 
+    @Schema(name = "StatutoryStatement", requiredProperties = {"reportType", "templateCode",
+            "standardCode", "standardVersion", "periodCode", "primaryColumn", "comparativeColumn",
+            "groups", "checks"})
     public record Statement(
             String reportType,
             String templateCode,
@@ -21,9 +25,12 @@ public final class StatutoryReportResponses {
             List<Check> checks) {
     }
 
+    @Schema(requiredProperties = {"key", "title", "lines"})
     public record Group(String key, String title, List<Line> lines) {
     }
 
+    @Schema(name = "StatutoryStatementLine", requiredProperties = {"key", "lineNo", "name", "indent",
+            "rowType", "primaryAmount", "comparativeAmount"})
     public record Line(
             String key,
             int lineNo,
@@ -34,6 +41,7 @@ public final class StatutoryReportResponses {
             BigDecimal comparativeAmount) {
     }
 
+    @Schema(requiredProperties = {"key", "name", "passed", "difference"})
     public record Check(String key, String name, boolean passed, BigDecimal difference) {
     }
 }

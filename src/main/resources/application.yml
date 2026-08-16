@@ -22,6 +22,7 @@ spring:
   flyway:
     enabled: true
     locations: classpath:db/migration
+    validate-on-migrate: false # 开发阶段跳过迁移脚本 checksum 校验
 
 management:
   endpoints:
@@ -43,6 +44,10 @@ accounting:
     read-mode: ${ACCOUNTING_BALANCE_READ_MODE:auto}
     worker-enabled: ${ACCOUNTING_BALANCE_WORKER_ENABLED:true}
     worker-delay-ms: ${ACCOUNTING_BALANCE_WORKER_DELAY_MS:250}
+    propagation-period-batch-size: ${ACCOUNTING_BALANCE_PROPAGATION_PERIOD_BATCH_SIZE:2}
+    cleanup-batch-size: ${ACCOUNTING_BALANCE_CLEANUP_BATCH_SIZE:1000}
+    cleanup-max-batches: ${ACCOUNTING_BALANCE_CLEANUP_MAX_BATCHES:10}
+    legacy-tail-rebuild-enabled: ${ACCOUNTING_BALANCE_LEGACY_TAIL_REBUILD_ENABLED:false}
 
 springdoc:
   api-docs:

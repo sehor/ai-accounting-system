@@ -7,6 +7,7 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 public interface VoucherRepository {
@@ -24,6 +25,14 @@ public interface VoucherRepository {
     boolean activeAccountExists(UUID ledgerId, UUID accountId);
 
     Optional<AccountControls> accountControls(UUID ledgerId, UUID accountId);
+
+    Map<UUID, AccountControls> accountControlsByAccounts(UUID ledgerId, List<UUID> accountIds);
+
+    Set<UUID> activeAccountIds(UUID ledgerId, List<UUID> accountIds);
+
+    Set<UUID> activeCashFlowItemIds(UUID ledgerId, Set<UUID> itemIds);
+
+    Set<String> activeDimensionBindings(UUID ledgerId, Set<String> requestedBindings);
 
     boolean validCashFlowItem(UUID ledgerId, UUID cashFlowItemId);
 
@@ -51,9 +60,14 @@ public interface VoucherRepository {
 
     void createLine(UUID lineId, UUID ledgerId, UUID voucherId, int lineNo, UUID accountId, String side,
                     String currency, BigDecimal originalAmount, BigDecimal exchangeRate, BigDecimal baseAmount,
-                    String summary, UUID cashFlowItemId, BigDecimal quantity, BigDecimal unitPrice);
+                    String summary, UUID cashFlowItemId, BigDecimal quantity, BigDecimal unitPrice,
+                    UUID dimensionCombinationId);
+
+    void createLines(List<LineInsert> lines);
 
     void createLineDimensions(UUID lineId, UUID ledgerId, List<VoucherRequests.Dimension> dimensions);
+
+    void createLineDimensionsBatch(List<LineDimensionInsert> dimensions);
 
     boolean controlsComplete(UUID ledgerId, UUID voucherId);
 
@@ -119,5 +133,14 @@ public interface VoucherRepository {
     record AccountControls(boolean cashFlowRequired, UUID defaultCashFlowItemId,
                            boolean quantityEnabled, String unitName,
                            List<UUID> dimensionTypeIds) {
+    }
+
+    record LineInsert(UUID lineId, UUID ledgerId, UUID voucherId, int lineNo, UUID accountId, String side,
+                      String currency, BigDecimal originalAmount, BigDecimal exchangeRate, BigDecimal baseAmount,
+                      String summary, UUID cashFlowItemId, BigDecimal quantity, BigDecimal unitPrice,
+                      UUID dimensionCombinationId) {
+    }
+
+    record LineDimensionInsert(UUID lineId, UUID ledgerId, UUID dimensionTypeId, UUID dimensionValueId) {
     }
 }

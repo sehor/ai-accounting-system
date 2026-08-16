@@ -2,8 +2,14 @@ import { Alert, App, Button, Card, Checkbox, Form, Input, Modal, Select, Space, 
 import { DownloadOutlined, PlusOutlined, UploadOutlined } from '@ant-design/icons'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { useEffect, useMemo, useState } from 'react'
-import { apiFetch, ApiError, jsonBody, type ApiAuth } from '../api/client'
-import type { Account, AccountImportPreview, CashFlowItem, DimensionType, Period } from '../api/types'
+import { apiData, apiHeaders, openApiClient, ApiError, type ApiAuth } from '../api/client'
+import type { components } from '../api/generated'
+
+type Account = components['schemas']['Account']
+type AccountImportPreview = components['schemas']['AccountImportPreview']
+type DimensionType = components['schemas']['DimensionType']
+type Period = Omit<components['schemas']['Period'], 'hasVouchers'> & { hasVouchers?: boolean }
+type AccountImportAction = 'CREATE' | 'UPDATE' | 'MAP' | 'SKIP'
 
 type AccountTree = Account & { children?: AccountTree[] }
 export type AccountCategoryTab =
@@ -31,7 +37,9 @@ export const ACCOUNT_CATEGORY_LABELS: Record<AccountCategoryTab, string> = {
 }
 type AccountForm = {
   code: string
+  childCodeSuffix?: string
   name: string
+  standardAccountKey?: string
   category: string
   normalBalance: string
   cashFlowRequired?: boolean
@@ -64,11 +72,50 @@ export function AccountsTab({ ledgerId, session, accounts, dimensionTypes, perio
   const [createdInPeriodId, setCreatedInPeriodId] = useState<string>()
   const [preview, setPreview] = useState<AccountImportPreview | null>(null)
   const [expandedRowKeys, setExpandedRowKeys] = useState<string[]>([])
+  const selectedCategory = Form.useWatch('category', form)
+  const standardKeyOptions = useMemo(() => {
+    const byKey = new Map<string, Account>()
+    accounts.forEach((account) => {
+      if (account.standardAccountKey && (!selectedCategory || account.category === selectedCategory) &&
+          !byKey.has(account.standardAccountKey)) {
+        byKey.set(account.standardAccountKey, account)
+      }
+    })
+    return [...byKey.entries()].sort(([left], [right]) => left.localeCompare(right)).map(([key, account]) => ({
+      value: key,
+      label: `${key} · ${account.code} ${account.name}`,
+    }))
+  }, [accounts, selectedCategory])
+  const codeRuleQuery = useQuery({
+    queryKey: ['account-code-rule', ledgerId],
+    queryFn: () => apiData(openApiClient.GET('/v1/ledgers/{ledgerId}/account-code-rule', { params: { path: { ledgerId } }, headers: apiHeaders(session) })),
+    enabled: Boolean(session && ledgerId),
+  })
+  const formParent = useMemo(() => parent || (editing?.parentId
+    ? accounts.find((account) => account.id === editing.parentId) || null
+    : null), [accounts, editing?.parentId, parent])
+  const childCodeWidth = formParent && codeRuleQuery.data
+    ? formParent.level === 1 ? codeRuleQuery.data.level2Width
+      : formParent.level === 2 ? codeRuleQuery.data.level3Width
+        : formParent.level === 3 ? codeRuleQuery.data.level4Width
+          : undefined
+    : undefined
+  const nextChildCodeQuery = useQuery({
+    queryKey: ['next-child-account-code', ledgerId, parent?.id],
+    queryFn: () => apiData(openApiClient.GET('/v1/ledgers/{ledgerId}/accounts/{accountId}/next-child-code', {
+      params: { path: { ledgerId, accountId: parent!.id } },
+      headers: apiHeaders(session),
+    })),
+    enabled: Boolean(formOpen && parent && !editing),
+  })
+  const nextChildCodeFailed = nextChildCodeQuery.isError || nextChildCodeQuery.isRefetchError
   useEffect(() => {
     if (!formOpen) return
     if (editing) {
       form.setFieldsValue({
         ...editing,
+        childCodeSuffix: formParent ? editing.code.slice(formParent.code.length) : undefined,
+        standardAccountKey: editing.standardAccountKey || undefined,
         defaultCashFlowItemId: editing.defaultCashFlowItemId || undefined,
         unitName: editing.unitName || undefined,
         dimensionTypeIds: editing.dimensionRequirements.map((item) => item.dimensionTypeId),
@@ -78,14 +125,28 @@ export function AccountsTab({ ledgerId, session, accounts, dimensionTypes, perio
       return
     }
     form.resetFields()
-    form.setFieldsValue(parent ? {
-      category: parent.category,
-      normalBalance: parent.normalBalance,
-    } : { cashFlowRequired: false, quantityEnabled: false })
-  }, [editing, form, formOpen, parent])
+    if (parent) {
+      form.setFieldsValue({
+        childCodeSuffix: undefined,
+        category: parent.category,
+        normalBalance: parent.normalBalance,
+        cashFlowRequired: false,
+        quantityEnabled: false,
+      })
+      return
+    }
+    form.setFieldsValue({ category, cashFlowRequired: false, quantityEnabled: false })
+  }, [category, editing, form, formOpen, formParent, parent])
+  useEffect(() => {
+    const suggestedCode = nextChildCodeQuery.data?.code
+    if (!formOpen || !parent || editing || nextChildCodeQuery.isFetching || nextChildCodeFailed || !suggestedCode ||
+        !suggestedCode.startsWith(parent.code) || form.isFieldTouched('childCodeSuffix')) return
+    form.setFieldValue('childCodeSuffix', suggestedCode.slice(parent.code.length))
+  }, [editing, form, formOpen, nextChildCodeFailed, nextChildCodeQuery.data?.code,
+    nextChildCodeQuery.isFetching, parent])
   const cashFlowItems = useQuery({
     queryKey: ['cash-flow-items', ledgerId],
-    queryFn: () => apiFetch<CashFlowItem[]>(`/ledgers/${ledgerId}/cash-flow-items`, session),
+    queryFn: () => apiData(openApiClient.GET('/v1/ledgers/{ledgerId}/cash-flow-items', { params: { path: { ledgerId } }, headers: apiHeaders(session) })),
   })
   const createdAtPeriod = periods.find((period) => period.id === createdInPeriodId)
   const tree = useMemo(() => filterTree(
@@ -99,21 +160,27 @@ export function AccountsTab({ ledgerId, session, accounts, dimensionTypes, perio
 
   const save = useMutation({
     mutationFn: (value: AccountForm) => {
-      const dimensionRequirements = (value.dimensionTypeIds || []).map((dimensionTypeId) => ({
+      const { dimensionTypeIds, requiredDimensionTypeIds, standardAccountKey,
+        childCodeSuffix, code: enteredCode, ...fields } = value
+      const dimensionRequirements = (dimensionTypeIds || []).map((dimensionTypeId) => ({
         dimensionTypeId,
-        required: (value.requiredDimensionTypeIds || []).includes(dimensionTypeId),
+        required: (requiredDimensionTypeIds || []).includes(dimensionTypeId),
       }))
       const body = {
-        ...value,
-        parentId: editing?.parentId || parent?.id || null,
+        ...fields,
+        code: formParent ? `${formParent.code}${childCodeSuffix || ''}` : enteredCode,
+        parentId: editing?.parentId || parent?.id || undefined,
         dimensionRequirements,
-        ...(editing ? { expectedVersion: editing.version } : {}),
       }
-      return apiFetch<Account>(
-        editing ? `/ledgers/${ledgerId}/accounts/${editing.id}` : `/ledgers/${ledgerId}/accounts`,
-        session,
-        { method: editing ? 'PATCH' : 'POST', body: jsonBody(body) },
-      )
+      return editing
+        ? apiData(openApiClient.PATCH('/v1/ledgers/{ledgerId}/accounts/{accountId}', {
+            params: { path: { ledgerId, accountId: editing.id } }, headers: apiHeaders(session),
+            body: { ...body, expectedVersion: editing.version },
+          }))
+        : apiData(openApiClient.POST('/v1/ledgers/{ledgerId}/accounts', {
+            params: { path: { ledgerId } }, headers: apiHeaders(session),
+            body: { ...body, standardAccountKey: parent ? undefined : standardAccountKey },
+          }))
     },
     onSuccess: () => {
       message.success(editing ? '科目已更新' : '科目已创建')
@@ -125,20 +192,18 @@ export function AccountsTab({ ledgerId, session, accounts, dimensionTypes, perio
 
   const patchStatus = useMutation({
     mutationFn: ({ account, next }: { account: Account; next: 'ACTIVE' | 'INACTIVE' }) =>
-      apiFetch<Account>(`/ledgers/${ledgerId}/accounts/${account.id}`, session, {
-        method: 'PATCH',
-        body: jsonBody({ expectedVersion: account.version, status: next }),
-      }),
+      apiData(openApiClient.PATCH('/v1/ledgers/{ledgerId}/accounts/{accountId}', {
+        params: { path: { ledgerId, accountId: account.id } }, headers: apiHeaders(session),
+        body: { expectedVersion: account.version, status: next },
+      })),
     onSuccess: () => onChanged(),
     onError: (error) => message.error(errorText(error)),
   })
 
   const remove = useMutation({
-    mutationFn: (account: Account) => apiFetch<void>(
-      `/ledgers/${ledgerId}/accounts/${account.id}?expectedVersion=${account.version}`,
-      session,
-      { method: 'DELETE' },
-    ),
+    mutationFn: (account: Account) => apiData(openApiClient.DELETE('/v1/ledgers/{ledgerId}/accounts/{accountId}', {
+      params: { path: { ledgerId, accountId: account.id }, query: { expectedVersion: account.version } }, headers: apiHeaders(session),
+    })),
     onSuccess: () => { message.success('科目已删除'); onChanged() },
     onError: (error) => message.error(errorText(error)),
   })
@@ -147,9 +212,10 @@ export function AccountsTab({ ledgerId, session, accounts, dimensionTypes, perio
     mutationFn: (file: File) => {
       const body = new FormData()
       body.append('file', file)
-      return apiFetch<AccountImportPreview>(
-        `/ledgers/${ledgerId}/account-imports?format=${format}`, session, { method: 'POST', body },
-      )
+      return apiData(openApiClient.POST('/v1/ledgers/{ledgerId}/account-imports', {
+        params: { path: { ledgerId }, query: { format } }, headers: apiHeaders(session),
+        body: { file: file as unknown as string }, bodySerializer: () => body,
+      }))
     },
     onSuccess: setPreview,
     onError: (error) => message.error(errorText(error)),
@@ -160,18 +226,18 @@ export function AccountsTab({ ledgerId, session, accounts, dimensionTypes, perio
       rowNo: number
       action: 'CREATE' | 'UPDATE' | 'MAP' | 'SKIP'
       targetAccountId: string | null
-    }) => apiFetch<AccountImportPreview>(
-      `/ledgers/${ledgerId}/account-imports/${preview?.id}/rows/${rowNo}`, session,
-      { method: 'PUT', body: jsonBody({ action, targetAccountId }) },
-    ),
+    }) => apiData(openApiClient.PUT('/v1/ledgers/{ledgerId}/account-imports/{importId}/rows/{rowNo}', {
+      params: { path: { ledgerId, importId: preview!.id, rowNo } }, headers: apiHeaders(session),
+      body: { action, targetAccountId, accountCode: null },
+    })),
     onSuccess: setPreview,
     onError: (error) => message.error(errorText(error)),
   })
 
   const commit = useMutation({
-    mutationFn: () => apiFetch<AccountImportPreview>(
-      `/ledgers/${ledgerId}/account-imports/${preview?.id}:commit`, session, { method: 'POST' },
-    ),
+    mutationFn: () => apiData(openApiClient.POST('/v1/ledgers/{ledgerId}/account-imports/{importId}:commit', {
+      params: { path: { ledgerId, importId: preview!.id } }, headers: apiHeaders(session),
+    })),
     onSuccess: (result) => {
       setPreview(result)
       message.success('科目已原子提交')
@@ -194,13 +260,10 @@ export function AccountsTab({ ledgerId, session, accounts, dimensionTypes, perio
 
   const download = async (kind: 'account-import-template' | 'account-export') => {
     try {
-      const periodFilter = kind === 'account-export' && createdInPeriodId
-        ? `&createdInPeriodId=${encodeURIComponent(createdInPeriodId)}`
-        : ''
-      const blob = await apiFetch<Blob>(
-        `/ledgers/${ledgerId}/${kind}?format=${format}${periodFilter}`,
-        session,
-      )
+      const options = { params: { path: { ledgerId }, query: { format, createdInPeriodId: createdInPeriodId || undefined } }, headers: apiHeaders(session), parseAs: 'blob' as const }
+      const blob = await apiData(kind === 'account-export'
+        ? openApiClient.GET('/v1/ledgers/{ledgerId}/account-export', options)
+        : openApiClient.GET('/v1/ledgers/{ledgerId}/account-import-template', options)) as unknown as Blob
       const url = URL.createObjectURL(blob)
       const anchor = document.createElement('a')
       anchor.href = url
@@ -293,10 +356,36 @@ export function AccountsTab({ ledgerId, session, accounts, dimensionTypes, perio
       confirmLoading={save.isPending} destroyOnHidden>
       <Form form={form} layout="vertical" onFinish={(value) => save.mutate(value)}>
         {editing?.coreLocked && <Alert type="info" showIcon message="已有已记账凭证或已确认期初余额，仅名称和状态可修改。" />}
-        <Form.Item name="code" label="科目编码" rules={[{ required: true }, { max: 32 }]}>
+        {parent && nextChildCodeFailed && <Alert type="warning" showIcon
+          message="未能生成推荐编码，请手动填写子级编码段"
+          description={errorText(nextChildCodeQuery.error)} />}
+        {formParent ? <Form.Item label="科目编码"
+          extra={`父科目编码 ${formParent.code} 已固定，只能修改子级编码段`}>
+          <Space.Compact block>
+            <Input aria-label="父科目编码" value={formParent.code} readOnly tabIndex={-1}
+              style={{ flex: '0 0 auto', width: `${formParent.code.length + 3}ch` }} />
+            <Form.Item name="childCodeSuffix" noStyle rules={[
+              { required: true, message: '请输入子级编码段' },
+              { pattern: /^\d+$/, message: '子级编码段只能包含数字' },
+              ...(childCodeWidth ? [{ len: childCodeWidth, message: `子级编码段必须为 ${childCodeWidth} 位` }] : []),
+            ]}>
+              <Input aria-label="科目编码"
+                disabled={Boolean(editing?.coreLocked || editing?.isTemplate || (parent && nextChildCodeQuery.isFetching))}
+                maxLength={childCodeWidth || 32 - formParent.code.length}
+                inputMode="numeric"
+                placeholder={parent && nextChildCodeQuery.isFetching ? '正在生成推荐编码…' : undefined} />
+            </Form.Item>
+          </Space.Compact>
+        </Form.Item> : <Form.Item name="code" label="科目编码" rules={[{ required: true }, { max: 32 }]}>
           <Input disabled={Boolean(editing?.coreLocked || editing?.isTemplate)} />
-        </Form.Item>
+        </Form.Item>}
         <Form.Item name="name" label="科目名称" rules={[{ required: true }, { max: 200 }]}><Input /></Form.Item>
+        {!editing && !parent && <Form.Item name="standardAccountKey" label="法定报表归类"
+          extra="稳定归类不会随科目名称或编码修改"
+          rules={[{ required: true, message: '请选择法定报表归类' }]}>
+          <Select showSearch optionFilterProp="label" options={standardKeyOptions}
+            placeholder="选择一个已安装的准则科目归类" />
+        </Form.Item>}
         <Space style={{ width: '100%' }} align="start">
           <Form.Item name="category" label="类别" rules={[{ required: true }]}>
             <Select disabled={Boolean(parent || editing?.parentId || editing?.coreLocked || editing?.isTemplate)}
@@ -346,9 +435,9 @@ export function AccountsTab({ ledgerId, session, accounts, dimensionTypes, perio
         { title: '名称', render: (_, row) => row.cleanedData.name },
         { title: '置信度', dataIndex: 'confidence' },
         { title: '问题', render: (_, row) => row.issues.map((issue) => <Tag color="red" key={issue}>{issue}</Tag>) },
-        { title: '处理', render: (_, row) => <Select value={row.confirmed ? row.action || undefined : undefined}
+        { title: '处理', render: (_, row) => <Select value={row.confirmed ? row.action as AccountImportAction | null : undefined}
           placeholder={`建议：${row.action}`} style={{ width: 130 }}
-          onChange={(action) => decide.mutate({
+          onChange={(action: AccountImportAction) => decide.mutate({
             rowNo: row.rowNo,
             action,
             targetAccountId: ['MAP', 'UPDATE'].includes(action) ? row.targetAccountId : null,

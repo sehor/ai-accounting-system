@@ -1,9 +1,10 @@
 package com.example.accounting.fixedasset.internal.application;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.example.accounting.fixedasset.FixedAssetRequests;
 import com.example.accounting.fixedasset.FixedAssetResponses;
+import com.example.accounting.fixedasset.FixedAssetDepreciationCancellationCommand;
+import com.example.accounting.shared.audit.AuditSnapshotSerializer;
+import com.example.accounting.fixedasset.FixedAssetDisposalReversalCommand;
 import com.example.accounting.fixedasset.FixedAssetService;
 import com.example.accounting.fixedasset.internal.port.FixedAssetRepository;
 import com.example.accounting.fixedasset.internal.port.FixedAssetRepository.AssetRecord;
@@ -17,6 +18,7 @@ import com.example.accounting.ledger.LedgerService;
 import com.example.accounting.shared.web.ApiProblemException;
 import com.example.accounting.voucher.VoucherRequests;
 import com.example.accounting.voucher.VoucherResponses;
+import com.example.accounting.voucher.GeneratedVoucherCommandService;
 import com.example.accounting.voucher.VoucherService;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -46,7 +48,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
-public class DefaultFixedAssetService implements FixedAssetService {
+public class DefaultFixedAssetService implements FixedAssetService, FixedAssetDisposalReversalCommand,
+        FixedAssetDepreciationCancellationCommand {
 
     private static final Set<LedgerRole> WRITE_ROLES = Set.of(LedgerRole.OWNER, LedgerRole.EDITOR);
     private static final Set<LedgerRole> READ_ROLES = Set.of(LedgerRole.OWNER, LedgerRole.EDITOR,
@@ -56,14 +59,19 @@ public class DefaultFixedAssetService implements FixedAssetService {
     private final LedgerAccessService ledgerAccess;
     private final LedgerService ledgers;
     private final VoucherService vouchers;
-    private final ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
+    private final GeneratedVoucherCommandService generatedVouchers;
+    private final AuditSnapshotSerializer auditSnapshots;
 
     public DefaultFixedAssetService(FixedAssetRepository assets, LedgerAccessService ledgerAccess,
-                                    LedgerService ledgers, VoucherService vouchers) {
+                                    LedgerService ledgers, VoucherService vouchers,
+                                    GeneratedVoucherCommandService generatedVouchers,
+                                    AuditSnapshotSerializer auditSnapshots) {
         this.assets = assets;
         this.ledgerAccess = ledgerAccess;
         this.ledgers = ledgers;
         this.vouchers = vouchers;
+        this.generatedVouchers = generatedVouchers;
+        this.auditSnapshots = auditSnapshots;
     }
 
     @Override
@@ -216,9 +224,12 @@ public class DefaultFixedAssetService implements FixedAssetService {
                 || request.accumulatedDepreciationAccountId() != null || request.depreciationExpenseAccountId() != null
                 || request.impairmentAccountId() != null || request.clearingAccountId() != null
                 || request.disposalGainAccountId() != null || request.disposalLossAccountId() != null;
-        if (accountingChange && (request.effectivePeriodId() == null || request.reason() == null || request.reason().isBlank())) {
+        if (accountingChange && (request.changePeriodId() == null || request.reason() == null || request.reason().isBlank())) {
             throw problem(422, "FIXED_ASSET_CHANGE_REASON_REQUIRED", "Change reason is required",
-                    "Accounting changes need an effective period and a reason");
+                    "Accounting changes need the current open period and a reason");
+        }
+        if (accountingChange) {
+            validateChangePeriod(actorId, ledgerId, request.changePeriodId());
         }
         if (request.originalCost() != null || request.serviceDate() != null) {
             if (assets.hasAssetUsage(ledgerId, assetId)) {
@@ -245,7 +256,7 @@ public class DefaultFixedAssetService implements FixedAssetService {
                 request.clearingAccountId() == null ? current.clearingAccountId() : request.clearingAccountId(),
                 request.disposalGainAccountId() == null ? current.disposalGainAccountId() : request.disposalGainAccountId(),
                 request.disposalLossAccountId() == null ? current.disposalLossAccountId() : request.disposalLossAccountId(),
-                current.disposalDate(), request.note() == null ? current.note() : request.note(), current.version());
+                current.disposalDate(), request.note() == null ? current.note() : request.note(), current.version() + 1);
         validateRate(next.residualRate());
         validateAmounts(next.originalCost(), next.residualRate(), next.openingAccumulatedDepreciation(), next.impairmentAmount(),
                 next.usefulLifeMonths(), next.openingDepreciatedMonths());
@@ -254,12 +265,18 @@ public class DefaultFixedAssetService implements FixedAssetService {
                 next.disposalGainAccountId(), next.disposalLossAccountId());
         validateAcquisitionVoucher(actorId, ledgerId, next.acquisitionVoucherId());
         validateDepartment(actorId, ledgerId, next.departmentValueId());
+        String beforeData = null;
+        String afterData = null;
+        if (accountingChange) {
+            beforeData = fixedAssetAuditSnapshot(current);
+            afterData = fixedAssetAuditSnapshot(next);
+        }
         if (!assets.updateAsset(ledgerId, assetId, next, request.expectedVersion(), actorId)) {
             throw problem(409, "RESOURCE_VERSION_CONFLICT", "Resource version conflict", "The asset was changed by another request");
         }
         if (accountingChange) {
-            assets.insertChange(ledgerId, assetId, request.effectivePeriodId(), request.reason().trim(), actorId,
-                    json(current), json(next));
+            assets.insertChange(ledgerId, assetId, request.changePeriodId(), request.reason().trim(), actorId,
+                    beforeData, afterData);
         }
         return asset(actorId, ledgerId, assetRow(ledgerId, assetId), currentPeriod(actorId, ledgerId).id());
     }
@@ -300,7 +317,7 @@ public class DefaultFixedAssetService implements FixedAssetService {
     public FixedAssetResponses.DepreciationPreview previewDepreciation(UUID actorId, UUID ledgerId, UUID periodId) {
         requireRole(actorId, ledgerId, READ_ROLES);
         LedgerResponses.Period period = period(actorId, ledgerId, periodId);
-        List<AssetRecord> rows = assets.activeAssets(ledgerId);
+        List<AssetRecord> rows = assets.depreciationCandidates(ledgerId, periodId);
         List<LineRecord> lines = assets.activeLines(ledgerId, periodId);
         Map<UUID, LineRecord> byAsset = lines.stream().collect(Collectors.toMap(LineRecord::assetId, line -> line, (a, b) -> b));
         DepreciationControls controls = depreciationControls(actorId, ledgerId, rows);
@@ -322,7 +339,14 @@ public class DefaultFixedAssetService implements FixedAssetService {
             }
         }
         boolean stale = assets.currentRun(ledgerId, periodId, "MONTH_END")
-                .map(run -> !run.inputFingerprint().equals(fingerprint(rows, period))).orElse(false);
+                .map(run -> {
+                    Set<UUID> participatingIds = lines.stream()
+                            .filter(line -> line.runId().equals(run.id()))
+                            .map(LineRecord::assetId).collect(Collectors.toSet());
+                    List<AssetRecord> participatingRows = rows.stream()
+                            .filter(row -> participatingIds.contains(row.id())).toList();
+                    return !run.inputFingerprint().equals(fingerprint(participatingRows, period));
+                }).orElse(false);
         if (stale) blockers.add("本期折旧批次已失效，请重新生成");
         int pending = eligible - completed;
         return new FixedAssetResponses.DepreciationPreview(periodId, period.periodCode(), total, eligible, completed, pending,
@@ -345,6 +369,7 @@ public class DefaultFixedAssetService implements FixedAssetService {
         if (request.reason() == null || request.reason().isBlank()) {
             throw problem(422, "FIXED_ASSET_REGENERATION_REASON_REQUIRED", "Regeneration reason is required", "Enter a reason before regenerating");
         }
+        assets.lockLedger(ledgerId);
         RunRecord current = assets.currentRun(ledgerId, request.periodId(), "MONTH_END").orElseThrow(() ->
                 problem(409, "FIXED_ASSET_RUN_NOT_FOUND", "No depreciation run to regenerate", "Generate the period depreciation first"));
         VoucherResponses.Voucher currentVoucher = vouchers.find(actorId, ledgerId, current.voucherId());
@@ -381,8 +406,8 @@ public class DefaultFixedAssetService implements FixedAssetService {
         }
         UUID depreciationVoucherId = null;
         if (monthly(row, period).signum() > 0 && !assets.hasActiveLine(ledgerId, assetId, period.id())) {
-            FixedAssetResponses.DepreciationRun run = generate(actorId, ledgerId, period.id(), "处置向导自动补提折旧",
-                    null, 0, null);
+            FixedAssetResponses.DepreciationRun run = generateDisposalDepreciation(
+                    actorId, ledgerId, row, period, request.disposalDate());
             depreciationVoucherId = run.voucherId();
         }
         String baseCurrency = ledgers.findLedger(actorId, ledgerId).baseCurrency();
@@ -434,6 +459,169 @@ public class DefaultFixedAssetService implements FixedAssetService {
         assets.insertDisposal(disposal, actorId);
         return new FixedAssetResponses.Disposal(disposal.id(), assetId, period.id(), depreciationVoucherId,
                 transferVoucher.id(), settlementVoucher.id(), carrying, gainOrLoss);
+    }
+
+    @Override
+    @Transactional
+    public FixedAssetResponses.Asset cancelDisposal(UUID actorId, UUID ledgerId, UUID assetId,
+                                                    long expectedVersion, String reason) {
+        requireRole(actorId, ledgerId, WRITE_ROLES);
+        if (reason == null || reason.isBlank()) {
+            throw problem(422, "FIXED_ASSET_DISPOSAL_CANCELLATION_REASON_REQUIRED",
+                    "Cancellation reason is required", "Enter a reason before cancelling the disposal");
+        }
+        assets.lockLedger(ledgerId);
+        AssetRecord row = assetRow(ledgerId, assetId);
+        FixedAssetRepository.ActiveDisposalRecord disposal = assets.activeDisposal(ledgerId, assetId)
+                .orElseThrow(this::disposalIntegrityProblem);
+        LedgerResponses.Period disposalPeriod = period(actorId, ledgerId, disposal.periodId());
+        if (!"OPEN".equals(disposalPeriod.status())) {
+            throw problem(409, "FIXED_ASSET_DISPOSAL_PERIOD_CLOSED", "Disposal period is closed",
+                    "Reopen the disposal period before cancelling the disposal");
+        }
+        if (!"DISPOSED".equals(row.status()) || !disposal.disposalDate().equals(row.disposalDate())) {
+            throw disposalIntegrityProblem();
+        }
+        if (row.version() != expectedVersion) {
+            throw problem(409, "RESOURCE_VERSION_CONFLICT", "Resource version conflict",
+                    "The asset was changed by another request");
+        }
+
+        VoucherResponses.Voucher transfer = ownedVoucher(actorId, ledgerId, disposal.transferVoucherId(),
+                disposal.periodId(), "FIXED_ASSET_DISPOSAL", assetId, disposalIntegrityProblem());
+        VoucherResponses.Voucher settlement = ownedVoucher(actorId, ledgerId, disposal.settlementVoucherId(),
+                disposal.periodId(), "FIXED_ASSET_DISPOSAL", assetId, disposalIntegrityProblem());
+        if (transfer.id().equals(settlement.id())) throw disposalIntegrityProblem();
+        RunRecord depreciationRun = null;
+        VoucherResponses.Voucher depreciation = null;
+        List<LineRecord> depreciationLines = List.of();
+        RunRecord activeDisposalRun = assets.activeRunForAsset(
+                ledgerId, assetId, disposal.periodId(), "DISPOSAL").orElse(null);
+        if (disposal.depreciationVoucherId() != null) {
+            depreciationRun = assets.findRunByVoucher(ledgerId, disposal.depreciationVoucherId())
+                    .orElseThrow(this::disposalIntegrityProblem);
+            List<LineRecord> lines = assets.linesForRun(ledgerId, depreciationRun.id());
+            depreciationLines = lines;
+            if (!"DISPOSAL".equals(depreciationRun.runType()) || !"POSTED".equals(depreciationRun.status())
+                    || !depreciationRun.periodId().equals(disposal.periodId()) || lines.size() != 1
+                    || !lines.get(0).assetId().equals(assetId)
+                    || !"ACTIVE".equals(lines.get(0).status())) {
+                throw disposalIntegrityProblem();
+            }
+            if (activeDisposalRun == null || !activeDisposalRun.id().equals(depreciationRun.id())) {
+                throw disposalIntegrityProblem();
+            }
+            depreciation = ownedVoucher(actorId, ledgerId, disposal.depreciationVoucherId(),
+                    disposal.periodId(), "FIXED_ASSET_DEPRECIATION", depreciationRun.id(),
+                    disposalIntegrityProblem());
+            if (depreciation.id().equals(transfer.id()) || depreciation.id().equals(settlement.id())
+                    || depreciationRun.totalAmount().compareTo(lines.get(0).amount()) != 0
+                    || depreciation.lines().stream()
+                    .noneMatch(line -> line.id().equals(lines.get(0).voucherLineId()))) {
+                throw disposalIntegrityProblem();
+            }
+        } else if (activeDisposalRun != null) {
+            throw disposalIntegrityProblem();
+        }
+
+        String cancellationReason = reason.trim();
+        if (!assets.cancelDisposal(ledgerId, disposal.id(), actorId, cancellationReason)) {
+            throw disposalIntegrityProblem();
+        }
+        if (depreciationRun != null) {
+            if (!assets.cancelRun(ledgerId, depreciationRun.id(), "DISPOSAL", depreciation.id(), actorId,
+                    cancellationReason)) {
+                throw disposalIntegrityProblem();
+            }
+            if (assets.cancelRunLines(ledgerId, depreciationRun.id()) != depreciationLines.size()) {
+                throw disposalIntegrityProblem();
+            }
+            generatedVouchers.deleteGenerated(actorId, ledgerId, depreciation.id(),
+                    "FIXED_ASSET_DEPRECIATION", depreciationRun.id(), depreciation.version(), cancellationReason);
+        }
+        generatedVouchers.deleteGenerated(actorId, ledgerId, transfer.id(), "FIXED_ASSET_DISPOSAL",
+                assetId, transfer.version(), cancellationReason);
+        generatedVouchers.deleteGenerated(actorId, ledgerId, settlement.id(), "FIXED_ASSET_DISPOSAL",
+                assetId, settlement.version(), cancellationReason);
+
+        AssetRecord restored = new AssetRecord(row.id(), row.ledgerId(), row.categoryId(), row.categoryCode(),
+                row.categoryName(), row.code(), row.name(), "ACTIVE", row.quantity(), row.serviceDate(),
+                row.originalCost(), row.inputTax(), row.usefulLifeMonths(), row.residualRate(),
+                row.openingAccumulatedDepreciation(), row.openingDepreciatedMonths(), row.impairmentAmount(),
+                row.departmentValueId(), row.acquisitionVoucherId(), row.assetAccountId(),
+                row.accumulatedDepreciationAccountId(), row.depreciationExpenseAccountId(), row.impairmentAccountId(),
+                row.clearingAccountId(), row.disposalGainAccountId(), row.disposalLossAccountId(), null, row.note(),
+                row.version() + 1);
+        String beforeData = fixedAssetAuditSnapshot(row);
+        String afterData = fixedAssetAuditSnapshot(restored);
+        if (!assets.updateAsset(ledgerId, assetId, restored, expectedVersion, actorId)) {
+            throw problem(409, "RESOURCE_VERSION_CONFLICT", "Resource version conflict",
+                    "The asset was changed by another request");
+        }
+        assets.insertChange(ledgerId, assetId, disposal.periodId(), cancellationReason, actorId,
+                beforeData, afterData);
+        return asset(actorId, ledgerId, assetRow(ledgerId, assetId), disposal.periodId());
+    }
+
+    @Override
+    @Transactional
+    public FixedAssetResponses.DepreciationRun cancelDepreciation(UUID actorId, UUID ledgerId, UUID runId,
+                                                                  String reason) {
+        requireRole(actorId, ledgerId, WRITE_ROLES);
+        if (reason == null || reason.isBlank()) {
+            throw problem(422, "FIXED_ASSET_DEPRECIATION_CANCELLATION_REASON_REQUIRED",
+                    "Cancellation reason is required", "Enter a reason before cancelling depreciation");
+        }
+        assets.lockLedger(ledgerId);
+        RunRecord run = assets.findRun(ledgerId, runId)
+                .orElseThrow(() -> problem(404, "FIXED_ASSET_RUN_NOT_FOUND", "Depreciation run not found",
+                        "The depreciation run is not available to this ledger"));
+        if ("DISPOSAL".equals(run.runType())) {
+            throw problem(409, "FIXED_ASSET_DISPOSAL_REVERSAL_REQUIRED", "Whole disposal reversal is required",
+                    "Cancel the complete disposal instead of deleting its depreciation source alone");
+        }
+        if (!"POSTED".equals(run.status()) || !"MONTH_END".equals(run.runType())) {
+            throw problem(409, "FIXED_ASSET_RUN_NOT_CANCELLABLE", "Depreciation run cannot be cancelled",
+                    "Only a complete posted month-end depreciation run can be cancelled");
+        }
+        LedgerResponses.Period runPeriod = period(actorId, ledgerId, run.periodId());
+        if (!"OPEN".equals(runPeriod.status())) {
+            throw problem(409, "FIXED_ASSET_PERIOD_CLOSED", "Period is closed",
+                    "Reopen the period before cancelling depreciation");
+        }
+        List<LineRecord> lines = assets.linesForRun(ledgerId, run.id());
+        if (lines.isEmpty() || lines.stream().anyMatch(line -> !"ACTIVE".equals(line.status()))) {
+            throw problem(409, "FIXED_ASSET_DEPRECIATION_DATA_INTEGRITY", "Depreciation data is incomplete",
+                    "The run, lines and generated voucher must match before cancellation");
+        }
+        ApiProblemException integrityProblem = problem(409, "FIXED_ASSET_DEPRECIATION_DATA_INTEGRITY",
+                "Depreciation data is incomplete",
+                "The run, lines and generated voucher must match before cancellation");
+        VoucherResponses.Voucher voucher = ownedVoucher(actorId, ledgerId, run.voucherId(), run.periodId(),
+                "FIXED_ASSET_DEPRECIATION", run.id(), integrityProblem);
+        BigDecimal lineTotal = lines.stream().map(LineRecord::amount).reduce(BigDecimal.ZERO, BigDecimal::add);
+        Set<UUID> voucherLineIds = voucher.lines().stream().map(VoucherResponses.Line::id).collect(Collectors.toSet());
+        if (run.totalAmount().compareTo(lineTotal) != 0
+                || lines.stream().anyMatch(line -> !voucherLineIds.contains(line.voucherLineId()))) {
+            throw integrityProblem;
+        }
+        String cancellationReason = reason.trim();
+        if (!assets.cancelRun(ledgerId, run.id(), "MONTH_END", voucher.id(), actorId, cancellationReason)) {
+            throw integrityProblem;
+        }
+        if (assets.cancelRunLines(ledgerId, run.id()) != lines.size()) {
+            throw integrityProblem;
+        }
+        generatedVouchers.deleteGenerated(actorId, ledgerId, voucher.id(), "FIXED_ASSET_DEPRECIATION",
+                run.id(), voucher.version(), cancellationReason);
+        return new FixedAssetResponses.DepreciationRun(run.id(), run.periodId(), run.runType(), "CANCELLED",
+                null, run.totalAmount(), run.inputFingerprint(), run.createdAt());
+    }
+
+    private String fixedAssetAuditSnapshot(Object value) {
+        return auditSnapshots.serialize(value, "FIXED_ASSET_AUDIT_SNAPSHOT_FAILED",
+                "Fixed-asset audit snapshot failed",
+                "The fixed-asset change could not be serialized");
     }
 
     @Override
@@ -558,6 +746,48 @@ public class DefaultFixedAssetService implements FixedAssetService {
         catch (Exception exception) { throw new IllegalArgumentException("启用日期应为 YYYY-MM-DD"); }
     }
 
+    private FixedAssetResponses.DepreciationRun generateDisposalDepreciation(
+            UUID actorId, UUID ledgerId, AssetRecord row, LedgerResponses.Period period,
+            LocalDate disposalDate) {
+        BigDecimal amount = monthly(row, period);
+        DepreciationControls controls = depreciationControls(actorId, ledgerId, List.of(row));
+        List<String> blockers = depreciationBlockers(row, controls);
+        if (!blockers.isEmpty()) {
+            throw problem(422, "FIXED_ASSET_DEPRECIATION_BLOCKED", "Depreciation is blocked",
+                    String.join("; ", blockers));
+        }
+        UUID runId = UUID.randomUUID();
+        String currency = ledgers.findLedger(actorId, ledgerId).baseCurrency();
+        UUID expenseDepartment = controls.departmentValueId(
+                row.depreciationExpenseAccountId(), row.departmentValueId());
+        UUID accumulatedDepartment = controls.departmentValueId(
+                row.accumulatedDepreciationAccountId(), row.departmentValueId());
+        List<VoucherRequests.Line> voucherLines = List.of(
+                new VoucherRequests.Line(row.depreciationExpenseAccountId(), "DEBIT", currency, amount,
+                        BigDecimal.ONE, "处置当月补提固定资产折旧", null, null, null,
+                        controls.dimensions(row.depreciationExpenseAccountId(), expenseDepartment)),
+                new VoucherRequests.Line(row.accumulatedDepreciationAccountId(), "CREDIT", currency, amount,
+                        BigDecimal.ONE, "处置当月补提固定资产折旧", null, null, null,
+                        controls.dimensions(row.accumulatedDepreciationAccountId(), accumulatedDepartment)));
+        String number = "ZJ-D-" + period.periodCode().replace("-", "") + "-" + shortId(runId);
+        VoucherResponses.Voucher voucher = createVoucher(actorId, ledgerId, period, number,
+                "处置当月补提固定资产折旧：" + row.code(), voucherLines,
+                "FIXED_ASSET_DEPRECIATION", runId);
+        RunRecord run = new RunRecord(runId, ledgerId, period.id(), "DISPOSAL", "POSTED", voucher.id(),
+                disposalFingerprint(row, period, disposalDate, amount), amount, "处置向导自动补提折旧", null,
+                java.time.OffsetDateTime.now());
+        assets.insertRun(run, actorId);
+        UUID voucherLineId = voucher.lines().stream()
+                .filter(line -> line.accountId().equals(row.depreciationExpenseAccountId())
+                        && "DEBIT".equals(line.side()))
+                .map(VoucherResponses.Line::id).findFirst().orElseThrow(this::disposalIntegrityProblem);
+        assets.insertLine(new LineRecord(UUID.randomUUID(), ledgerId, runId, row.id(), period.id(), amount,
+                row.depreciationExpenseAccountId(), row.accumulatedDepreciationAccountId(), row.departmentValueId(),
+                voucherLineId, "ACTIVE"));
+        return new FixedAssetResponses.DepreciationRun(run.id(), run.periodId(), run.runType(), run.status(),
+                run.voucherId(), run.totalAmount(), run.inputFingerprint(), run.createdAt());
+    }
+
     private FixedAssetResponses.DepreciationRun generate(UUID actorId, UUID ledgerId, UUID periodId,
                                                          String reason, UUID replacingVoucherId,
                                                          long expectedVoucherVersion, UUID expectedSourceId) {
@@ -570,7 +800,7 @@ public class DefaultFixedAssetService implements FixedAssetService {
                     .map(run -> new FixedAssetResponses.DepreciationRun(run.id(), run.periodId(), run.runType(), run.status(), run.voucherId(), run.totalAmount(), run.inputFingerprint(), run.createdAt()))
                     .orElseThrow(() -> problem(409, "FIXED_ASSET_NO_DEPRECIATION", "No depreciation is due", "There is no asset to depreciate in this period"));
         }
-        List<AssetRecord> rows = assets.activeAssets(ledgerId);
+        List<AssetRecord> rows = assets.depreciationCandidates(ledgerId, periodId);
         Map<UUID, LineRecord> existing = assets.activeLines(ledgerId, periodId).stream()
                 .collect(Collectors.toMap(LineRecord::assetId, line -> line, (a, b) -> b));
         DepreciationControls controls = depreciationControls(actorId, ledgerId, rows);
@@ -607,7 +837,9 @@ public class DefaultFixedAssetService implements FixedAssetService {
                             currentVoucher.voucherType(), currentVoucher.voucherNumber(), "计提固定资产折旧", voucherLines),
                     "FIXED_ASSET_DEPRECIATION", expectedSourceId, runId);
         }
-        String fingerprint = fingerprint(rows, period);
+        Set<UUID> participatingIds = amounts.keySet();
+        String fingerprint = fingerprint(rows.stream()
+                .filter(row -> participatingIds.contains(row.id())).toList(), period);
         RunRecord run = new RunRecord(runId, ledgerId, periodId, "MONTH_END", "POSTED", voucher.id(), fingerprint,
                 amounts.values().stream().reduce(BigDecimal.ZERO, BigDecimal::add), reason, null, java.time.OffsetDateTime.now());
         assets.insertRun(run, actorId);
@@ -683,6 +915,43 @@ public class DefaultFixedAssetService implements FixedAssetService {
     private LedgerResponses.Period period(UUID actorId, UUID ledgerId, UUID periodId) {
         return ledgers.listPeriods(actorId, ledgerId).stream().filter(p -> p.id().equals(periodId)).findFirst()
                 .orElseThrow(() -> problem(404, "PERIOD_NOT_FOUND", "Period not found", "The period is not available to this ledger"));
+    }
+
+    private void validateChangePeriod(UUID actorId, UUID ledgerId, UUID changePeriodId) {
+        LedgerResponses.Period changePeriod = period(actorId, ledgerId, changePeriodId);
+        if (!"OPEN".equals(changePeriod.status())) {
+            throw problem(409, "FIXED_ASSET_CHANGE_PERIOD_CLOSED", "Change period is closed",
+                    "Reopen the period before changing accounting parameters");
+        }
+        LedgerResponses.Period current = currentPeriod(actorId, ledgerId);
+        if (!current.id().equals(changePeriod.id())) {
+            boolean past = changePeriod.startDate().isBefore(current.startDate());
+            throw problem(422, past ? "FIXED_ASSET_CHANGE_PERIOD_PAST" : "FIXED_ASSET_CHANGE_PERIOD_FUTURE",
+                    past ? "Past change period is not allowed" : "Future change period is not allowed",
+                    "Accounting parameters can only change in the current open period");
+        }
+    }
+
+    private VoucherResponses.Voucher ownedVoucher(UUID actorId, UUID ledgerId, UUID voucherId, UUID periodId,
+                                                   String sourceType, UUID sourceId,
+                                                   ApiProblemException integrityProblem) {
+        if (voucherId == null) throw integrityProblem;
+        VoucherResponses.Voucher voucher;
+        try {
+            voucher = vouchers.find(actorId, ledgerId, voucherId);
+        } catch (RuntimeException exception) {
+            throw integrityProblem;
+        }
+        if (!periodId.equals(voucher.periodId()) || !sourceType.equals(voucher.sourceType())
+                || !sourceId.equals(voucher.sourceId())) {
+            throw integrityProblem;
+        }
+        return voucher;
+    }
+
+    private ApiProblemException disposalIntegrityProblem() {
+        return problem(409, "FIXED_ASSET_DISPOSAL_DATA_INTEGRITY", "Disposal data is incomplete",
+                "The active disposal, depreciation, transfer and settlement sources must all match");
     }
 
     private CategoryRecord categoryRow(UUID ledgerId, UUID categoryId) { return assets.findCategory(ledgerId, categoryId).orElseThrow(() -> problem(404, "FIXED_ASSET_CATEGORY_NOT_FOUND", "Category not found", "The category is not available to this ledger")); }
@@ -787,11 +1056,28 @@ public class DefaultFixedAssetService implements FixedAssetService {
     private BigDecimal scaleRate(BigDecimal value) { return value.setScale(4, RoundingMode.HALF_UP); }
     private String shortId(UUID value) { return value.toString().substring(0, 8); }
     private String fingerprint(List<AssetRecord> rows, LedgerResponses.Period period) {
-        String value = rows.stream().map(r -> r.id() + ":" + r.version() + ":" + monthly(r, period)).sorted().collect(Collectors.joining("|"));
+        String value = rows.stream().filter(r -> monthly(r, period).signum() > 0).map(r -> {
+            BigDecimal amount = monthly(r, period);
+            String disposalPeriod = "DISPOSED".equals(r.status()) && r.disposalDate() != null
+                    && !r.disposalDate().isBefore(period.startDate()) && !r.disposalDate().isAfter(period.endDate())
+                    ? period.id().toString() : "-";
+            return fingerprintEntry(r.id(), r.status(), r.disposalDate(), disposalPeriod, r.version(), amount);
+        }).sorted().collect(Collectors.joining("|"));
+        return hashFingerprint(value);
+    }
+    private String disposalFingerprint(AssetRecord row, LedgerResponses.Period period,
+                                       LocalDate disposalDate, BigDecimal amount) {
+        return hashFingerprint(fingerprintEntry(row.id(), "DISPOSED", disposalDate, period.id().toString(),
+                row.version() + 1, amount));
+    }
+    private String fingerprintEntry(UUID assetId, String status, LocalDate disposalDate,
+                                    String disposalPeriod, long version, BigDecimal amount) {
+        return assetId + ":" + status + ":" + disposalDate + ":" + disposalPeriod + ":" + version + ":" + amount;
+    }
+    private String hashFingerprint(String value) {
         try { return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8))); }
         catch (Exception exception) { throw problem(500, "FIXED_ASSET_FINGERPRINT_FAILED", "Depreciation fingerprint failed", "The depreciation input could not be fingerprinted"); }
     }
-    private String json(Object value) { try { return objectMapper.writeValueAsString(value); } catch (JsonProcessingException e) { return "{}"; } }
     private void requireRole(UUID actorId, UUID ledgerId, Set<LedgerRole> roles) { if (!roles.contains(ledgerAccess.requireMembership(actorId, ledgerId))) throw problem(403, "INSUFFICIENT_LEDGER_ROLE", "Insufficient ledger role", "The current user cannot perform this operation"); }
     private ApiProblemException problem(int status, String code, String title, String detail) { return new ApiProblemException(status, code, title, detail, false); }
     private FixedAssetResponses.Category category(CategoryRecord row) { return new FixedAssetResponses.Category(row.id(), row.ledgerId(), row.code(), row.name(), row.usefulLifeMonths(), row.residualRate(), row.assetAccountId(), row.accumulatedDepreciationAccountId(), row.depreciationExpenseAccountId(), row.impairmentAccountId(), row.clearingAccountId(), row.disposalGainAccountId(), row.disposalLossAccountId(), row.status(), row.version()); }

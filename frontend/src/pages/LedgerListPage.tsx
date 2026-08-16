@@ -4,9 +4,12 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import dayjs, { type Dayjs } from 'dayjs'
-import { apiFetch, jsonBody } from '../api/client'
-import type { AccountingStandard, Ledger } from '../api/types'
+import { apiData, apiHeaders, openApiClient } from '../api/client'
+import type { components } from '../api/generated'
 import { useAuth } from '../auth/AuthProvider'
+
+type AccountingStandard = components['schemas']['AccountingStandardPackage']
+type Ledger = components['schemas']['LedgerResponse']
 
 interface CreateLedgerForm {
   name: string
@@ -24,12 +27,12 @@ export function LedgerListPage() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const [open, setOpen] = useState(false)
-  const ledgers = useQuery({ queryKey: ['ledgers'], queryFn: () => apiFetch<Ledger[]>('/ledgers', session!), enabled: Boolean(session) })
-  const standards = useQuery({ queryKey: ['accounting-standards'], queryFn: () => apiFetch<AccountingStandard[]>('/accounting-standards', session!), enabled: Boolean(session) })
+  const ledgers = useQuery({ queryKey: ['ledgers'], queryFn: () => apiData(openApiClient.GET('/v1/ledgers', { headers: apiHeaders(session!) })), enabled: Boolean(session) })
+  const standards = useQuery({ queryKey: ['accounting-standards'], queryFn: () => apiData(openApiClient.GET('/v1/accounting-standards', { headers: apiHeaders(session!) })), enabled: Boolean(session) })
   const create = useMutation({
     mutationFn: (value: CreateLedgerForm) => {
       const [accountingStandardCode, accountingStandardVersion] = value.standard.split('/')
-      return apiFetch<Ledger>('/ledgers', session!, { method: 'POST', body: jsonBody({
+      return apiData(openApiClient.POST('/v1/ledgers', { headers: apiHeaders(session!), body: {
         name: value.name,
         description: value.description || '',
         accountingStandardCode,
@@ -42,7 +45,7 @@ export function LedgerListPage() {
           level3Width: value.level3Width,
           level4Width: value.level4Width,
         },
-      }) })
+      } }))
     },
     onSuccess: (ledger) => { void queryClient.invalidateQueries({ queryKey: ['ledgers'] }); setOpen(false); navigate(`/ledgers/${ledger.id}/overview`) },
   })

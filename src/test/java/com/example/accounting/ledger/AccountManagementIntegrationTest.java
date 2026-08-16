@@ -30,7 +30,7 @@ class AccountManagementIntegrationTest {
                 LocalDate.of(2026, 1, 1), false)).id();
 
         List<LedgerResponses.Account> initial = ledgers.listAccounts(owner, ledgerId);
-        assertThat(initial).hasSize(17).allMatch(LedgerResponses.Account::isTemplate);
+        assertThat(initial).hasSize(18).allMatch(LedgerResponses.Account::isTemplate);
         assertThat(ledgers.listCashFlowItems(owner, ledgerId)).hasSize(3);
         assertThat(ledgers.listDimensionTypes(owner, ledgerId)).hasSize(5);
 
@@ -42,6 +42,7 @@ class AccountManagementIntegrationTest {
                         false, null, false, null, List.of()));
         assertThat(child.parentId()).isEqualTo(bank.id());
         assertThat(child.level()).isEqualTo(2);
+        assertThat(child.standardAccountKey()).isEqualTo("ASSET.BANK_DEPOSIT");
         assertThat(ledgers.findAccount(owner, ledgerId, bank.id()).isLeaf()).isFalse();
 
         assertProblem("ACCOUNT_CODE_RULE_LOCKED", () -> ledgers.updateAccountCodeRule(
@@ -54,6 +55,7 @@ class AccountManagementIntegrationTest {
         LedgerResponses.Account renamed = ledgers.updateAccount(owner, ledgerId, child.id(),
                 new LedgerRequests.AccountPatch(child.version(), null, "人民币基本户", null,
                         null, null, null, null, null, null, null, null));
+        assertThat(renamed.standardAccountKey()).isEqualTo("ASSET.BANK_DEPOSIT");
         assertThat(renamed.name()).isEqualTo("人民币基本户");
         assertProblem("ACCOUNT_VERSION_CONFLICT", () -> ledgers.updateAccount(
                 owner, ledgerId, child.id(), new LedgerRequests.AccountPatch(
@@ -67,6 +69,41 @@ class AccountManagementIntegrationTest {
                 select count(*) from audit_revision
                 where ledger_id = ? and aggregate_type = 'ACCOUNT'
                 """, Integer.class, ledgerId)).isGreaterThanOrEqualTo(3);
+    }
+
+    @Test
+    void generatesNextChildAccountCodeAndRetrievesCodeRule() {
+        UUID owner = UUID.randomUUID();
+        UUID ledgerId = ledgers.create(user(owner), new LedgerRequests.Create(
+                "account-code-test", "SME", "2011-17", "CNY",
+                LocalDate.of(2026, 1, 1), false)).id();
+
+        AccountCodeRule rule = ledgers.getAccountCodeRule(owner, ledgerId);
+        assertThat(rule).isNotNull();
+        assertThat(rule.level2Width()).isEqualTo(2);
+        assertThat(rule.level3Width()).isEqualTo(2);
+        assertThat(rule.level4Width()).isEqualTo(2);
+
+        LedgerResponses.Account bank = ledgers.listAccounts(owner, ledgerId).stream()
+                .filter(account -> account.code().equals("1002")).findFirst().orElseThrow();
+
+        // First child should be 100201
+        String firstCode = ledgers.nextChildAccountCode(owner, ledgerId, bank.id());
+        assertThat(firstCode).isEqualTo("100201");
+
+        // Create 100201
+        LedgerResponses.Account child1 = ledgers.createAccount(owner, ledgerId,
+                new LedgerRequests.AccountCreate(
+                        firstCode, "基本户", "CURRENT_ASSET", "DEBIT", bank.id(),
+                        false, null, false, null, List.of()));
+
+        // Next child under bank should be 100202
+        String secondCode = ledgers.nextChildAccountCode(owner, ledgerId, bank.id());
+        assertThat(secondCode).isEqualTo("100202");
+
+        // Next child under child1 (level 2) should be 10020101
+        String grandchildCode = ledgers.nextChildAccountCode(owner, ledgerId, child1.id());
+        assertThat(grandchildCode).isEqualTo("10020101");
     }
 
     @Test

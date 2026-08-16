@@ -39,6 +39,11 @@ public class JdbcFixedAssetRepository implements FixedAssetRepository {
     }
 
     @Override
+    public void lockLedger(UUID ledgerId) {
+        jdbc.queryForObject("select id from ledger where id = ? for update", UUID.class, ledgerId);
+    }
+
+    @Override
     public List<CategoryRecord> listCategories(UUID ledgerId) {
         return jdbc.query(CATEGORY_COLUMNS + " where ledger_id = ? and deleted_at is null order by code",
                 (rs, row) -> mapCategory(rs), ledgerId);
@@ -180,16 +185,21 @@ public class JdbcFixedAssetRepository implements FixedAssetRepository {
     }
 
     @Override
-    public List<AssetRecord> activeAssets(UUID ledgerId) {
-        return jdbc.query(ASSET_COLUMNS + " where a.ledger_id = ? and a.status = 'ACTIVE' and a.deleted_at is null order by a.code",
-                (rs, row) -> mapAsset(rs), ledgerId);
+    public List<AssetRecord> depreciationCandidates(UUID ledgerId, UUID periodId) {
+        return jdbc.query(ASSET_COLUMNS + """
+                 join accounting_period p on p.ledger_id = a.ledger_id and p.id = ?
+                 where a.ledger_id = ? and a.deleted_at is null
+                   and (a.status = 'ACTIVE' or (a.status = 'DISPOSED'
+                        and a.disposal_date between p.start_date and p.end_date))
+                 order by a.code
+                """, (rs, row) -> mapAsset(rs), periodId, ledgerId);
     }
 
     @Override
     public void insertChange(UUID ledgerId, UUID assetId, UUID periodId, String reason, UUID actorId,
                              String beforeData, String afterData) {
         jdbc.update("""
-                insert into fixed_asset_change (id, ledger_id, asset_id, effective_period_id, reason,
+                insert into fixed_asset_change (id, ledger_id, asset_id, change_period_id, reason,
                     before_data, after_data, actor_id)
                 values (?, ?, ?, ?, ?, ?::jsonb, ?::jsonb, ?)
                 """, UUID.randomUUID(), ledgerId, assetId, periodId, reason, beforeData, afterData, actorId);
@@ -204,6 +214,36 @@ public class JdbcFixedAssetRepository implements FixedAssetRepository {
                 where ledger_id = ? and period_id = ? and run_type = ? and status = 'POSTED'
                 order by created_at desc limit 1
                 """, rs -> rs.next() ? mapRun(rs) : null, ledgerId, periodId, runType));
+    }
+
+    @Override
+    public Optional<RunRecord> findRun(UUID ledgerId, UUID runId) {
+        return Optional.ofNullable(jdbc.query("""
+                select id, ledger_id, period_id, run_type, status, voucher_id, input_fingerprint,
+                    total_amount, reason, superseded_by, created_at
+                from fixed_asset_depreciation_run where ledger_id = ? and id = ?
+                """, rs -> rs.next() ? mapRun(rs) : null, ledgerId, runId));
+    }
+
+    @Override
+    public Optional<RunRecord> findRunByVoucher(UUID ledgerId, UUID voucherId) {
+        return Optional.ofNullable(jdbc.query("""
+                select id, ledger_id, period_id, run_type, status, voucher_id, input_fingerprint,
+                    total_amount, reason, superseded_by, created_at
+                from fixed_asset_depreciation_run where ledger_id = ? and voucher_id = ?
+                """, rs -> rs.next() ? mapRun(rs) : null, ledgerId, voucherId));
+    }
+
+    @Override
+    public Optional<RunRecord> activeRunForAsset(UUID ledgerId, UUID assetId, UUID periodId, String runType) {
+        return Optional.ofNullable(jdbc.query("""
+                select r.id, r.ledger_id, r.period_id, r.run_type, r.status, r.voucher_id,
+                    r.input_fingerprint, r.total_amount, r.reason, r.superseded_by, r.created_at
+                from fixed_asset_depreciation_run r
+                join fixed_asset_depreciation_line l on l.ledger_id = r.ledger_id and l.run_id = r.id
+                where r.ledger_id = ? and l.asset_id = ? and r.period_id = ? and r.run_type = ?
+                    and r.status = 'POSTED' and l.status = 'ACTIVE'
+                """, rs -> rs.next() ? mapRun(rs) : null, ledgerId, assetId, periodId, runType));
     }
 
     @Override
@@ -225,6 +265,16 @@ public class JdbcFixedAssetRepository implements FixedAssetRepository {
                 where ledger_id = ? and period_id = ? and status = 'ACTIVE'
                 order by asset_id
                 """, (rs, row) -> mapLine(rs), ledgerId, periodId);
+    }
+
+    @Override
+    public List<LineRecord> linesForRun(UUID ledgerId, UUID runId) {
+        return jdbc.query("""
+                select id, ledger_id, run_id, asset_id, period_id, amount, expense_account_id,
+                    accumulated_account_id, department_value_id, voucher_line_id, status
+                from fixed_asset_depreciation_line where ledger_id = ? and run_id = ?
+                order by asset_id
+                """, (rs, row) -> mapLine(rs), ledgerId, runId);
     }
 
     @Override
@@ -280,7 +330,8 @@ public class JdbcFixedAssetRepository implements FixedAssetRepository {
 
     @Override
     public void supersedeRun(UUID ledgerId, UUID runId, UUID supersededBy) {
-        jdbc.update("update fixed_asset_depreciation_run set status = 'SUPERSEDED', superseded_by = ? "
+        jdbc.update("update fixed_asset_depreciation_run set status = 'SUPERSEDED', superseded_by = ?, "
+                + "historical_voucher_id = coalesce(historical_voucher_id, voucher_id), voucher_id = null "
                 + "where ledger_id = ? and id = ?", supersededBy, ledgerId, runId);
     }
 
@@ -291,24 +342,75 @@ public class JdbcFixedAssetRepository implements FixedAssetRepository {
     }
 
     @Override
+    public boolean cancelRun(UUID ledgerId, UUID runId, String runType, UUID voucherId, UUID actorId,
+                             String reason) {
+        return jdbc.update("""
+                update fixed_asset_depreciation_run
+                set status = 'CANCELLED', historical_voucher_id = coalesce(historical_voucher_id, voucher_id),
+                    voucher_id = null,
+                    cancelled_at = now(), cancelled_by = ?, cancellation_reason = ?
+                where ledger_id = ? and id = ? and status = 'POSTED' and run_type = ?
+                    and voucher_id = ?
+                """, actorId, reason, ledgerId, runId, runType, voucherId) == 1;
+    }
+
+    @Override
+    public int cancelRunLines(UUID ledgerId, UUID runId) {
+        return jdbc.update("""
+                update fixed_asset_depreciation_line set status = 'CANCELLED'
+                where ledger_id = ? and run_id = ? and status = 'ACTIVE'
+                """, ledgerId, runId);
+    }
+
+    @Override
     public void insertDisposal(DisposalRecord disposal, UUID actorId) {
         jdbc.update("""
                 insert into fixed_asset_disposal (id, ledger_id, asset_id, period_id, disposal_date, reason,
                     proceeds, output_tax, clearing_cost, clearing_input_tax, receipt_account_id, payment_account_id,
                     output_tax_account_id, input_tax_account_id, depreciation_voucher_id, transfer_voucher_id,
-                    settlement_voucher_id)
-                values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    settlement_voucher_id, created_by)
+                values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, disposal.id(), disposal.ledgerId(), disposal.assetId(), disposal.periodId(), disposal.disposalDate(),
                 disposal.reason(), disposal.proceeds(), disposal.outputTax(), disposal.clearingCost(),
                 disposal.clearingInputTax(), disposal.receiptAccountId(), disposal.paymentAccountId(),
                 disposal.outputTaxAccountId(), disposal.inputTaxAccountId(), disposal.depreciationVoucherId(),
-                disposal.transferVoucherId(), disposal.settlementVoucherId());
+                disposal.transferVoucherId(), disposal.settlementVoucherId(), actorId);
     }
 
     @Override
     public boolean hasDisposal(UUID ledgerId, UUID assetId) {
-        return Boolean.TRUE.equals(jdbc.queryForObject("select exists (select 1 from fixed_asset_disposal where ledger_id = ? and asset_id = ?)",
+        return Boolean.TRUE.equals(jdbc.queryForObject("select exists (select 1 from fixed_asset_disposal where ledger_id = ? and asset_id = ? and status = 'ACTIVE')",
                 Boolean.class, ledgerId, assetId));
+    }
+
+    @Override
+    public Optional<ActiveDisposalRecord> activeDisposal(UUID ledgerId, UUID assetId) {
+        return Optional.ofNullable(jdbc.query("""
+                select id, ledger_id, asset_id, period_id, disposal_date, depreciation_voucher_id,
+                    transfer_voucher_id, settlement_voucher_id
+                from fixed_asset_disposal
+                where ledger_id = ? and asset_id = ? and status = 'ACTIVE'
+                for update
+                """, rs -> rs.next() ? new ActiveDisposalRecord(
+                rs.getObject("id", UUID.class), rs.getObject("ledger_id", UUID.class),
+                rs.getObject("asset_id", UUID.class), rs.getObject("period_id", UUID.class),
+                rs.getObject("disposal_date", LocalDate.class),
+                rs.getObject("depreciation_voucher_id", UUID.class),
+                rs.getObject("transfer_voucher_id", UUID.class),
+                rs.getObject("settlement_voucher_id", UUID.class)) : null, ledgerId, assetId));
+    }
+
+    @Override
+    public boolean cancelDisposal(UUID ledgerId, UUID disposalId, UUID actorId, String reason) {
+        return jdbc.update("""
+                update fixed_asset_disposal
+                set status = 'CANCELLED', cancelled_at = now(), cancelled_by = ?, cancellation_reason = ?,
+                    cancelled_depreciation_voucher_id = depreciation_voucher_id,
+                    cancelled_transfer_voucher_id = transfer_voucher_id,
+                    cancelled_settlement_voucher_id = settlement_voucher_id,
+                    depreciation_voucher_id = null, transfer_voucher_id = null, settlement_voucher_id = null
+                where ledger_id = ? and id = ? and status = 'ACTIVE'
+                """, actorId, reason, ledgerId, disposalId) == 1;
     }
 
     private CategoryRecord mapCategory(java.sql.ResultSet rs) throws java.sql.SQLException {

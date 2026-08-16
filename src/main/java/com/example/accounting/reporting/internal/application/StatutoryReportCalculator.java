@@ -1,7 +1,7 @@
 package com.example.accounting.reporting.internal.application;
 
-import com.example.accounting.reporting.ReportResponses;
 import com.example.accounting.reporting.StatutoryReportResponses;
+import com.example.accounting.reporting.internal.port.ReportingRepository;
 import com.fasterxml.jackson.databind.JsonNode;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -25,8 +25,8 @@ final class StatutoryReportCalculator {
             String periodCode,
             String standardVersion,
             JsonNode formula,
-            List<ReportResponses.TrialBalanceLine> primarySource,
-            List<ReportResponses.TrialBalanceLine> comparativeSource) {
+            List<ReportingRepository.StatutoryAccountAmount> primarySource,
+            List<ReportingRepository.StatutoryAccountAmount> comparativeSource) {
         JsonNode statutory = formula == null ? null : formula.path("statutory");
         if (statutory == null || !"SME-2011-17".equals(statutory.path("template").asText())) {
             throw new IllegalArgumentException("The SME statutory report template is not installed");
@@ -35,8 +35,8 @@ final class StatutoryReportCalculator {
         boolean income = "income-statement".equals(reportType);
         List<GroupDefinition> groups = groupDefinitions(statutory.path("groups"));
         validateTemplate(statutory, groups, income);
-        Map<String, ReportResponses.TrialBalanceLine> primary = byCode(primarySource);
-        Map<String, ReportResponses.TrialBalanceLine> comparative = byCode(comparativeSource);
+        Map<String, ReportingRepository.StatutoryAccountAmount> primary = byKey(primarySource);
+        Map<String, ReportingRepository.StatutoryAccountAmount> comparative = byKey(comparativeSource);
         Map<String, BigDecimal[]> calculated = new LinkedHashMap<>();
         List<StatutoryReportResponses.Group> result = new ArrayList<>();
 
@@ -104,9 +104,7 @@ final class StatutoryReportCalculator {
         String kind = requiredText(definition, "kind");
         List<AccountReference> accounts = new ArrayList<>();
         for (JsonNode account : definition.path("accounts")) {
-            accounts.add(new AccountReference(
-                    requiredText(account, "code"),
-                    account.hasNonNull("name") ? account.get("name").asText() : null));
+            accounts.add(new AccountReference(requiredText(account, "key")));
         }
         List<Component> components = new ArrayList<>();
         for (JsonNode component : definition.path("components")) {
@@ -126,7 +124,7 @@ final class StatutoryReportCalculator {
 
     private BigDecimal evaluate(
             Definition definition,
-            Map<String, ReportResponses.TrialBalanceLine> source,
+            Map<String, ReportingRepository.StatutoryAccountAmount> source,
             Map<String, BigDecimal[]> calculated,
             int column) {
         return switch (definition.operation().kind()) {
@@ -143,12 +141,12 @@ final class StatutoryReportCalculator {
 
     private BigDecimal accountAmount(
             Operation operation,
-            Map<String, ReportResponses.TrialBalanceLine> source,
+            Map<String, ReportingRepository.StatutoryAccountAmount> source,
             boolean activity) {
         BigDecimal value = ZERO;
         for (AccountReference account : operation.accounts()) {
-            ReportResponses.TrialBalanceLine line = source.get(account.code());
-            if (line == null || (account.name() != null && !account.name().equals(line.name()))) {
+            ReportingRepository.StatutoryAccountAmount line = source.get(account.key());
+            if (line == null) {
                 continue;
             }
             BigDecimal debit = activity ? line.periodDebit() : line.closingDebit();
@@ -176,11 +174,25 @@ final class StatutoryReportCalculator {
         return pair == null ? ZERO : pair[index];
     }
 
-    private static Map<String, ReportResponses.TrialBalanceLine> byCode(
-            List<ReportResponses.TrialBalanceLine> lines) {
-        Map<String, ReportResponses.TrialBalanceLine> result = new LinkedHashMap<>();
-        lines.forEach(line -> result.put(line.code(), line));
+    private static Map<String, ReportingRepository.StatutoryAccountAmount> byKey(
+            List<ReportingRepository.StatutoryAccountAmount> lines) {
+        Map<String, ReportingRepository.StatutoryAccountAmount> result = new LinkedHashMap<>();
+        lines.stream().filter(line -> line.standardAccountKey() != null).forEach(line ->
+                result.merge(line.standardAccountKey(), line, StatutoryReportCalculator::add));
         return result;
+    }
+
+    private static ReportingRepository.StatutoryAccountAmount add(
+            ReportingRepository.StatutoryAccountAmount left,
+            ReportingRepository.StatutoryAccountAmount right) {
+        return new ReportingRepository.StatutoryAccountAmount(
+                left.accountId(), left.accountCode(), left.standardAccountKey(),
+                left.openingDebit().add(right.openingDebit()),
+                left.openingCredit().add(right.openingCredit()),
+                left.periodDebit().add(right.periodDebit()),
+                left.periodCredit().add(right.periodCredit()),
+                left.closingDebit().add(right.closingDebit()),
+                left.closingCredit().add(right.closingCredit()));
     }
 
     private static BigDecimal money(BigDecimal value) {
@@ -190,6 +202,6 @@ final class StatutoryReportCalculator {
     private record GroupDefinition(String key, String title, List<Definition> rows) { }
     private record Definition(String key, int lineNo, String name, int indent, String rowType, Operation operation) { }
     private record Operation(String kind, String side, List<AccountReference> accounts, List<Component> components) { }
-    private record AccountReference(String code, String name) { }
+    private record AccountReference(String key) { }
     private record Component(String key, int factor) { }
 }

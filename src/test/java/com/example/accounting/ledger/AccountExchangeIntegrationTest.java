@@ -32,6 +32,57 @@ class AccountExchangeIntegrationTest {
     private JdbcTemplate jdbc;
 
     @Test
+    void reusesExistingKeyForKingdeeUpdatesAndRejectsStandardKeyConflicts() throws Exception {
+        UUID owner = UUID.randomUUID();
+        UUID ledgerId = ledgers.create(user(owner), new LedgerRequests.Create(
+                "account-key-update", "SME", "2011-17", "CNY",
+                LocalDate.of(2026, 1, 1), false)).id();
+
+        byte[] kingdee;
+        try (var source = new HSSFWorkbook(); var output = new ByteArrayOutputStream()) {
+            var sheet = source.createSheet("科目列表");
+            var header = sheet.createRow(0);
+            List.of("编码", "名称", "类别", "余额方向").forEach(value ->
+                    header.createCell(header.getLastCellNum() < 0 ? 0 : header.getLastCellNum()).setCellValue(value));
+            var row = sheet.createRow(1);
+            row.createCell(0).setCellValue("5601");
+            row.createCell(1).setCellValue("历史管理费用名称");
+            row.createCell(2).setCellValue("期间费用");
+            row.createCell(3).setCellValue("借");
+            source.write(output);
+            kingdee = output.toByteArray();
+        }
+        AccountExchangeService.Preview kingdeePreview = exchange.preview(owner, ledgerId,
+                AccountExchangeService.Format.KINGDEE, "existing-5601.xls", kingdee.length,
+                new ByteArrayInputStream(kingdee));
+        assertThat(kingdeePreview.rows()).singleElement().satisfies(row -> {
+            assertThat(row.action()).isEqualTo("UPDATE");
+            assertThat(row.issues()).isEmpty();
+            assertThat(row.cleanedData()).containsEntry("standardAccountKey", "EXPENSE.SELLING");
+        });
+
+        byte[] exported = exchange.export(owner, ledgerId, AccountExchangeService.Format.STANDARD);
+        byte[] conflicting;
+        try (var workbook = WorkbookFactory.create(new ByteArrayInputStream(exported));
+             var output = new ByteArrayOutputStream()) {
+            var sheet = workbook.getSheet("Accounts");
+            for (int index = 1; index <= sheet.getLastRowNum(); index++) {
+                if ("1001".equals(sheet.getRow(index).getCell(0).getStringCellValue())) {
+                    sheet.getRow(index).getCell(10).setCellValue("ASSET.BANK_DEPOSIT");
+                }
+            }
+            workbook.write(output);
+            conflicting = output.toByteArray();
+        }
+        AccountExchangeService.Preview standardPreview = exchange.preview(owner, ledgerId,
+                AccountExchangeService.Format.STANDARD, "conflicting-key.xlsx", conflicting.length,
+                new ByteArrayInputStream(conflicting));
+        assertThat(standardPreview.rows()).filteredOn(row -> row.accountCode().equals("1001"))
+                .singleElement().satisfies(row ->
+                        assertThat(row.issues()).contains("ERROR:STANDARD_ACCOUNT_KEY_CONFLICT"));
+    }
+
+    @Test
     void previewsAndCommitsANativeKingdeeAccountList() throws Exception {
         UUID owner = UUID.randomUUID();
         UUID ledgerId = ledgers.create(user(owner), new LedgerRequests.Create(
@@ -133,6 +184,8 @@ class AccountExchangeIntegrationTest {
         try (var workbook = WorkbookFactory.create(new ByteArrayInputStream(exported))) {
             assertThat(workbook.getSheet("Metadata")).isNotNull();
             assertThat(workbook.getSheet("Accounts")).isNotNull();
+            assertThat(workbook.getSheet("Accounts").getRow(0).getCell(10).getStringCellValue())
+                    .isEqualTo("StandardAccountKey");
             assertThat(workbook.getSheet("DimensionTypes")).isNotNull();
             assertThat(workbook.getSheet("AccountDimensions")).isNotNull();
         }
@@ -150,6 +203,8 @@ class AccountExchangeIntegrationTest {
         AccountExchangeService.Preview committed = exchange.commit(owner, ledgerId, preview.id());
         assertThat(committed.status()).isEqualTo("COMMITTED");
         assertThat(ledgers.listAccounts(owner, ledgerId)).hasSize(18);
+        assertThat(ledgers.listAccounts(owner, ledgerId))
+                .allMatch(account -> account.standardAccountKey() != null);
     }
 
     @Test
@@ -168,7 +223,8 @@ class AccountExchangeIntegrationTest {
         jdbc.update("update ledger_account set created_at = ? where ledger_id = ?",
                 startInclusive.minusDays(1), ledgerId);
         LedgerResponses.Account parent = ledgers.createAccount(owner, ledgerId,
-                new LedgerRequests.AccountCreate("1998", "期间外父科目", "CURRENT_ASSET", "DEBIT"));
+                new LedgerRequests.AccountCreate("1998", "期间外父科目",
+                        "ASSET.CASH", "CURRENT_ASSET", "DEBIT"));
         jdbc.update("update ledger_account set created_at = ? where ledger_id = ? and id = ?",
                 startInclusive.minusDays(1), ledgerId, parent.id());
         ledgers.createAccount(owner, ledgerId,
@@ -176,7 +232,8 @@ class AccountExchangeIntegrationTest {
                         "199801", "期间内子科目", "CURRENT_ASSET", "DEBIT", parent.id(),
                         false, null, false, null, List.of()));
         ledgers.createAccount(owner, ledgerId,
-                new LedgerRequests.AccountCreate("1997", "期间外科目", "CURRENT_ASSET", "DEBIT"));
+                new LedgerRequests.AccountCreate("1997", "期间外科目",
+                        "ASSET.CASH", "CURRENT_ASSET", "DEBIT"));
         jdbc.update("update ledger_account set created_at = ? where ledger_id = ? and code = ?",
                 startInclusive, ledgerId, "199801");
         jdbc.update("update ledger_account set created_at = ? where ledger_id = ? and code = ?",

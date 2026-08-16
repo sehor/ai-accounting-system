@@ -26,10 +26,13 @@ public class FixedAssetController {
 
     private final CurrentUserResolver currentUserResolver;
     private final FixedAssetService fixedAssets;
+    private final FixedAssetDisposalReversalCommand disposalReversals;
 
-    public FixedAssetController(CurrentUserResolver currentUserResolver, FixedAssetService fixedAssets) {
+    public FixedAssetController(CurrentUserResolver currentUserResolver, FixedAssetService fixedAssets,
+                                FixedAssetDisposalReversalCommand disposalReversals) {
         this.currentUserResolver = currentUserResolver;
         this.fixedAssets = fixedAssets;
+        this.disposalReversals = disposalReversals;
     }
 
     @GetMapping("/fixed-asset-categories")
@@ -144,6 +147,14 @@ public class FixedAssetController {
                                                 @PathVariable UUID assetId,
                                                 @Valid @RequestBody FixedAssetRequests.Disposal body) {
         return fixedAssets.disposeAsset(user(request), ledgerId, assetId, body);
+    }
+
+    @PostMapping("/fixed-assets/{assetId}:cancel-disposal")
+    public FixedAssetResponses.Asset cancelDisposal(HttpServletRequest request, @PathVariable UUID ledgerId,
+                                                    @PathVariable UUID assetId,
+                                                    @Valid @RequestBody FixedAssetRequests.DisposalCancellation body) {
+        return disposalReversals.cancelDisposal(
+                user(request), ledgerId, assetId, body.expectedVersion(), body.reason());
     }
 
     private UUID user(HttpServletRequest request) {

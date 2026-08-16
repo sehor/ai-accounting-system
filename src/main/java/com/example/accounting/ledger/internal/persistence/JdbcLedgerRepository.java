@@ -7,7 +7,10 @@ import com.example.accounting.ledger.internal.port.LedgerRepository;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -42,21 +45,23 @@ public class JdbcLedgerRepository implements LedgerRepository {
     }
 
     @Override
-    public void createAccount(UUID ledgerId, String code, String name, String category, String normalBalance) {
+    public void createAccount(UUID ledgerId, String code, String name, String category, String normalBalance,
+                              String standardAccountKey) {
         jdbc.update("""
-                insert into ledger_account (id, ledger_id, code, name, category, normal_balance)
-                values (?, ?, ?, ?, ?, ?)
-                """, UUID.randomUUID(), ledgerId, code, name, category, normalBalance);
+                insert into ledger_account (id, ledger_id, code, name, category, normal_balance, standard_account_key)
+                values (?, ?, ?, ?, ?, ?, ?)
+                """, UUID.randomUUID(), ledgerId, code, name, category, normalBalance, standardAccountKey);
     }
 
     @Override
     public boolean createAccountIfAbsent(
-            UUID ledgerId, String code, String name, String category, String normalBalance) {
+            UUID ledgerId, String code, String name, String category, String normalBalance,
+            String standardAccountKey) {
         return jdbc.update("""
-                insert into ledger_account (id, ledger_id, code, name, category, normal_balance)
-                values (?, ?, ?, ?, ?, ?)
+                insert into ledger_account (id, ledger_id, code, name, category, normal_balance, standard_account_key)
+                values (?, ?, ?, ?, ?, ?, ?)
                 on conflict (ledger_id, code) do nothing
-                """, UUID.randomUUID(), ledgerId, code, name, category, normalBalance) == 1;
+                """, UUID.randomUUID(), ledgerId, code, name, category, normalBalance, standardAccountKey) == 1;
     }
 
     @Override
@@ -163,7 +168,7 @@ public class JdbcLedgerRepository implements LedgerRepository {
     @Override
     public List<LedgerResponses.Account> listAccounts(UUID ledgerId) {
         return jdbc.query("""
-                select id, ledger_id, code, name, category, normal_balance, status, created_at
+                select id, ledger_id, code, name, standard_account_key, category, normal_balance, status, created_at
                 from ledger_account where ledger_id = ? order by code
                 """, (rs, rowNum) -> mapAccount(rs), ledgerId);
     }
@@ -171,7 +176,7 @@ public class JdbcLedgerRepository implements LedgerRepository {
     @Override
     public Optional<LedgerResponses.Account> findAccount(UUID ledgerId, String code) {
         return Optional.ofNullable(jdbc.query("""
-                select id, ledger_id, code, name, category, normal_balance, status, created_at
+                select id, ledger_id, code, name, standard_account_key, category, normal_balance, status, created_at
                 from ledger_account where ledger_id = ? and code = ?
                 """, rs -> rs.next() ? mapAccount(rs) : null, ledgerId, code));
     }
@@ -213,7 +218,7 @@ public class JdbcLedgerRepository implements LedgerRepository {
     @Override
     public List<LedgerResponses.DimensionType> listDimensionTypes(UUID ledgerId) {
         return jdbc.query("""
-                select id, ledger_id, code, name, required, status
+                select id, ledger_id, code, name, required, status, version
                 from dimension_type where ledger_id = ? order by code
                 """, (rs, rowNum) -> mapDimensionType(rs), ledgerId);
     }
@@ -227,9 +232,19 @@ public class JdbcLedgerRepository implements LedgerRepository {
     }
 
     @Override
+    public boolean updateDimensionType(UUID ledgerId, UUID typeId, String name, String status,
+                                       boolean required, long expectedVersion) {
+        return jdbc.update("""
+                update dimension_type set name = ?, status = ?, required = ?,
+                    version = version + 1, updated_at = now()
+                where ledger_id = ? and id = ? and version = ?
+                """, name, status, required, ledgerId, typeId, expectedVersion) == 1;
+    }
+
+    @Override
     public Optional<LedgerResponses.DimensionType> findDimensionType(UUID ledgerId, UUID typeId) {
         return Optional.ofNullable(jdbc.query("""
-                select id, ledger_id, code, name, required, status
+                select id, ledger_id, code, name, required, status, version
                 from dimension_type where ledger_id = ? and id = ?
                 """, rs -> rs.next() ? mapDimensionType(rs) : null, ledgerId, typeId));
     }
@@ -245,7 +260,7 @@ public class JdbcLedgerRepository implements LedgerRepository {
     @Override
     public List<LedgerResponses.DimensionValue> listDimensionValues(UUID ledgerId, UUID typeId) {
         return jdbc.query("""
-                select id, ledger_id, dimension_type_id, code, name, status
+                select id, ledger_id, dimension_type_id, code, name, status, version
                 from dimension_value where ledger_id = ? and dimension_type_id = ? order by code
                 """, (rs, rowNum) -> mapDimensionValue(rs), ledgerId, typeId);
     }
@@ -259,20 +274,91 @@ public class JdbcLedgerRepository implements LedgerRepository {
     }
 
     @Override
+    public boolean updateDimensionValue(UUID ledgerId, UUID typeId, UUID valueId, String name, String status,
+                                        long expectedVersion) {
+        return jdbc.update("""
+                update dimension_value set name = ?, status = ?, version = version + 1, updated_at = now()
+                where ledger_id = ? and dimension_type_id = ? and id = ? and version = ?
+                """, name, status, ledgerId, typeId, valueId, expectedVersion) == 1;
+    }
+
+    @Override
     public Optional<LedgerResponses.DimensionValue> findDimensionValue(UUID ledgerId, UUID valueId) {
         return Optional.ofNullable(jdbc.query("""
-                select id, ledger_id, dimension_type_id, code, name, status
+                select id, ledger_id, dimension_type_id, code, name, status, version
                 from dimension_value where ledger_id = ? and id = ?
                 """, rs -> rs.next() ? mapDimensionValue(rs) : null, ledgerId, valueId));
     }
 
     @Override
+    public void recordDimensionRevision(UUID ledgerId, String aggregateType, UUID aggregateId,
+                                        String action, UUID actorId, String beforeJson, String afterJson) {
+        jdbc.update("""
+                insert into audit_revision (
+                    id, ledger_id, aggregate_type, aggregate_id, revision, action,
+                    actor_id, before_data, after_data)
+                values (?, ?, ?, ?, (
+                    select coalesce(max(revision), 0) + 1 from audit_revision
+                    where ledger_id = ? and aggregate_type = ? and aggregate_id = ?
+                ), ?, ?, ?::jsonb, ?::jsonb)
+                """, UUID.randomUUID(), ledgerId, aggregateType, aggregateId,
+                ledgerId, aggregateType, aggregateId, action, actorId, beforeJson, afterJson);
+    }
+
+    @Override
+    public void recordOpeningBalanceRevision(UUID ledgerId, String action, UUID actorId, String reason,
+                                             String beforeJson, String afterJson) {
+        jdbc.update("""
+                insert into audit_revision (
+                    id, ledger_id, aggregate_type, aggregate_id, revision, action,
+                    actor_id, reason, before_data, after_data)
+                values (?, ?, 'OPENING_BALANCE', ?, (
+                    select coalesce(max(revision), 0) + 1 from audit_revision
+                    where ledger_id = ? and aggregate_type = 'OPENING_BALANCE' and aggregate_id = ?
+                ), ?, ?, ?, ?::jsonb, ?::jsonb)
+                """, UUID.randomUUID(), ledgerId, ledgerId, ledgerId, ledgerId,
+                action, actorId, reason, beforeJson, afterJson);
+    }
+
+    @Override
     public List<LedgerResponses.OpeningBalance> listOpeningBalances(UUID ledgerId) {
-        return jdbc.query("""
+        List<LedgerResponses.OpeningBalance> balances = jdbc.query("""
                 select id, ledger_id, period_id, account_id, currency, dimension_key,
                     debit_original, credit_original, exchange_rate, debit_base, credit_base, confirmed
                 from opening_balance where ledger_id = ? order by period_id, account_id, currency, dimension_key
                 """, (rs, rowNum) -> mapOpeningBalance(rs), ledgerId);
+        if (balances.isEmpty()) {
+            return balances;
+        }
+        Map<UUID, List<LedgerResponses.OpeningBalanceDimension>> dimensions = new LinkedHashMap<>();
+        jdbc.query("""
+                select relation.opening_balance_id, member.dimension_type_id, member.dimension_value_id,
+                    member.dimension_type_code, member.dimension_type_name,
+                    member.dimension_value_code, member.dimension_value_name
+                from opening_balance_dimension relation
+                join dimension_combination_member member
+                  on member.ledger_id = relation.ledger_id
+                 and member.combination_id = relation.dimension_combination_id
+                 and member.dimension_type_id = relation.dimension_type_id
+                where relation.ledger_id = ?
+                order by relation.opening_balance_id, member.dimension_type_code
+                """, rs -> {
+            while (rs.next()) {
+                dimensions.computeIfAbsent(
+                        rs.getObject("opening_balance_id", UUID.class), ignored -> new ArrayList<>()).add(
+                        new LedgerResponses.OpeningBalanceDimension(
+                                rs.getObject("dimension_type_id", UUID.class),
+                                rs.getObject("dimension_value_id", UUID.class),
+                                rs.getString("dimension_type_code"), rs.getString("dimension_type_name"),
+                                rs.getString("dimension_value_code"), rs.getString("dimension_value_name")));
+            }
+            return null;
+        }, ledgerId);
+        return balances.stream().map(balance -> new LedgerResponses.OpeningBalance(
+                balance.id(), balance.ledgerId(), balance.periodId(), balance.accountId(), balance.currency(),
+                balance.dimensionKey(), balance.debitOriginal(), balance.creditOriginal(), balance.exchangeRate(),
+                balance.debitBase(), balance.creditBase(), balance.confirmed(),
+                dimensions.getOrDefault(balance.id(), List.of()))).toList();
     }
 
     @Override
@@ -288,19 +374,42 @@ public class JdbcLedgerRepository implements LedgerRepository {
     }
 
     @Override
-    public boolean upsertOpeningBalance(LedgerResponses.OpeningBalance balance) {
-        return jdbc.update("""
+    public Optional<UUID> upsertOpeningBalance(
+            LedgerResponses.OpeningBalance balance, UUID dimensionCombinationId) {
+        UUID openingBalanceId = jdbc.query("""
                 insert into opening_balance (id, ledger_id, period_id, account_id, currency, dimension_key,
-                    debit_original, credit_original, exchange_rate, debit_base, credit_base)
-                values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                on conflict (ledger_id, period_id, account_id, currency, dimension_key)
+                    dimension_combination_id, debit_original, credit_original, exchange_rate, debit_base, credit_base)
+                values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                on conflict (ledger_id, period_id, account_id, currency, dimension_combination_id)
                 do update set debit_original = excluded.debit_original, credit_original = excluded.credit_original,
                     exchange_rate = excluded.exchange_rate, debit_base = excluded.debit_base,
-                    credit_base = excluded.credit_base, updated_at = now()
+                    credit_base = excluded.credit_base, dimension_key = excluded.dimension_key, updated_at = now()
                 where opening_balance.confirmed = false
-                """, balance.id(), balance.ledgerId(), balance.periodId(), balance.accountId(), balance.currency(),
-                balance.dimensionKey(), balance.debitOriginal(), balance.creditOriginal(), balance.exchangeRate(),
-                balance.debitBase(), balance.creditBase()) == 1;
+                returning id
+                """, rs -> rs.next() ? rs.getObject(1, UUID.class) : null,
+                balance.id(), balance.ledgerId(), balance.periodId(), balance.accountId(), balance.currency(),
+                balance.dimensionKey(), dimensionCombinationId, balance.debitOriginal(), balance.creditOriginal(),
+                balance.exchangeRate(), balance.debitBase(), balance.creditBase());
+        return Optional.ofNullable(openingBalanceId);
+    }
+
+    @Override
+    public void replaceOpeningBalanceDimensions(
+            UUID ledgerId, UUID openingBalanceId,
+            List<LedgerResponses.OpeningBalanceDimension> dimensions) {
+        jdbc.update("delete from opening_balance_dimension where ledger_id = ? and opening_balance_id = ?",
+                ledgerId, openingBalanceId);
+        for (LedgerResponses.OpeningBalanceDimension dimension : dimensions) {
+            jdbc.update("""
+                    insert into opening_balance_dimension (
+                        opening_balance_id, ledger_id, dimension_combination_id,
+                        dimension_type_id, dimension_value_id)
+                    select ?, ?, balance.dimension_combination_id, ?, ?
+                    from opening_balance balance
+                    where balance.ledger_id = ? and balance.id = ?
+                    """, openingBalanceId, ledgerId, dimension.dimensionTypeId(), dimension.dimensionValueId(),
+                    ledgerId, openingBalanceId);
+        }
     }
 
     @Override
@@ -416,7 +525,8 @@ public class JdbcLedgerRepository implements LedgerRepository {
     private LedgerResponses.Account mapAccount(java.sql.ResultSet rs) throws java.sql.SQLException {
         return new LedgerResponses.Account(rs.getObject("id", UUID.class),
                 rs.getObject("ledger_id", UUID.class), rs.getString("code"), rs.getString("name"),
-                rs.getString("category"), rs.getString("normal_balance"), rs.getString("status"),
+                rs.getString("standard_account_key"), rs.getString("category"),
+                rs.getString("normal_balance"), rs.getString("status"),
                 rs.getObject("created_at", OffsetDateTime.class));
     }
 
@@ -436,13 +546,13 @@ public class JdbcLedgerRepository implements LedgerRepository {
     private LedgerResponses.DimensionType mapDimensionType(java.sql.ResultSet rs) throws java.sql.SQLException {
         return new LedgerResponses.DimensionType(rs.getObject("id", UUID.class),
                 rs.getObject("ledger_id", UUID.class), rs.getString("code"), rs.getString("name"),
-                rs.getBoolean("required"), rs.getString("status"));
+                rs.getBoolean("required"), rs.getString("status"), rs.getLong("version"));
     }
 
     private LedgerResponses.DimensionValue mapDimensionValue(java.sql.ResultSet rs) throws java.sql.SQLException {
         return new LedgerResponses.DimensionValue(rs.getObject("id", UUID.class),
                 rs.getObject("ledger_id", UUID.class), rs.getObject("dimension_type_id", UUID.class),
-                rs.getString("code"), rs.getString("name"), rs.getString("status"));
+                rs.getString("code"), rs.getString("name"), rs.getString("status"), rs.getLong("version"));
     }
 
     private LedgerResponses.OpeningBalance mapOpeningBalance(java.sql.ResultSet rs) throws java.sql.SQLException {

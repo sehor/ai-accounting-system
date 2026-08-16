@@ -118,6 +118,20 @@ public class LedgerController {
         ledgerService.deleteAccount(user(request), ledgerId, accountId, expectedVersion);
     }
 
+    @GetMapping("/{ledgerId}/accounts/{accountId}/next-child-code")
+    public LedgerResponses.NextAccountCodeResponse nextChildAccountCode(
+            HttpServletRequest request,
+            @PathVariable UUID ledgerId,
+            @PathVariable UUID accountId) {
+        String code = ledgerService.nextChildAccountCode(user(request), ledgerId, accountId);
+        return new LedgerResponses.NextAccountCodeResponse(code);
+    }
+
+    @GetMapping("/{ledgerId}/account-code-rule")
+    public AccountCodeRule getAccountCodeRule(HttpServletRequest request, @PathVariable UUID ledgerId) {
+        return ledgerService.getAccountCodeRule(user(request), ledgerId);
+    }
+
     @PutMapping("/{ledgerId}/account-code-rule")
     public AccountCodeRule updateAccountCodeRule(HttpServletRequest request, @PathVariable UUID ledgerId,
                                                   @Valid @RequestBody LedgerRequests.AccountCodeRuleUpdate body) {
@@ -163,11 +177,25 @@ public class LedgerController {
         return ledgerService.createDimensionType(user(request), ledgerId, body);
     }
 
+    @PatchMapping("/{ledgerId}/dimension-types/{typeId}")
+    public LedgerResponses.DimensionType updateDimensionType(
+            HttpServletRequest request, @PathVariable UUID ledgerId, @PathVariable UUID typeId,
+            @Valid @RequestBody LedgerRequests.DimensionTypePatch body) {
+        return ledgerService.updateDimensionType(user(request), ledgerId, typeId, body);
+    }
+
     @GetMapping("/{ledgerId}/dimension-types/{typeId}/values")
     public List<LedgerResponses.DimensionValue> listDimensionValues(HttpServletRequest request,
                                                                       @PathVariable UUID ledgerId,
                                                                       @PathVariable UUID typeId) {
         return ledgerService.listDimensionValues(user(request), ledgerId, typeId);
+    }
+
+    @PostMapping("/{ledgerId}/dimension-values:batch")
+    public LedgerResponses.DimensionValuesBatch listDimensionValues(
+            HttpServletRequest request, @PathVariable UUID ledgerId,
+            @Valid @RequestBody LedgerRequests.DimensionValuesBatch body) {
+        return ledgerService.listDimensionValues(user(request), ledgerId, body);
     }
 
     @PostMapping("/{ledgerId}/dimension-types/{typeId}/values")
@@ -177,6 +205,13 @@ public class LedgerController {
                                                                 @PathVariable UUID typeId,
                                                                 @Valid @RequestBody LedgerRequests.DimensionValueCreate body) {
         return ledgerService.createDimensionValue(user(request), ledgerId, typeId, body);
+    }
+
+    @PatchMapping("/{ledgerId}/dimension-types/{typeId}/values/{valueId}")
+    public LedgerResponses.DimensionValue updateDimensionValue(
+            HttpServletRequest request, @PathVariable UUID ledgerId, @PathVariable UUID typeId,
+            @PathVariable UUID valueId, @Valid @RequestBody LedgerRequests.DimensionValuePatch body) {
+        return ledgerService.updateDimensionValue(user(request), ledgerId, typeId, valueId, body);
     }
 
     @GetMapping("/{ledgerId}/opening-balances")
@@ -189,21 +224,25 @@ public class LedgerController {
     public List<LedgerResponses.OpeningBalance> replaceOpeningBalances(HttpServletRequest request,
                                                                          @PathVariable UUID ledgerId,
                                                                          @Valid @RequestBody LedgerRequests.OpeningBalances body) {
-        return ledgerService.replaceOpeningBalances(user(request), ledgerId, body.lines());
+        return ledgerService.replaceOpeningBalances(user(request), ledgerId, body.lines(), body.reason());
     }
 
     @PostMapping(value = "/{ledgerId}/opening-balances:import-csv", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public List<LedgerResponses.OpeningBalance> importOpeningBalances(HttpServletRequest request,
                                                                         @PathVariable UUID ledgerId,
-                                                                        @RequestPart("file") MultipartFile file)
+                                                                        @RequestPart("file") MultipartFile file,
+                                                                        @RequestPart(value = "reason", required = false) String reason)
             throws java.io.IOException {
-        return ledgerService.importOpeningBalances(user(request), ledgerId, file.getInputStream());
+        return ledgerService.importOpeningBalances(user(request), ledgerId, file.getInputStream(), reason);
     }
 
     @PostMapping("/{ledgerId}/opening-balances:confirm")
     public java.util.Map<String, Integer> confirmOpeningBalances(HttpServletRequest request,
-                                                                  @PathVariable UUID ledgerId) {
-        return java.util.Map.of("confirmedCount", ledgerService.confirmOpeningBalances(user(request), ledgerId));
+                                                                  @PathVariable UUID ledgerId,
+                                                                  @org.springframework.web.bind.annotation.RequestParam(
+                                                                          required = false) String reason) {
+        return java.util.Map.of("confirmedCount",
+                ledgerService.confirmOpeningBalances(user(request), ledgerId, reason));
     }
 
     @PostMapping("/{ledgerId}/members")

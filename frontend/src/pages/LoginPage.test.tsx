@@ -2,6 +2,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError, apiFetch } from '../api/client'
+import { installLegacyOpenApiBridge } from '../test/openApiLegacyBridge'
 import { AuthProvider } from '../auth/AuthProvider'
 import { LoginPage } from './LoginPage'
 
@@ -9,6 +10,8 @@ vi.mock('../api/client', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../api/client')>()
   return { ...actual, apiFetch: vi.fn() }
 })
+
+installLegacyOpenApiBridge(apiFetch)
 
 describe('local login', () => {
   beforeAll(() => {

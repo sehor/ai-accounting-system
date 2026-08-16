@@ -9,6 +9,12 @@ import java.util.UUID;
 
 public interface FixedAssetRepository {
 
+    /**
+     * Serializes a ledger-scoped source mutation with the balance projection worker.
+     * Call this before acquiring any fixed-asset, depreciation-run, or voucher locks.
+     */
+    void lockLedger(UUID ledgerId);
+
     List<CategoryRecord> listCategories(UUID ledgerId);
 
     Optional<CategoryRecord> findCategory(UUID ledgerId, UUID categoryId);
@@ -34,16 +40,24 @@ public interface FixedAssetRepository {
 
     boolean hasAssetUsage(UUID ledgerId, UUID assetId);
 
-    List<AssetRecord> activeAssets(UUID ledgerId);
+    List<AssetRecord> depreciationCandidates(UUID ledgerId, UUID periodId);
 
     void insertChange(UUID ledgerId, UUID assetId, UUID periodId, String reason, UUID actorId,
                       String beforeData, String afterData);
 
     Optional<RunRecord> currentRun(UUID ledgerId, UUID periodId, String runType);
 
+    Optional<RunRecord> findRun(UUID ledgerId, UUID runId);
+
+    Optional<RunRecord> findRunByVoucher(UUID ledgerId, UUID voucherId);
+
+    Optional<RunRecord> activeRunForAsset(UUID ledgerId, UUID assetId, UUID periodId, String runType);
+
     List<RunRecord> listRuns(UUID ledgerId, UUID periodId);
 
     List<LineRecord> activeLines(UUID ledgerId, UUID periodId);
+
+    List<LineRecord> linesForRun(UUID ledgerId, UUID runId);
 
     boolean hasActiveLine(UUID ledgerId, UUID assetId, UUID periodId);
 
@@ -59,9 +73,17 @@ public interface FixedAssetRepository {
 
     void supersedeLines(UUID ledgerId, UUID runId);
 
+    boolean cancelRun(UUID ledgerId, UUID runId, String runType, UUID voucherId, UUID actorId, String reason);
+
+    int cancelRunLines(UUID ledgerId, UUID runId);
+
     void insertDisposal(DisposalRecord disposal, UUID actorId);
 
     boolean hasDisposal(UUID ledgerId, UUID assetId);
+
+    Optional<ActiveDisposalRecord> activeDisposal(UUID ledgerId, UUID assetId);
+
+    boolean cancelDisposal(UUID ledgerId, UUID disposalId, UUID actorId, String reason);
 
     record CategoryRecord(UUID id, UUID ledgerId, String code, String name, int usefulLifeMonths,
                           BigDecimal residualRate, UUID assetAccountId, UUID accumulatedDepreciationAccountId,
@@ -99,5 +121,10 @@ public interface FixedAssetRepository {
                           UUID outputTaxAccountId, UUID inputTaxAccountId, UUID depreciationVoucherId,
                           UUID transferVoucherId, UUID settlementVoucherId, BigDecimal carryingAmount,
                           BigDecimal gainOrLoss) {
+    }
+
+    record ActiveDisposalRecord(UUID id, UUID ledgerId, UUID assetId, UUID periodId,
+                                LocalDate disposalDate, UUID depreciationVoucherId,
+                                UUID transferVoucherId, UUID settlementVoucherId) {
     }
 }

@@ -3,10 +3,13 @@ package com.example.accounting.reporting;
 import com.example.accounting.identity.CurrentUserResolver;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import jakarta.validation.Valid;
 import java.util.UUID;
 import java.util.function.Supplier;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -54,6 +57,15 @@ public class BookController {
                         currentUserResolver.resolve(request), ledgerId, range.periodCode(), accountId, page, pageSize)
                 : reportingService.subLedgerBook(
                         currentUserResolver.resolve(request), ledgerId, range, accountId, page, pageSize));
+    }
+
+    @PostMapping("/dimension-ledger:query")
+    public ReportResponses.DimensionLedgerPage dimensionLedger(HttpServletRequest request,
+                                                               HttpServletResponse response,
+                                                               @PathVariable UUID ledgerId,
+                                                               @Valid @RequestBody DimensionLedgerRequests.Query body) {
+        return respond(response, () -> reportingService.dimensionLedger(
+                currentUserResolver.resolve(request), ledgerId, body));
     }
 
     private <T> T respond(HttpServletResponse response, Supplier<T> action) {

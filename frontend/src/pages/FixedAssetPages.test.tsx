@@ -3,12 +3,12 @@ import { App } from 'antd'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter, Route, Routes, useNavigate } from 'react-router-dom'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
-import { apiFetch } from '../api/client'
+import { apiFetch, openApiClient } from '../api/client'
 import { departmentNameById, FixedAssetEditorPage, fixedAssetPayload, formatFixedAssetMoney, normalizeFixedAssetTab } from './FixedAssetPages'
 
 vi.mock('../api/client', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../api/client')>()
-  return { ...actual, apiFetch: vi.fn() }
+  return { ...actual, apiFetch: vi.fn(), openApiClient: { GET: vi.fn(), POST: vi.fn(), PATCH: vi.fn(), DELETE: vi.fn() } }
 })
 
 vi.mock('../auth/AuthProvider', () => ({
@@ -57,9 +57,31 @@ function defaultApiResponse(path: string, init?: RequestInit) {
   return Promise.resolve([])
 }
 
+function legacyPath(path: string, options: { params?: { path?: Record<string, string>; query?: Record<string, unknown> } }) {
+  let result = path.replace(/^\/v1/, '')
+  for (const [name, value] of Object.entries(options.params?.path || {})) result = result.replace(`{${name}}`, value)
+  if (options.params?.query?.periodId && path.endsWith('/{assetId}')) result += `?periodId=${options.params.query.periodId}`
+  return result
+}
+
+async function openApiResult(method: string, path: string, options: { body?: unknown; params?: { path?: Record<string, string>; query?: Record<string, unknown> } }) {
+  const init = method === 'GET' ? undefined : { method, body: options.body === undefined ? undefined : JSON.stringify(options.body) }
+  const data = await apiFetch(legacyPath(path, options), { localUserId: 'user-1', localUserName: 'admin' }, init)
+  return { data, response: new Response(null, { status: 200 }) }
+}
+
+const getMock = openApiClient.GET as unknown as ReturnType<typeof vi.fn>
+const postMock = openApiClient.POST as unknown as ReturnType<typeof vi.fn>
+const patchMock = openApiClient.PATCH as unknown as ReturnType<typeof vi.fn>
+const deleteMock = openApiClient.DELETE as unknown as ReturnType<typeof vi.fn>
+
 beforeEach(() => {
   vi.clearAllMocks()
   vi.mocked(apiFetch).mockImplementation((path, _session, init) => defaultApiResponse(path, init))
+  getMock.mockImplementation((path: string, options: never) => openApiResult('GET', path, options))
+  postMock.mockImplementation((path: string, options: never) => openApiResult('POST', path, options))
+  patchMock.mockImplementation((path: string, options: never) => openApiResult('PATCH', path, options))
+  deleteMock.mockImplementation((path: string, options: never) => openApiResult('DELETE', path, options))
 })
 
 afterEach(cleanup)
@@ -85,7 +107,7 @@ describe('fixed asset presentation', () => {
 
   it('maps a department value id to its display name and falls back from invalid tabs', () => {
     const departments = departmentNameById([{
-      id: 'dept-1', ledgerId: 'ledger-1', dimensionTypeId: 'type-1', code: 'RD', name: '研发部', status: 'ACTIVE',
+      id: 'dept-1', ledgerId: 'ledger-1', dimensionTypeId: 'type-1', code: 'RD', name: '研发部', status: 'ACTIVE', version: 0,
     }])
 
     expect(departments.get('dept-1')).toBe('研发部')
@@ -97,6 +119,7 @@ describe('fixed asset presentation', () => {
   it('omits server-owned and immutable fields from an edit patch', () => {
     const payload = fixedAssetPayload({
       ...asset, serviceDate: '2026-08-01', name: '更新名称', categoryId: 'category-2', code: 'CHANGED',
+      changePeriodId: period.id,
     }, true)
 
     expect(payload).toMatchObject({ name: '更新名称', serviceDate: '2026-08-01' })
@@ -106,6 +129,7 @@ describe('fixed asset presentation', () => {
     expect(payload).not.toHaveProperty('openingDepreciatedMonths')
     expect(payload).not.toHaveProperty('currentDepreciation')
     expect(payload).not.toHaveProperty('currentAccumulatedDepreciation')
+    expect(payload).toHaveProperty('changePeriodId', period.id)
   })
 })
 

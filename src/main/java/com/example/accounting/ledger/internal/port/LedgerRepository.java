@@ -16,9 +16,11 @@ public interface LedgerRepository {
 
     void createOwner(UUID ledgerId, UUID actorId);
 
-    void createAccount(UUID ledgerId, String code, String name, String category, String normalBalance);
+    void createAccount(UUID ledgerId, String code, String name, String category, String normalBalance,
+                       String standardAccountKey);
 
-    boolean createAccountIfAbsent(UUID ledgerId, String code, String name, String category, String normalBalance);
+    boolean createAccountIfAbsent(UUID ledgerId, String code, String name, String category, String normalBalance,
+                                  String standardAccountKey);
 
     void createPeriod(UUID ledgerId, String periodCode, LocalDate startDate, LocalDate endDate);
 
@@ -52,6 +54,9 @@ public interface LedgerRepository {
 
     void createDimensionType(UUID id, UUID ledgerId, String code, String name, boolean required);
 
+    boolean updateDimensionType(UUID ledgerId, UUID typeId, String name, String status,
+                                boolean required, long expectedVersion);
+
     Optional<LedgerResponses.DimensionType> findDimensionType(UUID ledgerId, UUID typeId);
 
     boolean activeDimensionTypeExists(UUID ledgerId, UUID typeId);
@@ -60,7 +65,16 @@ public interface LedgerRepository {
 
     void createDimensionValue(UUID id, UUID ledgerId, UUID typeId, String code, String name);
 
+    boolean updateDimensionValue(UUID ledgerId, UUID typeId, UUID valueId, String name, String status,
+                                 long expectedVersion);
+
     Optional<LedgerResponses.DimensionValue> findDimensionValue(UUID ledgerId, UUID valueId);
+
+    void recordDimensionRevision(UUID ledgerId, String aggregateType, UUID aggregateId,
+                                 String action, UUID actorId, String beforeJson, String afterJson);
+
+    void recordOpeningBalanceRevision(UUID ledgerId, String action, UUID actorId, String reason,
+                                      String beforeJson, String afterJson);
 
     List<LedgerResponses.OpeningBalance> listOpeningBalances(UUID ledgerId);
 
@@ -68,7 +82,11 @@ public interface LedgerRepository {
 
     void deleteUnconfirmedOpeningBalances(UUID ledgerId);
 
-    boolean upsertOpeningBalance(LedgerResponses.OpeningBalance balance);
+    Optional<UUID> upsertOpeningBalance(LedgerResponses.OpeningBalance balance, UUID dimensionCombinationId);
+
+    void replaceOpeningBalanceDimensions(
+            UUID ledgerId, UUID openingBalanceId,
+            List<LedgerResponses.OpeningBalanceDimension> dimensions);
 
     boolean validOpeningReference(UUID ledgerId, UUID accountId, UUID periodId);
 

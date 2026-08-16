@@ -3,12 +3,15 @@ import { App as AntApp } from 'antd'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { apiFetch } from '../api/client'
+import { installLegacyOpenApiBridge } from '../test/openApiLegacyBridge'
 import { AdminPage } from './AdminPage'
 
 vi.mock('../api/client', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../api/client')>()
   return { ...actual, apiFetch: vi.fn() }
 })
+
+installLegacyOpenApiBridge(apiFetch)
 
 vi.mock('../auth/AuthProvider', () => ({
   useAuth: () => ({ session: { localUserName: 'admin' } }),

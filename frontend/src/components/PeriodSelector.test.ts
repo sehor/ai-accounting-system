@@ -1,8 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import type { Period } from '../api/types'
-import { selectDefaultPeriod } from './PeriodSelector'
+import { selectDefaultPeriod, type PeriodOption } from './PeriodSelector'
 
-const period = (periodCode: string, hasVouchers = false): Period => ({
+const period = (periodCode: string, hasVouchers = false): PeriodOption => ({
   id: periodCode,
   ledgerId: 'ledger-1',
   periodCode,

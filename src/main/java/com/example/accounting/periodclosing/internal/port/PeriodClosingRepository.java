@@ -13,6 +13,8 @@ public interface PeriodClosingRepository {
     Optional<SettingRecord> setting(UUID ledgerId);
     void upsertSetting(UUID ledgerId, UUID profitAccountId, UUID retainedEarningsAccountId);
     Optional<StepRecord> step(UUID ledgerId, UUID periodId, PeriodClosingStepType type);
+    Optional<StepRecord> stepForUpdate(UUID ledgerId, UUID periodId, PeriodClosingStepType type);
+    StepRecord ensureStep(UUID id, UUID ledgerId, UUID periodId, PeriodClosingStepType type);
     List<StepRecord> steps(UUID ledgerId, UUID periodId);
     void createStep(UUID id, UUID ledgerId, UUID periodId, PeriodClosingStepType type,
                     PeriodClosingStepStatus status, BigDecimal amount, String fingerprint,
@@ -28,6 +30,9 @@ public interface PeriodClosingRepository {
     Optional<AccountInfo> account(UUID ledgerId, UUID accountId);
     Optional<AccountInfo> accountByCode(UUID ledgerId, String code);
     boolean hasRequiredDimensions(UUID ledgerId, UUID accountId);
+    String baseCurrency(UUID ledgerId);
+    TrialBalanceAmounts trialBalanceAmounts(UUID ledgerId, String periodCode);
+    Optional<UUID> depreciationRunId(UUID ledgerId, UUID periodId, UUID voucherId);
 
     record SettingRecord(UUID ledgerId, UUID profitAccountId, UUID retainedEarningsAccountId,
                          long version) { }
@@ -41,4 +46,6 @@ public interface PeriodClosingRepository {
                        String status, UUID parentId, boolean leaf) { }
     record AccountAmount(UUID accountId, String code, String name, String category,
                         BigDecimal debit, BigDecimal credit) { }
+    record TrialBalanceAmounts(BigDecimal openingDebit, BigDecimal openingCredit,
+                               BigDecimal periodDebit, BigDecimal periodCredit) { }
 }

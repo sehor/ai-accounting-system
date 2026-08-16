@@ -23,7 +23,7 @@ public class AccountManagementRepository {
 
     private static final String ACCOUNT_SELECT = """
             select a.id, a.ledger_id, a.code, a.name, a.category, a.normal_balance, a.status,
-                a.parent_id, a.level, a.is_template, a.legacy_code, a.version,
+                a.standard_account_key, a.parent_id, a.level, a.is_template, a.legacy_code, a.version,
                 a.cash_flow_required, a.default_cash_flow_item_id, a.quantity_enabled, a.unit_name,
                 a.created_at,
                 not exists (
@@ -89,6 +89,12 @@ public class AccountManagementRepository {
                 ACCOUNT_SELECT + " where a.ledger_id = ? order by a.code",
                 (rs, row) -> mapAccount(rs, List.of()), ledgerId);
         return attachDimensions(ledgerId, accounts);
+    }
+
+    public List<String> listChildCodes(UUID ledgerId, UUID parentAccountId) {
+        return jdbc.queryForList(
+                "select code from ledger_account where ledger_id = ? and parent_id = ? order by code",
+                String.class, ledgerId, parentAccountId);
     }
 
     public List<LedgerResponses.Account> listCreatedBetween(
@@ -171,28 +177,28 @@ public class AccountManagementRepository {
     }
 
     public void create(UUID id, UUID ledgerId, String code, String name, String category,
-                       String normalBalance, UUID parentId, int level, boolean template,
+                       String normalBalance, String standardAccountKey, UUID parentId, int level, boolean template,
                        boolean cashFlowRequired, UUID defaultCashFlowItemId,
                        boolean quantityEnabled, String unitName) {
         jdbc.update("""
                 insert into ledger_account (
                     id, ledger_id, code, name, category, normal_balance, parent_id, level,
-                    is_template, cash_flow_required, default_cash_flow_item_id,
+                    standard_account_key, is_template, cash_flow_required, default_cash_flow_item_id,
                     quantity_enabled, unit_name)
-                values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """, id, ledgerId, code, name, category, normalBalance, parentId, level, template,
+                values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, id, ledgerId, code, name, category, normalBalance, parentId, level, standardAccountKey, template,
                 cashFlowRequired, defaultCashFlowItemId, quantityEnabled, unitName);
         bumpLedgerVersion(ledgerId);
     }
 
     public boolean createIfAbsent(UUID id, UUID ledgerId, String code, String name, String category,
-                                  String normalBalance, UUID parentId, int level) {
+                                  String normalBalance, String standardAccountKey, UUID parentId, int level) {
         int inserted = jdbc.update("""
                 insert into ledger_account (
-                    id, ledger_id, code, name, category, normal_balance, parent_id, level)
-                values (?, ?, ?, ?, ?, ?, ?, ?)
+                    id, ledger_id, code, name, category, normal_balance, standard_account_key, parent_id, level)
+                values (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 on conflict (ledger_id, code) do nothing
-                """, id, ledgerId, code, name, category, normalBalance, parentId, level);
+                """, id, ledgerId, code, name, category, normalBalance, standardAccountKey, parentId, level);
         if (inserted == 1) {
             bumpLedgerVersion(ledgerId);
         }
@@ -591,7 +597,7 @@ public class AccountManagementRepository {
             ResultSet rs, List<LedgerResponses.DimensionRequirement> dimensions) throws SQLException {
         return new LedgerResponses.Account(
                 rs.getObject("id", UUID.class), rs.getObject("ledger_id", UUID.class),
-                rs.getString("code"), rs.getString("name"), rs.getString("category"),
+                rs.getString("code"), rs.getString("name"), rs.getString("standard_account_key"), rs.getString("category"),
                 rs.getString("normal_balance"), rs.getString("status"),
                 rs.getObject("parent_id", UUID.class), rs.getInt("level"), rs.getBoolean("leaf"),
                 rs.getBoolean("is_template"), rs.getBoolean("has_business_usage"),
@@ -605,8 +611,8 @@ public class AccountManagementRepository {
     private LedgerResponses.Account copyWithDimensions(
             LedgerResponses.Account account, List<LedgerResponses.DimensionRequirement> dimensions) {
         return new LedgerResponses.Account(
-                account.id(), account.ledgerId(), account.code(), account.name(), account.category(),
-                account.normalBalance(), account.status(), account.parentId(), account.level(),
+                account.id(), account.ledgerId(), account.code(), account.name(), account.standardAccountKey(),
+                account.category(), account.normalBalance(), account.status(), account.parentId(), account.level(),
                 account.isLeaf(), account.isTemplate(), account.hasBusinessUsage(), account.coreLocked(),
                 account.legacyCode(), account.version(), account.cashFlowRequired(),
                 account.defaultCashFlowItemId(), account.quantityEnabled(), account.unitName(), dimensions,

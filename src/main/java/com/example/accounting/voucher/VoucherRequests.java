@@ -1,5 +1,6 @@
 package com.example.accounting.voucher;
 
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
@@ -16,6 +17,7 @@ public final class VoucherRequests {
     private VoucherRequests() {
     }
 
+    @Schema(name = "VoucherCreateRequest")
     public record Create(@Nullable UUID periodId,
                          @NotNull LocalDate voucherDate,
                          @NotBlank String voucherType,
@@ -24,6 +26,7 @@ public final class VoucherRequests {
                          @NotEmpty List<@Valid Line> lines) {
     }
 
+    @Schema(name = "VoucherUpdateRequest")
     public record Update(@NotNull Long expectedVersion,
                          @NotNull UUID periodId,
                          @NotNull LocalDate voucherDate,
@@ -33,12 +36,14 @@ public final class VoucherRequests {
                          @NotEmpty List<@Valid Line> lines) {
     }
 
+    @Schema(name = "VoucherSearchRequest")
     public record Search(@Nullable String periodCode,
                          @Nullable LocalDate startDate,
                          @Nullable LocalDate endDate,
                          @Nullable String keyword) {
     }
 
+    @Schema(name = "VoucherLineRequest")
     public record Line(@Nullable UUID accountId,
                        @NotBlank @Pattern(regexp = "DEBIT|CREDIT") String side,
                        @NotBlank @Pattern(regexp = "[A-Z]{3}") String currency,
@@ -57,6 +62,7 @@ public final class VoucherRequests {
         }
     }
 
+    @Schema(name = "VoucherDimensionRequest")
     public record Dimension(@NotNull UUID dimensionTypeId, @NotNull UUID dimensionValueId) {
     }
 

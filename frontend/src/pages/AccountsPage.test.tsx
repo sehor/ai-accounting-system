@@ -3,10 +3,13 @@ import { App } from 'antd'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
+import { apiFetch } from '../api/client'
+import { installLegacyOpenApiBridge } from '../test/openApiLegacyBridge'
 import { AccountsPage } from './AccountsPage'
 
-vi.mock('../api/client', () => ({
-  apiFetch: vi.fn((path: string) => {
+vi.mock('../api/client', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../api/client')>()
+  return { ...actual, apiFetch: vi.fn((path: string) => {
     if (path.endsWith('/accounts')) return Promise.resolve([])
     if (path.endsWith('/role')) return Promise.resolve({ role: 'OWNER' })
     if (path.endsWith('/periods')) return Promise.resolve([{
@@ -14,10 +17,10 @@ vi.mock('../api/client', () => ({
       startDate: '2026-08-01', endDate: '2026-08-31', status: 'OPEN', hasVouchers: false,
     }])
     return Promise.resolve([])
-  }),
-  jsonBody: vi.fn((value) => value),
-  ApiError: class ApiError extends Error {},
-}))
+  }) }
+})
+
+installLegacyOpenApiBridge(apiFetch)
 
 vi.mock('../auth/AuthProvider', () => ({
   useAuth: () => ({ session: { localUserId: 'user-1', localUserName: 'admin' } }),

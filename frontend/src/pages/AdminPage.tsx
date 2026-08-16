@@ -2,8 +2,13 @@ import { Alert, App, Button, Card, Form, Modal, Popconfirm, Select, Space, Switc
 import { DeleteOutlined, ReloadOutlined } from '@ant-design/icons'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
-import { apiFetch, jsonBody } from '../api/client'
-import type { AdminLedger, AdminUser, LedgerRole, Member } from '../api/types'
+import { apiData, apiHeaders, openApiClient } from '../api/client'
+import type { components } from '../api/generated'
+
+type AdminLedger = components['schemas']['AdminLedger']
+type AdminUser = components['schemas']['AdminUser']
+type Member = components['schemas']['Member']
+type LedgerRole = Member['role']
 import { useAuth } from '../auth/AuthProvider'
 
 interface PermissionForm {
@@ -27,36 +32,36 @@ export function AdminPage() {
   const [permissionForm] = Form.useForm<PermissionForm>()
   const users = useQuery({
     queryKey: ['admin-users'],
-    queryFn: () => apiFetch<AdminUser[]>('/admin/users', session!),
+    queryFn: () => apiData(openApiClient.GET('/v1/admin/users', { headers: apiHeaders(session!) })),
     enabled: Boolean(session),
   })
   const ledgers = useQuery({
     queryKey: ['admin-ledgers'],
-    queryFn: () => apiFetch<AdminLedger[]>('/admin/ledgers', session!),
+    queryFn: () => apiData(openApiClient.GET('/v1/admin/ledgers', { headers: apiHeaders(session!) })),
     enabled: Boolean(session),
   })
   const members = useQuery({
     queryKey: ['ledger-members', permissionLedger?.id],
-    queryFn: () => apiFetch<Member[]>(`/ledgers/${permissionLedger!.id}/members`, session!),
+    queryFn: () => apiData(openApiClient.GET('/v1/ledgers/{ledgerId}/members', { params: { path: { ledgerId: permissionLedger!.id } }, headers: apiHeaders(session!) })),
     enabled: Boolean(session && permissionLedger),
   })
 
   const deleteUser = useMutation({
-    mutationFn: (userId: string) => apiFetch<void>(`/admin/users/${userId}`, session!, { method: 'DELETE' }),
+    mutationFn: (userId: string) => apiData(openApiClient.DELETE('/v1/admin/users/{userId}', { params: { path: { userId } }, headers: apiHeaders(session!) })),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['admin-users'] })
       void message.success('用户已删除')
     },
   })
   const restoreUser = useMutation({
-    mutationFn: (userId: string) => apiFetch<AdminUser>(`/admin/users/${userId}:restore`, session!, { method: 'POST' }),
+    mutationFn: (userId: string) => apiData(openApiClient.POST('/v1/admin/users/{userId}:restore', { params: { path: { userId } }, headers: apiHeaders(session!) })),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['admin-users'] })
       void message.success('用户已恢复')
     },
   })
   const deleteLedger = useMutation({
-    mutationFn: (ledgerId: string) => apiFetch<void>(`/admin/ledgers/${ledgerId}`, session!, { method: 'DELETE' }),
+    mutationFn: (ledgerId: string) => apiData(openApiClient.DELETE('/v1/admin/ledgers/{ledgerId}', { params: { path: { ledgerId } }, headers: apiHeaders(session!) })),
     onSuccess: async () => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['admin-ledgers'] }),
@@ -66,7 +71,7 @@ export function AdminPage() {
     },
   })
   const restoreLedger = useMutation({
-    mutationFn: (ledgerId: string) => apiFetch<AdminLedger>(`/admin/ledgers/${ledgerId}:restore`, session!, { method: 'POST' }),
+    mutationFn: (ledgerId: string) => apiData(openApiClient.POST('/v1/admin/ledgers/{ledgerId}:restore', { params: { path: { ledgerId } }, headers: apiHeaders(session!) })),
     onSuccess: async () => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['admin-ledgers'] }),
@@ -76,11 +81,9 @@ export function AdminPage() {
     },
   })
   const assignPermission = useMutation({
-    mutationFn: (value: PermissionForm) => apiFetch<Member>(
-      `/ledgers/${permissionLedger!.id}/members`,
-      session!,
-      { method: 'POST', body: jsonBody(value) },
-    ),
+    mutationFn: (value: PermissionForm) => apiData(openApiClient.POST('/v1/ledgers/{ledgerId}/members', {
+      params: { path: { ledgerId: permissionLedger!.id } }, headers: apiHeaders(session!), body: value,
+    })),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['ledger-members', permissionLedger?.id] })
       permissionForm.resetFields()
@@ -88,11 +91,9 @@ export function AdminPage() {
     },
   })
   const removePermission = useMutation({
-    mutationFn: (userId: string) => apiFetch<void>(
-      `/ledgers/${permissionLedger!.id}/members/${userId}`,
-      session!,
-      { method: 'DELETE' },
-    ),
+    mutationFn: (userId: string) => apiData(openApiClient.DELETE('/v1/ledgers/{ledgerId}/members/{userId}', {
+      params: { path: { ledgerId: permissionLedger!.id, userId } }, headers: apiHeaders(session!),
+    })),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['ledger-members', permissionLedger?.id] })
       void message.success('账套权限已移除')

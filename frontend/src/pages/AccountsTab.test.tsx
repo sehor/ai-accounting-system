@@ -3,18 +3,23 @@ import { App } from 'antd'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { apiFetch } from '../api/client'
-import type { Account } from '../api/types'
+import { installLegacyOpenApiBridge } from '../test/openApiLegacyBridge'
+import type { components } from '../api/generated'
 import { AccountsTab } from './AccountsTab'
 
-vi.mock('../api/client', () => ({
-  apiFetch: vi.fn().mockResolvedValue([]),
-  jsonBody: vi.fn((value) => value),
-  ApiError: class ApiError extends Error {},
-}))
+type Account = components['schemas']['Account']
+
+vi.mock('../api/client', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../api/client')>()
+  return { ...actual, apiFetch: vi.fn().mockResolvedValue([]) }
+})
+
+installLegacyOpenApiBridge(apiFetch)
 
 afterEach(() => {
   cleanup()
   vi.clearAllMocks()
+  vi.mocked(apiFetch).mockResolvedValue([])
 })
 
 Object.defineProperty(window, 'matchMedia', {
@@ -32,6 +37,7 @@ Object.defineProperty(window, 'matchMedia', {
 function account(id: string, name: string, createdAt: string, overrides: Partial<Account> = {}): Account {
   return {
     id, ledgerId: 'ledger-1', code: id, name, category: 'CURRENT_ASSET', normalBalance: 'DEBIT', status: 'ACTIVE',
+    standardAccountKey: 'ASSET.CASH',
     parentId: null, level: 1, isLeaf: true, isTemplate: false, hasBusinessUsage: false, coreLocked: false,
     legacyCode: false, version: 0, cashFlowRequired: false, defaultCashFlowItemId: null,
     quantityEnabled: false, unitName: null, dimensionRequirements: [], createdAt, ...overrides,
@@ -39,6 +45,91 @@ function account(id: string, name: string, createdAt: string, overrides: Partial
 }
 
 describe('AccountsTab account form', () => {
+  it('keeps the parent code fixed and enables the suggested child segment after loading', async () => {
+    let resolveRecommendation!: (value: { code: string }) => void
+    const recommendation = new Promise<{ code: string }>((resolve) => { resolveRecommendation = resolve })
+    vi.mocked(apiFetch).mockImplementation(async (path) => {
+      if (path.endsWith('/next-child-code')) return recommendation
+      if (path.endsWith('/account-code-rule')) {
+        return { level2Width: 2, level3Width: 2, level4Width: 2 }
+      }
+      return []
+    })
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    render(
+      <QueryClientProvider client={queryClient}>
+        <App>
+          <AccountsTab
+            ledgerId="ledger-1"
+            session={{ localUserId: 'user-1', localUserName: 'admin' }}
+            accounts={[account('parent-1', 'Bank', '2026-01-01T00:00:00+08:00', {
+              code: '1002', isLeaf: false,
+            })]}
+            dimensionTypes={[]}
+            periods={[]}
+            loading={false}
+            writable
+            category="CURRENT_ASSET"
+            onChanged={() => {}}
+          />
+        </App>
+      </QueryClientProvider>,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: '新增子科目' }))
+    const codeInput = screen.getByLabelText('科目编码')
+    await waitFor(() => expect(codeInput).toBeDisabled())
+
+    resolveRecommendation({ code: '100201' })
+    await waitFor(() => {
+      expect(codeInput).toBeEnabled()
+      expect(codeInput).toHaveValue('01')
+    })
+    expect(screen.getByLabelText('父科目编码')).toHaveValue('1002')
+    expect(screen.getByLabelText('父科目编码')).toHaveAttribute('readonly')
+
+    fireEvent.change(codeInput, { target: { value: '02' } })
+    fireEvent.change(screen.getByLabelText('科目名称'), { target: { value: 'Settlement account' } })
+    fireEvent.click(screen.getByRole('button', { name: 'OK' }))
+
+    await waitFor(() => {
+      const createCall = vi.mocked(apiFetch).mock.calls.find(([path, , init]) =>
+        path === '/ledgers/ledger-1/accounts' && init?.method === 'POST')
+      expect(createCall).toBeDefined()
+      expect(JSON.parse(String(createCall?.[2]?.body))).toMatchObject({
+        code: '100202',
+        parentId: 'parent-1',
+      })
+    })
+  })
+
+  it('allows an approved stable key when creating a top-level account', async () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    render(
+      <QueryClientProvider client={queryClient}>
+        <App>
+          <AccountsTab
+            ledgerId="ledger-1"
+            session={{ localUserId: 'user-1', localUserName: 'admin' }}
+            accounts={[account('1001', 'Cash', '2026-01-01T00:00:00+08:00', { isTemplate: true })]}
+            dimensionTypes={[]}
+            periods={[]}
+            loading={false}
+            writable
+            category="CURRENT_ASSET"
+            onChanged={() => {}}
+          />
+        </App>
+      </QueryClientProvider>,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: /新增一级科目/ }))
+    fireEvent.change(screen.getByLabelText('科目编码'), { target: { value: '1999' } })
+    fireEvent.change(screen.getByLabelText('科目名称'), { target: { value: 'Custom cash' } })
+    fireEvent.mouseDown(screen.getByRole('combobox', { name: '法定报表归类' }))
+    expect(await screen.findAllByRole('option', { name: /ASSET.CASH/ })).not.toHaveLength(0)
+  })
+
   it('does not warn when reopening the account form', async () => {
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
     const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {})

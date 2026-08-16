@@ -13,7 +13,7 @@
     "test:e2e": "playwright test",
     "test:e2e:axe": "playwright test e2e/axe.spec.ts",
     "test:e2e:business": "playwright test e2e/business.spec.ts",
-    "api:generate": "openapi-typescript http://localhost:8080/v1/openapi.json -o src/api/generated.ts"
+    "api:generate": "node scripts/generate-openapi.mjs"
   },
   "dependencies": {
     "@ant-design/icons": "^6.0.0",
@@ -23,6 +23,7 @@
     "dayjs": "^1.11.13",
     "decimal.js": "^10.5.0",
     "oidc-client-ts": "^3.2.0",
+    "openapi-fetch": "^0.17.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "react-router-dom": "^7.6.0"

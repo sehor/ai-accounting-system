@@ -46,6 +46,9 @@ class Stage2LedgerInitializationTest {
                 "select name from ledger_account where ledger_id = ? and code = '1002'",
                 String.class, ledger.id())).isEqualTo("银行存款");
         assertThat(jdbcTemplate.queryForObject(
+                "select standard_account_key from ledger_account where ledger_id = ? and code = '1002'",
+                String.class, ledger.id())).isEqualTo("ASSET.BANK_DEPOSIT");
+        assertThat(jdbcTemplate.queryForObject(
                 "select period_code from accounting_period where ledger_id = ? order by period_code limit 1",
                 String.class, ledger.id())).isEqualTo("2018-01");
         assertThat(jdbcTemplate.queryForObject(

@@ -3,44 +3,406 @@
   "version": "2006-18",
   "name": "企业会计准则应用指南",
   "effectiveDate": "2007-01-01",
-  "accountCodeRule": {"level2Width": 2, "level3Width": 2, "level4Width": 2},
+  "accountCodeRule": {
+    "level2Width": 2,
+    "level3Width": 2,
+    "level4Width": 2
+  },
   "accounts": [
-    {"code":"1001","name":"库存现金","category":"CURRENT_ASSET","normalBalance":"DEBIT","cashFlowRequired":false,"quantityEnabled":false},
-    {"code":"1002","name":"银行存款","category":"CURRENT_ASSET","normalBalance":"DEBIT","cashFlowRequired":false,"quantityEnabled":false},
-    {"code":"1101","name":"交易性金融资产","category":"CURRENT_ASSET","normalBalance":"DEBIT","cashFlowRequired":false,"quantityEnabled":false},
-    {"code":"1122","name":"应收账款","category":"CURRENT_ASSET","normalBalance":"DEBIT","cashFlowRequired":false,"quantityEnabled":false},
-    {"code":"1403","name":"原材料","category":"CURRENT_ASSET","normalBalance":"DEBIT","cashFlowRequired":false,"quantityEnabled":false},
-    {"code":"1405","name":"库存商品","category":"CURRENT_ASSET","normalBalance":"DEBIT","cashFlowRequired":false,"quantityEnabled":false},
-    {"code":"1601","name":"固定资产","category":"NON_CURRENT_ASSET","normalBalance":"DEBIT","cashFlowRequired":false,"quantityEnabled":false},
-    {"code":"1701","name":"无形资产","category":"NON_CURRENT_ASSET","normalBalance":"DEBIT","cashFlowRequired":false,"quantityEnabled":false},
-    {"code":"2001","name":"短期借款","category":"CURRENT_LIABILITY","normalBalance":"CREDIT","cashFlowRequired":false,"quantityEnabled":false},
-    {"code":"2202","name":"应付账款","category":"CURRENT_LIABILITY","normalBalance":"CREDIT","cashFlowRequired":false,"quantityEnabled":false},
-    {"code":"2221","name":"应交税费","category":"CURRENT_LIABILITY","normalBalance":"CREDIT","cashFlowRequired":false,"quantityEnabled":false},
-    {"code":"2501","name":"长期借款","category":"NON_CURRENT_LIABILITY","normalBalance":"CREDIT","cashFlowRequired":false,"quantityEnabled":false},
-    {"code":"4001","name":"实收资本","category":"EQUITY","normalBalance":"CREDIT","cashFlowRequired":false,"quantityEnabled":false},
-    {"code":"4103","name":"本年利润","category":"EQUITY","normalBalance":"CREDIT","cashFlowRequired":false,"quantityEnabled":false},
-    {"code":"4104","name":"未分配利润","category":"EQUITY","normalBalance":"CREDIT","cashFlowRequired":false,"quantityEnabled":false},
-    {"code":"5001","name":"生产成本","category":"COST","normalBalance":"DEBIT","cashFlowRequired":false,"quantityEnabled":false},
-    {"code":"6001","name":"主营业务收入","category":"OPERATING_REVENUE","normalBalance":"CREDIT","cashFlowRequired":false,"quantityEnabled":false},
-    {"code":"6401","name":"主营业务成本","category":"OPERATING_COST_AND_TAX","normalBalance":"DEBIT","cashFlowRequired":false,"quantityEnabled":false},
-    {"code":"6601","name":"销售费用","category":"PERIOD_EXPENSE","normalBalance":"DEBIT","cashFlowRequired":false,"quantityEnabled":false},
-    {"code":"6602","name":"管理费用","category":"PERIOD_EXPENSE","normalBalance":"DEBIT","cashFlowRequired":false,"quantityEnabled":false},
-    {"code":"6603","name":"财务费用","category":"PERIOD_EXPENSE","normalBalance":"DEBIT","cashFlowRequired":false,"quantityEnabled":false}
+    {
+      "code": "1001",
+      "name": "库存现金",
+      "category": "CURRENT_ASSET",
+      "normalBalance": "DEBIT",
+      "cashFlowRequired": false,
+      "quantityEnabled": false,
+      "standardAccountKey": "ASSET.CASH"
+    },
+    {
+      "code": "1002",
+      "name": "银行存款",
+      "category": "CURRENT_ASSET",
+      "normalBalance": "DEBIT",
+      "cashFlowRequired": false,
+      "quantityEnabled": false,
+      "standardAccountKey": "ASSET.BANK_DEPOSIT"
+    },
+    {
+      "code": "1101",
+      "name": "交易性金融资产",
+      "category": "CURRENT_ASSET",
+      "normalBalance": "DEBIT",
+      "cashFlowRequired": false,
+      "quantityEnabled": false,
+      "standardAccountKey": "ASSET.TRADING_FINANCIAL_ASSET"
+    },
+    {
+      "code": "1122",
+      "name": "应收账款",
+      "category": "CURRENT_ASSET",
+      "normalBalance": "DEBIT",
+      "cashFlowRequired": false,
+      "quantityEnabled": false,
+      "standardAccountKey": "ASSET.ACCOUNTS_RECEIVABLE"
+    },
+    {
+      "code": "1403",
+      "name": "原材料",
+      "category": "CURRENT_ASSET",
+      "normalBalance": "DEBIT",
+      "cashFlowRequired": false,
+      "quantityEnabled": false,
+      "standardAccountKey": "ASSET.RAW_MATERIAL"
+    },
+    {
+      "code": "1405",
+      "name": "库存商品",
+      "category": "CURRENT_ASSET",
+      "normalBalance": "DEBIT",
+      "cashFlowRequired": false,
+      "quantityEnabled": false,
+      "standardAccountKey": "ASSET.INVENTORY_GOODS"
+    },
+    {
+      "code": "1601",
+      "name": "固定资产",
+      "category": "NON_CURRENT_ASSET",
+      "normalBalance": "DEBIT",
+      "cashFlowRequired": false,
+      "quantityEnabled": false,
+      "standardAccountKey": "ASSET.FIXED_ASSET"
+    },
+    {
+      "code": "1701",
+      "name": "无形资产",
+      "category": "NON_CURRENT_ASSET",
+      "normalBalance": "DEBIT",
+      "cashFlowRequired": false,
+      "quantityEnabled": false,
+      "standardAccountKey": "ASSET.INTANGIBLE_ASSET"
+    },
+    {
+      "code": "2001",
+      "name": "短期借款",
+      "category": "CURRENT_LIABILITY",
+      "normalBalance": "CREDIT",
+      "cashFlowRequired": false,
+      "quantityEnabled": false,
+      "standardAccountKey": "LIABILITY.SHORT_TERM_BORROWING"
+    },
+    {
+      "code": "2202",
+      "name": "应付账款",
+      "category": "CURRENT_LIABILITY",
+      "normalBalance": "CREDIT",
+      "cashFlowRequired": false,
+      "quantityEnabled": false,
+      "standardAccountKey": "LIABILITY.ACCOUNTS_PAYABLE"
+    },
+    {
+      "code": "2221",
+      "name": "应交税费",
+      "category": "CURRENT_LIABILITY",
+      "normalBalance": "CREDIT",
+      "cashFlowRequired": false,
+      "quantityEnabled": false,
+      "standardAccountKey": "LIABILITY.TAX_PAYABLE"
+    },
+    {
+      "code": "2501",
+      "name": "长期借款",
+      "category": "NON_CURRENT_LIABILITY",
+      "normalBalance": "CREDIT",
+      "cashFlowRequired": false,
+      "quantityEnabled": false,
+      "standardAccountKey": "LIABILITY.LONG_TERM_BORROWING"
+    },
+    {
+      "code": "4001",
+      "name": "实收资本",
+      "category": "EQUITY",
+      "normalBalance": "CREDIT",
+      "cashFlowRequired": false,
+      "quantityEnabled": false,
+      "standardAccountKey": "EQUITY.PAID_IN_CAPITAL"
+    },
+    {
+      "code": "4103",
+      "name": "本年利润",
+      "category": "EQUITY",
+      "normalBalance": "CREDIT",
+      "cashFlowRequired": false,
+      "quantityEnabled": false,
+      "standardAccountKey": "EQUITY.CURRENT_YEAR_PROFIT"
+    },
+    {
+      "code": "4104",
+      "name": "未分配利润",
+      "category": "EQUITY",
+      "normalBalance": "CREDIT",
+      "cashFlowRequired": false,
+      "quantityEnabled": false,
+      "standardAccountKey": "EQUITY.RETAINED_EARNINGS"
+    },
+    {
+      "code": "5001",
+      "name": "生产成本",
+      "category": "COST",
+      "normalBalance": "DEBIT",
+      "cashFlowRequired": false,
+      "quantityEnabled": false,
+      "standardAccountKey": "COST.PRODUCTION"
+    },
+    {
+      "code": "6001",
+      "name": "主营业务收入",
+      "category": "OPERATING_REVENUE",
+      "normalBalance": "CREDIT",
+      "cashFlowRequired": false,
+      "quantityEnabled": false,
+      "standardAccountKey": "INCOME.MAIN_BUSINESS_REVENUE"
+    },
+    {
+      "code": "6401",
+      "name": "主营业务成本",
+      "category": "OPERATING_COST_AND_TAX",
+      "normalBalance": "DEBIT",
+      "cashFlowRequired": false,
+      "quantityEnabled": false,
+      "standardAccountKey": "EXPENSE.MAIN_BUSINESS_COST"
+    },
+    {
+      "code": "6601",
+      "name": "销售费用",
+      "category": "PERIOD_EXPENSE",
+      "normalBalance": "DEBIT",
+      "cashFlowRequired": false,
+      "quantityEnabled": false,
+      "standardAccountKey": "EXPENSE.SELLING"
+    },
+    {
+      "code": "6602",
+      "name": "管理费用",
+      "category": "PERIOD_EXPENSE",
+      "normalBalance": "DEBIT",
+      "cashFlowRequired": false,
+      "quantityEnabled": false,
+      "standardAccountKey": "EXPENSE.ADMINISTRATIVE"
+    },
+    {
+      "code": "6603",
+      "name": "财务费用",
+      "category": "PERIOD_EXPENSE",
+      "normalBalance": "DEBIT",
+      "cashFlowRequired": false,
+      "quantityEnabled": false,
+      "standardAccountKey": "EXPENSE.FINANCE"
+    }
   ],
   "formulas": [
-    {"code":"BALANCE_SHEET","name":"资产负债表","definition":{"type":"balance-sheet","debitCategories":["CURRENT_ASSET","NON_CURRENT_ASSET"],"creditCategories":["CURRENT_LIABILITY","NON_CURRENT_LIABILITY","EQUITY"]}},
-    {"code":"INCOME_STATEMENT","name":"利润表","definition":{"type":"income-statement","revenueCategories":["OPERATING_REVENUE","OTHER_INCOME"],"expenseCategories":["COST","OPERATING_COST_AND_TAX","OTHER_EXPENSE","PERIOD_EXPENSE","INCOME_TAX","PRIOR_YEAR_ADJUSTMENT"]}}
+    {
+      "code": "BALANCE_SHEET",
+      "name": "资产负债表",
+      "definition": {
+        "type": "balance-sheet",
+        "debitCategories": [
+          "CURRENT_ASSET",
+          "NON_CURRENT_ASSET"
+        ],
+        "creditCategories": [
+          "CURRENT_LIABILITY",
+          "NON_CURRENT_LIABILITY",
+          "EQUITY"
+        ]
+      }
+    },
+    {
+      "code": "INCOME_STATEMENT",
+      "name": "利润表",
+      "definition": {
+        "type": "income-statement",
+        "revenueCategories": [
+          "OPERATING_REVENUE",
+          "OTHER_INCOME"
+        ],
+        "expenseCategories": [
+          "COST",
+          "OPERATING_COST_AND_TAX",
+          "OTHER_EXPENSE",
+          "PERIOD_EXPENSE",
+          "INCOME_TAX",
+          "PRIOR_YEAR_ADJUSTMENT"
+        ]
+      }
+    }
   ],
   "cashFlowItems": [
-    {"code":"OPERATING","name":"经营活动产生的现金流量"},
-    {"code":"INVESTING","name":"投资活动产生的现金流量"},
-    {"code":"FINANCING","name":"筹资活动产生的现金流量"}
+    {
+      "code": "OPERATING",
+      "name": "经营活动产生的现金流量"
+    },
+    {
+      "code": "INVESTING",
+      "name": "投资活动产生的现金流量"
+    },
+    {
+      "code": "FINANCING",
+      "name": "筹资活动产生的现金流量"
+    }
   ],
   "dimensionTypes": [
-    {"code":"CUSTOMER","name":"客户","required":false},
-    {"code":"SUPPLIER","name":"供应商","required":false},
-    {"code":"DEPARTMENT","name":"部门","required":false},
-    {"code":"PERSON","name":"人员","required":false},
-    {"code":"PROJECT","name":"项目","required":false}
+    {
+      "code": "CUSTOMER",
+      "name": "客户",
+      "required": false
+    },
+    {
+      "code": "SUPPLIER",
+      "name": "供应商",
+      "required": false
+    },
+    {
+      "code": "DEPARTMENT",
+      "name": "部门",
+      "required": false
+    },
+    {
+      "code": "PERSON",
+      "name": "人员",
+      "required": false
+    },
+    {
+      "code": "PROJECT",
+      "name": "项目",
+      "required": false
+    }
+  ],
+  "standardAccountKeys": [
+    {
+      "key": "ASSET.CASH",
+      "legacyCodes": [
+        "1001"
+      ]
+    },
+    {
+      "key": "ASSET.BANK_DEPOSIT",
+      "legacyCodes": [
+        "1002"
+      ]
+    },
+    {
+      "key": "ASSET.TRADING_FINANCIAL_ASSET",
+      "legacyCodes": [
+        "1101"
+      ]
+    },
+    {
+      "key": "ASSET.ACCOUNTS_RECEIVABLE",
+      "legacyCodes": [
+        "1122"
+      ]
+    },
+    {
+      "key": "ASSET.RAW_MATERIAL",
+      "legacyCodes": [
+        "1403"
+      ]
+    },
+    {
+      "key": "ASSET.INVENTORY_GOODS",
+      "legacyCodes": [
+        "1405"
+      ]
+    },
+    {
+      "key": "ASSET.FIXED_ASSET",
+      "legacyCodes": [
+        "1601"
+      ]
+    },
+    {
+      "key": "ASSET.INTANGIBLE_ASSET",
+      "legacyCodes": [
+        "1701"
+      ]
+    },
+    {
+      "key": "LIABILITY.SHORT_TERM_BORROWING",
+      "legacyCodes": [
+        "2001"
+      ]
+    },
+    {
+      "key": "LIABILITY.ACCOUNTS_PAYABLE",
+      "legacyCodes": [
+        "2202"
+      ]
+    },
+    {
+      "key": "LIABILITY.TAX_PAYABLE",
+      "legacyCodes": [
+        "2221"
+      ]
+    },
+    {
+      "key": "LIABILITY.LONG_TERM_BORROWING",
+      "legacyCodes": [
+        "2501"
+      ]
+    },
+    {
+      "key": "EQUITY.PAID_IN_CAPITAL",
+      "legacyCodes": [
+        "4001"
+      ]
+    },
+    {
+      "key": "EQUITY.CURRENT_YEAR_PROFIT",
+      "legacyCodes": [
+        "4103"
+      ]
+    },
+    {
+      "key": "EQUITY.RETAINED_EARNINGS",
+      "legacyCodes": [
+        "4104"
+      ]
+    },
+    {
+      "key": "COST.PRODUCTION",
+      "legacyCodes": [
+        "5001"
+      ]
+    },
+    {
+      "key": "INCOME.MAIN_BUSINESS_REVENUE",
+      "legacyCodes": [
+        "6001"
+      ]
+    },
+    {
+      "key": "EXPENSE.MAIN_BUSINESS_COST",
+      "legacyCodes": [
+        "6401"
+      ]
+    },
+    {
+      "key": "EXPENSE.SELLING",
+      "legacyCodes": [
+        "6601"
+      ]
+    },
+    {
+      "key": "EXPENSE.ADMINISTRATIVE",
+      "legacyCodes": [
+        "6602"
+      ]
+    },
+    {
+      "key": "EXPENSE.FINANCE",
+      "legacyCodes": [
+        "6603"
+      ]
+    }
   ]
 }

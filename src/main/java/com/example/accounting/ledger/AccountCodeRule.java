@@ -1,7 +1,13 @@
 package com.example.accounting.ledger;
 
+import io.swagger.v3.oas.annotations.media.Schema;
+import java.util.Collection;
+import java.util.HashSet;
+import java.util.Locale;
 import java.util.Optional;
+import java.util.Set;
 
+@Schema(name = "AccountCodeRule", requiredProperties = {"level2Width", "level3Width", "level4Width"})
 public record AccountCodeRule(int level2Width, int level3Width, int level4Width) {
 
     public static final AccountCodeRule DEFAULT = new AccountCodeRule(2, 2, 2);
@@ -43,5 +49,45 @@ public record AccountCodeRule(int level2Width, int level3Width, int level4Width)
             parentLength += childWidths[index];
         }
         return Optional.of(code.substring(0, parentLength));
+    }
+
+    public int childWidth(int parentLevel) {
+        return switch (parentLevel) {
+            case 1 -> level2Width;
+            case 2 -> level3Width;
+            case 3 -> level4Width;
+            default -> throw new IllegalArgumentException("Parent level must be between 1 and 3, got: " + parentLevel);
+        };
+    }
+
+    public String nextChildCode(String parentCode, Collection<String> existingSiblingCodes) {
+        int parentLevel = levelOf(parentCode);
+        if (parentLevel <= 0 || parentLevel >= 4) {
+            throw new IllegalArgumentException("Parent account must be between level 1 and 3, but got level " + parentLevel + " for code " + parentCode);
+        }
+        int width = childWidth(parentLevel);
+        int expectedLength = parentCode.length() + width;
+        Set<Integer> usedNumbers = new HashSet<>();
+        if (existingSiblingCodes != null) {
+            for (String code : existingSiblingCodes) {
+                if (code != null && code.startsWith(parentCode) && code.length() == expectedLength) {
+                    String suffix = code.substring(parentCode.length());
+                    try {
+                        int val = Integer.parseInt(suffix);
+                        if (val > 0) {
+                            usedNumbers.add(val);
+                        }
+                    } catch (NumberFormatException ignored) {
+                    }
+                }
+            }
+        }
+        long maxVal = (long) Math.pow(10, width) - 1;
+        for (int i = 1; i <= maxVal; i++) {
+            if (!usedNumbers.contains(i)) {
+                return parentCode + String.format(Locale.ROOT, "%0" + width + "d", i);
+            }
+        }
+        throw new IllegalStateException("All child account codes under " + parentCode + " are exhausted (limit " + maxVal + ")");
     }
 }

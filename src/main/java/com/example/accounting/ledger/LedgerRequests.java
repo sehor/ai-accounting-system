@@ -6,6 +6,7 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import jakarta.validation.Valid;
+import io.swagger.v3.oas.annotations.media.Schema;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
@@ -21,6 +22,7 @@ public final class LedgerRequests {
         FUZZY
     }
 
+    @Schema(name = "LedgerCreateRequest")
     public record Create(@NotBlank @Size(max = 200) String name,
                          @Size(max = 2000) String description,
                          @NotBlank String accountingStandardCode,
@@ -68,6 +70,7 @@ public final class LedgerRequests {
     public record AccountCreate(
             @NotBlank @Pattern(regexp = "[A-Za-z0-9._-]{1,32}") String code,
             @NotBlank @Size(max = 200) String name,
+            @Pattern(regexp = "[A-Z][A-Z0-9]*(\\.[A-Z0-9_]+)+") String standardAccountKey,
             @NotBlank @Pattern(regexp = "CURRENT_ASSET|NON_CURRENT_ASSET|CURRENT_LIABILITY|NON_CURRENT_LIABILITY|EQUITY|COST|OPERATING_REVENUE|OTHER_INCOME|OPERATING_COST_AND_TAX|OTHER_EXPENSE|PERIOD_EXPENSE|INCOME_TAX|PRIOR_YEAR_ADJUSTMENT") String category,
             @NotBlank @Pattern(regexp = "DEBIT|CREDIT") String normalBalance,
             UUID parentId,
@@ -78,7 +81,21 @@ public final class LedgerRequests {
             List<@Valid DimensionRequirement> dimensionRequirements) {
 
         public AccountCreate(String code, String name, String category, String normalBalance) {
-            this(code, name, category, normalBalance, null, false, null, false, null, List.of());
+            this(code, name, null, category, normalBalance, null, false, null, false, null, List.of());
+        }
+
+        public AccountCreate(String code, String name, String standardAccountKey,
+                             String category, String normalBalance) {
+            this(code, name, standardAccountKey, category, normalBalance,
+                    null, false, null, false, null, List.of());
+        }
+
+        public AccountCreate(String code, String name, String category, String normalBalance,
+                             UUID parentId, Boolean cashFlowRequired, UUID defaultCashFlowItemId,
+                             Boolean quantityEnabled, String unitName,
+                             List<DimensionRequirement> dimensionRequirements) {
+            this(code, name, null, category, normalBalance, parentId, cashFlowRequired,
+                    defaultCashFlowItemId, quantityEnabled, unitName, dimensionRequirements);
         }
     }
 
@@ -97,6 +114,7 @@ public final class LedgerRequests {
             List<@Valid DimensionRequirement> dimensionRequirements) {
     }
 
+    @Schema(name = "AccountDimensionRequirementRequest")
     public record DimensionRequirement(@NotNull UUID dimensionTypeId, boolean required) {
     }
 
@@ -116,10 +134,30 @@ public final class LedgerRequests {
     public record DimensionTypeCreate(@NotBlank String code, @NotBlank String name, Boolean required) {
     }
 
+    public record DimensionTypePatch(@NotNull Long expectedVersion,
+                                     @Size(min = 1, max = 200) String name,
+                                     @Pattern(regexp = "ACTIVE|INACTIVE") String status,
+                                     Boolean required) {
+    }
+
     public record DimensionValueCreate(@NotBlank String code, @NotBlank String name) {
     }
 
-    public record OpeningBalances(@NotEmpty List<@Valid OpeningBalanceLine> lines) {
+    public record DimensionValuePatch(@NotNull Long expectedVersion,
+                                      @Size(min = 1, max = 200) String name,
+                                      @Pattern(regexp = "ACTIVE|INACTIVE") String status) {
+    }
+
+    @Schema(name = "DimensionValuesBatchRequest")
+    public record DimensionValuesBatch(@NotEmpty List<@NotNull UUID> dimensionTypeIds) {
+    }
+
+    public record OpeningBalances(@NotEmpty List<@Valid OpeningBalanceLine> lines,
+                                  @Size(max = 1000) String reason) {
+
+        public OpeningBalances(List<OpeningBalanceLine> lines) {
+            this(lines, null);
+        }
     }
 
     public record OpeningBalanceLine(@NotNull UUID accountId,
@@ -128,6 +166,23 @@ public final class LedgerRequests {
                                      String dimensionKey,
                                      @NotNull BigDecimal debitOriginal,
                                      @NotNull BigDecimal creditOriginal,
-                                     @NotNull BigDecimal exchangeRate) {
+                                     @NotNull BigDecimal exchangeRate,
+                                     List<@Valid OpeningBalanceDimension> dimensions) {
+
+        public OpeningBalanceLine {
+            dimensions = dimensions == null ? List.of() : List.copyOf(dimensions);
+        }
+
+        public OpeningBalanceLine(UUID accountId, UUID periodId, String currency, String dimensionKey,
+                                  BigDecimal debitOriginal, BigDecimal creditOriginal,
+                                  BigDecimal exchangeRate) {
+            this(accountId, periodId, currency, dimensionKey, debitOriginal, creditOriginal,
+                    exchangeRate, List.of());
+        }
+    }
+
+    @Schema(name = "OpeningBalanceDimensionRequest")
+    public record OpeningBalanceDimension(@NotNull UUID dimensionTypeId,
+                                          @NotNull UUID dimensionValueId) {
     }
 }

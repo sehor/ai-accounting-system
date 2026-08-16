@@ -39,8 +39,12 @@ public interface LedgerService {
 
     void deleteAccount(UUID actorId, UUID ledgerId, UUID accountId, long expectedVersion);
 
+    AccountCodeRule getAccountCodeRule(UUID actorId, UUID ledgerId);
+
     AccountCodeRule updateAccountCodeRule(
             UUID actorId, UUID ledgerId, LedgerRequests.AccountCodeRuleUpdate request);
+
+    String nextChildAccountCode(UUID actorId, UUID ledgerId, UUID parentAccountId);
 
     List<LedgerResponses.CashFlowItem> listCashFlowItems(UUID actorId, UUID ledgerId);
 
@@ -60,19 +64,42 @@ public interface LedgerService {
     LedgerResponses.DimensionType createDimensionType(UUID actorId, UUID ledgerId,
                                                        LedgerRequests.DimensionTypeCreate request);
 
+    LedgerResponses.DimensionType updateDimensionType(UUID actorId, UUID ledgerId, UUID typeId,
+                                                       LedgerRequests.DimensionTypePatch request);
+
     List<LedgerResponses.DimensionValue> listDimensionValues(UUID actorId, UUID ledgerId, UUID typeId);
+
+    LedgerResponses.DimensionValuesBatch listDimensionValues(
+            UUID actorId, UUID ledgerId, LedgerRequests.DimensionValuesBatch request);
 
     LedgerResponses.DimensionValue createDimensionValue(UUID actorId, UUID ledgerId, UUID typeId,
                                                          LedgerRequests.DimensionValueCreate request);
+
+    LedgerResponses.DimensionValue updateDimensionValue(UUID actorId, UUID ledgerId, UUID typeId, UUID valueId,
+                                                         LedgerRequests.DimensionValuePatch request);
 
     List<LedgerResponses.OpeningBalance> listOpeningBalances(UUID actorId, UUID ledgerId);
 
     List<LedgerResponses.OpeningBalance> replaceOpeningBalances(
             UUID actorId, UUID ledgerId, List<LedgerRequests.OpeningBalanceLine> lines);
 
+    default List<LedgerResponses.OpeningBalance> replaceOpeningBalances(
+            UUID actorId, UUID ledgerId, List<LedgerRequests.OpeningBalanceLine> lines, String reason) {
+        return replaceOpeningBalances(actorId, ledgerId, lines);
+    }
+
     int confirmOpeningBalances(UUID actorId, UUID ledgerId);
 
+    default int confirmOpeningBalances(UUID actorId, UUID ledgerId, String reason) {
+        return confirmOpeningBalances(actorId, ledgerId);
+    }
+
     List<LedgerResponses.OpeningBalance> importOpeningBalances(UUID actorId, UUID ledgerId, InputStream input);
+
+    default List<LedgerResponses.OpeningBalance> importOpeningBalances(
+            UUID actorId, UUID ledgerId, InputStream input, String reason) {
+        return importOpeningBalances(actorId, ledgerId, input);
+    }
 
     LedgerResponses.Member addMember(UUID actorId, UUID ledgerId, LedgerRequests.AddMember request);
 

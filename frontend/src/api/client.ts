@@ -1,5 +1,15 @@
-import type { ProblemDetails } from './types'
 import { clearSession } from '../auth/session'
+import createClient from 'openapi-fetch'
+import type { paths } from './generated'
+
+interface ProblemDetails {
+  title?: string
+  detail?: string
+  status?: number
+  code?: string
+  traceId?: string
+  retryable?: boolean
+}
 
 export interface ApiAuth {
   accessToken?: string
@@ -20,6 +30,42 @@ export class ApiError extends Error {
 }
 
 const baseUrl = (import.meta.env.VITE_API_BASE_URL || '/v1').replace(/\/$/, '')
+const openApiBaseUrl = baseUrl.endsWith('/v1') ? baseUrl.slice(0, -3) : baseUrl
+
+export const openApiClient = createClient<paths>({ baseUrl: openApiBaseUrl })
+
+export function apiHeaders(auth: ApiAuth): HeadersInit {
+  const headers: Record<string, string> = {}
+  if (auth.accessToken) headers.Authorization = `Bearer ${auth.accessToken}`
+  if (auth.localUserId) headers['X-User-Id'] = auth.localUserId
+  if (auth.localUserName) headers['X-User-Name'] = auth.localUserName
+  return headers
+}
+
+interface OpenApiResult<T> {
+  data?: T
+  error?: unknown
+  response: Response
+}
+
+export async function apiResponse<T>(request: PromiseLike<OpenApiResult<T>>): Promise<{ data: T; response: Response }> {
+  const result = await request
+  if (result.response.status === 401) {
+    clearSession()
+    if (window.location.pathname !== '/login') window.location.assign('/login')
+  }
+  if (!result.response.ok) {
+    const problem = typeof result.error === 'object' && result.error !== null
+      ? result.error as ProblemDetails
+      : { title: result.response.statusText }
+    throw new ApiError(result.response.status, problem)
+  }
+  return { data: result.data as T, response: result.response }
+}
+
+export async function apiData<T>(request: PromiseLike<OpenApiResult<T>>): Promise<T> {
+  return (await apiResponse(request)).data
+}
 
 export interface ApiResponse<T> {
   data: T

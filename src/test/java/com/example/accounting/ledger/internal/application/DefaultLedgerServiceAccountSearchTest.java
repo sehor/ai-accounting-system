@@ -17,6 +17,7 @@ import com.example.accounting.ledger.internal.persistence.AccountManagementRepos
 import com.example.accounting.ledger.internal.port.LedgerRepository;
 import com.example.accounting.shared.web.ApiProblemException;
 import com.example.accounting.shared.balance.BalanceProjectionService;
+import com.example.accounting.shared.accounting.DimensionCombinationStore;
 import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
@@ -33,11 +34,12 @@ class DefaultLedgerServiceAccountSearchTest {
     private final LocalSuperAgentPolicy localSuperAgent = mock(LocalSuperAgentPolicy.class);
     private final PlatformAdminPolicy platformAdmin = mock(PlatformAdminPolicy.class);
     private final BalanceProjectionService balanceProjection = mock(BalanceProjectionService.class);
+    private final DimensionCombinationStore dimensionCombinations = mock(DimensionCombinationStore.class);
     @SuppressWarnings("unchecked")
     private final ObjectProvider<PeriodCloseGuard> closeGuards = mock(ObjectProvider.class);
     private final DefaultLedgerService service = new DefaultLedgerService(
             ledgers, accounts, ledgerAccess, identityService, standards, closeGuards,
-            localSuperAgent, platformAdmin, balanceProjection);
+            localSuperAgent, platformAdmin, balanceProjection, dimensionCombinations);
 
     private final UUID actorId = UUID.randomUUID();
     private final UUID ledgerId = UUID.randomUUID();

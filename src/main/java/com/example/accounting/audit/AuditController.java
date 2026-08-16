@@ -2,8 +2,8 @@ package com.example.accounting.audit;
 
 import com.example.accounting.identity.CurrentUserResolver;
 import jakarta.servlet.http.HttpServletRequest;
-import java.util.List;
 import java.util.UUID;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -22,7 +22,12 @@ public class AuditController {
     }
 
     @GetMapping
-    public List<AuditResponses.Entry> list(HttpServletRequest request, @PathVariable UUID ledgerId) {
-        return auditService.list(currentUserResolver.resolve(request), ledgerId);
+    public AuditResponses.Page list(HttpServletRequest request, @PathVariable UUID ledgerId,
+                                    @RequestParam(defaultValue = "50") int limit,
+                                    @RequestParam(required = false) String cursor,
+                                    @RequestParam(required = false) String aggregateType,
+                                    @RequestParam(required = false) UUID aggregateId) {
+        return auditService.page(currentUserResolver.resolve(request), ledgerId, limit, cursor,
+                aggregateType, aggregateId);
     }
 }

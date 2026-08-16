@@ -4,13 +4,18 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import dayjs from 'dayjs'
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
-import { apiFetch, apiFetchWithHeaders } from '../api/client'
+import { apiFetch, apiFetchWithHeaders, openApiClient } from '../api/client'
 import { WorkspaceTabsProvider } from '../components/workspaceTabs'
 import { buildVoucherRequestBody, dateBelongsToPeriod, openPeriodForDate, voucherAmountPattern, VoucherEditorPage, VoucherListPage } from './VoucherPages'
 
 vi.mock('../api/client', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../api/client')>()
-  return { ...actual, apiFetch: vi.fn(), apiFetchWithHeaders: vi.fn() }
+  return {
+    ...actual,
+    apiFetch: vi.fn(),
+    apiFetchWithHeaders: vi.fn(),
+    openApiClient: { GET: vi.fn(), POST: vi.fn(), PUT: vi.fn(), DELETE: vi.fn() },
+  }
 })
 
 vi.mock('../auth/AuthProvider', () => ({
@@ -18,6 +23,8 @@ vi.mock('../auth/AuthProvider', () => ({
 }))
 
 const CurrentPath = () => <output aria-label="当前路径">{useLocation().pathname}</output>
+const openApiResult = (data: unknown, status = 200) => Promise.resolve({ data, response: new Response(null, { status }) })
+const mockedOpenApiMethod = (method: keyof typeof openApiClient) => openApiClient[method] as unknown as ReturnType<typeof vi.fn>
 
 beforeAll(() => {
   const getComputedStyle = window.getComputedStyle
@@ -46,6 +53,49 @@ beforeEach(() => {
         : [],
   ))
   vi.mocked(apiFetchWithHeaders).mockResolvedValue({ data: [], headers: new Headers({ 'X-Total-Count': '0' }) })
+  mockedOpenApiMethod('GET').mockImplementation(async (path: string, options: { params?: { path?: Record<string, string>; query?: Record<string, unknown> } }) => {
+    const pathParameters = options.params?.path || {}
+    const query = new URLSearchParams(Object.entries(options.params?.query || {})
+      .filter(([, value]) => value !== undefined && value !== '')
+      .map(([key, value]) => [key, String(value)]))
+    const legacyPath = path
+      .replace('/v1', '')
+      .replace('{ledgerId}', pathParameters.ledgerId || '')
+      .replace('{voucherId}', pathParameters.voucherId || '')
+      + (query.size ? `?${query}` : '')
+    if (path.endsWith('/vouchers')) {
+      const response = await apiFetchWithHeaders(legacyPath, { localUserId: 'user-1', localUserName: 'admin' })
+      return { data: response.data, response: new Response(null, { status: 200, headers: response.headers }) }
+    }
+    return openApiResult(await apiFetch(legacyPath, { localUserId: 'user-1', localUserName: 'admin' }))
+  })
+  mockedOpenApiMethod('POST').mockImplementation(async (path: string, options: { params?: { path?: Record<string, string> }; body?: Record<string, unknown>; headers?: HeadersInit }) => {
+    const ledgerId = options.params?.path?.ledgerId || ''
+    if (path.endsWith('/dimension-values:batch')) {
+      const typeIds = options.body?.dimensionTypeIds as string[]
+      const groups = await Promise.all(typeIds.map(async (dimensionTypeId) => ({
+        dimensionTypeId,
+        values: await apiFetch(`/ledgers/${ledgerId}/dimension-types/${dimensionTypeId}/values`, { localUserId: 'user-1', localUserName: 'admin' }),
+      })))
+      return openApiResult({ groups })
+    }
+    const voucherId = options.params?.path?.voucherId
+    const legacyPath = path.replace('/v1', '').replace('{ledgerId}', ledgerId).replace('{voucherId}', voucherId || '')
+    return openApiResult(await apiFetch(legacyPath, { localUserId: 'user-1', localUserName: 'admin' }, {
+      method: 'POST', headers: options.headers, body: options.body ? JSON.stringify(options.body) : undefined,
+    }))
+  })
+  mockedOpenApiMethod('PUT').mockImplementation(async (path: string, options: { params?: { path?: Record<string, string> }; body?: Record<string, unknown> }) => {
+    const pathParameters = options.params?.path || {}
+    const legacyPath = path.replace('/v1', '').replace('{ledgerId}', pathParameters.ledgerId || '').replace('{voucherId}', pathParameters.voucherId || '')
+    return openApiResult(await apiFetch(legacyPath, { localUserId: 'user-1', localUserName: 'admin' }, { method: 'PUT', body: JSON.stringify(options.body) }))
+  })
+  mockedOpenApiMethod('DELETE').mockImplementation(async (path: string, options: { params?: { path?: Record<string, string> } }) => {
+    const pathParameters = options.params?.path || {}
+    const legacyPath = path.replace('/v1', '').replace('{ledgerId}', pathParameters.ledgerId || '').replace('{voucherId}', pathParameters.voucherId || '')
+    await apiFetch(legacyPath, { localUserId: 'user-1', localUserName: 'admin' }, { method: 'DELETE' })
+    return openApiResult(undefined, 204)
+  })
 })
 
 afterEach(() => {
@@ -308,6 +358,58 @@ describe('VoucherListPage', () => {
 })
 
 describe('VoucherEditorPage', () => {
+  const dimensionAccount = {
+    id: 'account-dimension', ledgerId: 'ledger-1', code: '6602.01', name: '研发费用', category: 'EXPENSE',
+    normalBalance: 'DEBIT', status: 'ACTIVE', parentId: null, level: 2, isLeaf: true, isTemplate: false,
+    hasBusinessUsage: false, coreLocked: false, legacyCode: false, version: 0, cashFlowRequired: false,
+    defaultCashFlowItemId: null, quantityEnabled: false, unitName: null, createdAt: null,
+    dimensionRequirements: [{ dimensionTypeId: 'dimension-department', code: 'DEPARTMENT', name: '部门', required: true }],
+  }
+  const plainAccount = {
+    ...dimensionAccount,
+    id: 'account-plain', code: '1002', name: '银行存款', category: 'CURRENT_ASSET',
+    dimensionRequirements: [],
+  }
+  const mockDimensionEditorApi = () => {
+    vi.mocked(apiFetch).mockImplementation((path, _session, options) => {
+      if (path.endsWith('/periods')) return Promise.resolve([{
+        id: 'period-open', ledgerId: 'ledger-1', periodCode: '2026-08',
+        startDate: '2026-08-01', endDate: '2026-08-31', status: 'OPEN',
+      }])
+      if (path.endsWith('/accounts')) return Promise.resolve([dimensionAccount, plainAccount])
+      if (path.endsWith('/dimension-types')) return Promise.resolve([{
+        id: 'dimension-department', ledgerId: 'ledger-1', code: 'DEPARTMENT', name: '部门', required: true, status: 'ACTIVE',
+      }])
+      if (path.endsWith('/dimension-types/dimension-department/values')) return Promise.resolve([
+        { id: 'department-rd', ledgerId: 'ledger-1', dimensionTypeId: 'dimension-department', code: 'RD', name: '研发部', status: 'ACTIVE' },
+        { id: 'department-old', ledgerId: 'ledger-1', dimensionTypeId: 'dimension-department', code: 'OLD', name: '停用部门', status: 'INACTIVE' },
+      ])
+      if (path.endsWith('/vouchers') && options?.method === 'POST') return Promise.resolve({
+        id: 'voucher-created', ledgerId: 'ledger-1', periodId: 'period-open', voucherDate: '2026-08-14',
+        voucherType: '记', voucherNumber: '1', summary: null, status: 'POSTED', approvalRequired: false, version: 0, lines: [],
+      })
+      return Promise.resolve([])
+    })
+  }
+  const renderDimensionEditor = () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    render(
+      <QueryClientProvider client={queryClient}>
+        <App>
+          <MemoryRouter initialEntries={['/ledgers/ledger-1/vouchers/new']}>
+            <Routes><Route path="/ledgers/:ledgerId/vouchers/:voucherId" element={<VoucherEditorPage />} /></Routes>
+          </MemoryRouter>
+        </App>
+      </QueryClientProvider>,
+    )
+  }
+  const chooseSelectOption = async (label: string, optionName: string) => {
+    fireEvent.mouseDown(screen.getByRole('combobox', { name: label }))
+    await screen.findAllByText(optionName)
+    const openDropdowns = Array.from(document.querySelectorAll<HTMLElement>('.ant-select-dropdown:not(.ant-select-dropdown-hidden)'))
+    fireEvent.click(within(openDropdowns.at(-1)!).getByText(optionName))
+  }
+
   it('leaves the voucher number to the server for a new voucher', async () => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
 
@@ -347,7 +449,7 @@ describe('VoucherEditorPage', () => {
     expect(body).not.toHaveProperty('periodId')
     expect(body.lines).toHaveLength(5)
     expect(body.lines.slice(0, 2).map((line: { accountId?: string }) => line.accountId)).toEqual(['account-1', 'account-2'])
-    expect(body.lines.slice(2).every((line: { accountId?: string; originalAmount: string }) => (
+    expect(body.lines.slice(2).every((line: { accountId?: string; originalAmount?: string }) => (
       line.accountId === undefined && line.originalAmount === ''
     ))).toBe(true)
   })
@@ -425,6 +527,52 @@ describe('VoucherEditorPage', () => {
     expect(dateBelongsToPeriod(period, dayjs('2026-06-01'))).toBe(true)
     expect(dateBelongsToPeriod(period, dayjs('2026-06-30'))).toBe(true)
     expect(dateBelongsToPeriod(period, dayjs('2026-07-01'))).toBe(false)
+  })
+
+  it('renders required dimensions and submits the selected active value', async () => {
+    mockDimensionEditorApi()
+    renderDimensionEditor()
+
+    await chooseSelectOption('第 1 条分录会计科目', '6602.01 研发费用')
+    await chooseSelectOption('第 2 条分录会计科目', '1002 银行存款')
+    expect(await screen.findByRole('combobox', { name: '第 1 条分录部门（必填）' })).toBeInTheDocument()
+    await waitFor(() => expect(mockedOpenApiMethod('POST').mock.calls.filter(
+      ([path]) => path === '/v1/ledgers/{ledgerId}/dimension-values:batch',
+    )).toHaveLength(1))
+    expect(mockedOpenApiMethod('POST')).toHaveBeenCalledWith(
+      '/v1/ledgers/{ledgerId}/dimension-values:batch',
+      expect.objectContaining({ body: { dimensionTypeIds: ['dimension-department'] } }),
+    )
+
+    fireEvent.change(screen.getByLabelText('第 1 条分录借方金额'), { target: { value: '100' } })
+    fireEvent.change(screen.getByLabelText('第 2 条分录贷方金额'), { target: { value: '100' } })
+    fireEvent.click(screen.getByRole('button', { name: '保存并记账' }))
+    expect(await screen.findByText('请选择部门')).toBeInTheDocument()
+    expect(vi.mocked(apiFetch).mock.calls.some(([, , options]) => options?.method === 'POST')).toBe(false)
+
+    await chooseSelectOption('第 1 条分录部门（必填）', 'RD 研发部')
+    fireEvent.click(screen.getByRole('button', { name: '保存并记账' }))
+
+    await waitFor(() => expect(vi.mocked(apiFetch).mock.calls.some(([, , options]) => options?.method === 'POST')).toBe(true))
+    const createCall = vi.mocked(apiFetch).mock.calls.find(([, , options]) => options?.method === 'POST')!
+    expect(JSON.parse(String(createCall[2]?.body)).lines[0].dimensions).toEqual([{
+      dimensionTypeId: 'dimension-department', dimensionValueId: 'department-rd',
+    }])
+  }, 10_000)
+
+  it('clears obsolete dimension values when the account changes', async () => {
+    mockDimensionEditorApi()
+    renderDimensionEditor()
+
+    await chooseSelectOption('第 1 条分录会计科目', '6602.01 研发费用')
+    await chooseSelectOption('第 1 条分录部门（必填）', 'RD 研发部')
+    await chooseSelectOption('第 1 条分录会计科目', '1002 银行存款')
+    await waitFor(() => expect(screen.queryByRole('combobox', { name: '第 1 条分录部门（必填）' })).not.toBeInTheDocument())
+    fireEvent.click(screen.getByRole('button', { name: '保存并记账' }))
+
+    await waitFor(() => expect(vi.mocked(apiFetch).mock.calls.some(([, , options]) => options?.method === 'POST')).toBe(true))
+    const createCall = vi.mocked(apiFetch).mock.calls.find(([, , options]) => options?.method === 'POST')!
+    expect(JSON.parse(String(createCall[2]?.body)).lines[0].dimensions).toEqual([])
   })
 
   it('groups debit and credit amounts into adjacent voucher columns', async () => {

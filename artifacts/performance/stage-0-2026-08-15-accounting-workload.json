@@ -1,0 +1,17 @@
+{
+  "database": "ai-accounting-test",
+  "periods": 20,
+  "vouchersPerPeriod": 500,
+  "targetPeriod": "2026-10",
+  "futurePeriodProjectionChanged": true,
+  "metrics": [
+    {"name": "posted-create-transaction", "samples": 30, "p50Ms": 15, "p95Ms": 17, "p99Ms": 17, "minMs": 12, "maxMs": 17, "meanMs": 14.67},
+    {"name": "posted-create-worker-catch-up", "samples": 30, "p50Ms": 183, "p95Ms": 242, "p99Ms": 328, "minMs": 172, "maxMs": 328, "meanMs": 190.43},
+    {"name": "posted-update-transaction", "samples": 30, "p50Ms": 7, "p95Ms": 14, "p99Ms": 22, "minMs": 5, "maxMs": 22, "meanMs": 7.70},
+    {"name": "posted-update-worker-catch-up", "samples": 30, "p50Ms": 181, "p95Ms": 193, "p99Ms": 301, "minMs": 176, "maxMs": 301, "meanMs": 185.60},
+    {"name": "trial-balance-projection", "samples": 30, "p50Ms": 1, "p95Ms": 6, "p99Ms": 11, "minMs": 1, "maxMs": 11, "meanMs": 2.17},
+    {"name": "trial-balance-with-parents-projection", "samples": 30, "p50Ms": 1, "p95Ms": 2, "p99Ms": 4, "minMs": 1, "maxMs": 4, "meanMs": 1.17},
+    {"name": "general-ledger-book-projection", "samples": 30, "p50Ms": 2, "p95Ms": 3, "p99Ms": 3, "minMs": 1, "maxMs": 3, "meanMs": 2.10},
+    {"name": "sub-ledger-book-projection", "samples": 30, "p50Ms": 10, "p95Ms": 13, "p99Ms": 14, "minMs": 8, "maxMs": 14, "meanMs": 10.27}
+  ]
+}

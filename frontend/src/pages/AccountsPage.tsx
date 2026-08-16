@@ -2,8 +2,7 @@ import { Tabs, Typography } from 'antd'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect } from 'react'
 import { useParams } from 'react-router-dom'
-import { apiFetch } from '../api/client'
-import type { Account, DimensionType, LedgerRole, Period } from '../api/types'
+import { apiData, apiHeaders, openApiClient } from '../api/client'
 import { useAuth } from '../auth/AuthProvider'
 import { useWorkspaceSearchParams } from '../components/workspaceSearch'
 import { AccountsTab, ACCOUNT_CATEGORY_LABELS, type AccountCategoryTab } from './AccountsTab'
@@ -42,22 +41,22 @@ export function AccountsPage() {
   }, [category, search, setSearch])
   const accounts = useQuery({
     queryKey: ['accounts', ledgerId],
-    queryFn: () => apiFetch<Account[]>(`/ledgers/${ledgerId}/accounts`, session!),
+    queryFn: () => apiData(openApiClient.GET('/v1/ledgers/{ledgerId}/accounts', { params: { path: { ledgerId } }, headers: apiHeaders(session!) })),
     enabled: Boolean(session && ledgerId),
   })
   const dimensionTypes = useQuery({
     queryKey: ['dimension-types', ledgerId],
-    queryFn: () => apiFetch<DimensionType[]>(`/ledgers/${ledgerId}/dimension-types`, session!),
+    queryFn: () => apiData(openApiClient.GET('/v1/ledgers/{ledgerId}/dimension-types', { params: { path: { ledgerId } }, headers: apiHeaders(session!) })),
     enabled: Boolean(session && ledgerId),
   })
   const periods = useQuery({
     queryKey: ['periods', ledgerId],
-    queryFn: () => apiFetch<Period[]>(`/ledgers/${ledgerId}/periods`, session!),
+    queryFn: () => apiData(openApiClient.GET('/v1/ledgers/{ledgerId}/periods', { params: { path: { ledgerId } }, headers: apiHeaders(session!) })),
     enabled: Boolean(session && ledgerId),
   })
   const ledgerRole = useQuery({
     queryKey: ['ledger-role', ledgerId],
-    queryFn: () => apiFetch<{ role: LedgerRole }>(`/ledgers/${ledgerId}/role`, session!),
+    queryFn: () => apiData(openApiClient.GET('/v1/ledgers/{ledgerId}/role', { params: { path: { ledgerId } }, headers: apiHeaders(session!) })),
     enabled: Boolean(session && ledgerId),
   })
 

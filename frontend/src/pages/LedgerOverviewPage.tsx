@@ -1,19 +1,18 @@
 import { Alert, Card, Col, Row, Space, Statistic, Tag, Typography } from 'antd'
 import { useQuery } from '@tanstack/react-query'
 import { Link, useParams } from 'react-router-dom'
-import { apiFetch } from '../api/client'
-import type { Account, Ledger, Period, Voucher } from '../api/types'
+import { apiData, apiHeaders, openApiClient } from '../api/client'
 import { useAuth } from '../auth/AuthProvider'
 import { selectDefaultPeriod } from '../components/PeriodSelector'
 
 export function LedgerOverviewPage() {
   const { ledgerId = '' } = useParams()
   const { session } = useAuth()
-  const ledger = useQuery({ queryKey: ['ledger', ledgerId], queryFn: () => apiFetch<Ledger>(`/ledgers/${ledgerId}`, session!), enabled: Boolean(session && ledgerId) })
-  const periods = useQuery({ queryKey: ['periods', ledgerId], queryFn: () => apiFetch<Period[]>(`/ledgers/${ledgerId}/periods`, session!), enabled: Boolean(session && ledgerId) })
-  const accounts = useQuery({ queryKey: ['accounts', ledgerId], queryFn: () => apiFetch<Account[]>(`/ledgers/${ledgerId}/accounts`, session!), enabled: Boolean(session && ledgerId) })
+  const ledger = useQuery({ queryKey: ['ledger', ledgerId], queryFn: () => apiData(openApiClient.GET('/v1/ledgers/{ledgerId}', { params: { path: { ledgerId } }, headers: apiHeaders(session!) })), enabled: Boolean(session && ledgerId) })
+  const periods = useQuery({ queryKey: ['periods', ledgerId], queryFn: () => apiData(openApiClient.GET('/v1/ledgers/{ledgerId}/periods', { params: { path: { ledgerId } }, headers: apiHeaders(session!) })), enabled: Boolean(session && ledgerId) })
+  const accounts = useQuery({ queryKey: ['accounts', ledgerId], queryFn: () => apiData(openApiClient.GET('/v1/ledgers/{ledgerId}/accounts', { params: { path: { ledgerId } }, headers: apiHeaders(session!) })), enabled: Boolean(session && ledgerId) })
   const defaultPeriodCode = selectDefaultPeriod(periods.data || [])
-  const vouchers = useQuery({ queryKey: ['vouchers', ledgerId, 'overview', defaultPeriodCode], queryFn: () => apiFetch<Voucher[]>(`/ledgers/${ledgerId}/vouchers?periodCode=${defaultPeriodCode}&limit=5&offset=0`, session!), enabled: Boolean(session && ledgerId && defaultPeriodCode) })
+  const vouchers = useQuery({ queryKey: ['vouchers', ledgerId, 'overview', defaultPeriodCode], queryFn: () => apiData(openApiClient.GET('/v1/ledgers/{ledgerId}/vouchers', { params: { path: { ledgerId }, query: { periodCode: defaultPeriodCode, limit: 5, offset: 0 } }, headers: apiHeaders(session!) })), enabled: Boolean(session && ledgerId && defaultPeriodCode) })
 
   if (ledger.isError) return <Alert type="error" showIcon message="账套读取失败" description="请检查权限或重试。" />
   return <Space direction="vertical" size={16} style={{ width: '100%' }}>

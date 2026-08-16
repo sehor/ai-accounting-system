@@ -38,6 +38,15 @@ public class PeriodClosingController {
         return service.generate(user(request), ledgerId, periodId, step);
     }
 
+    @PostMapping("/period-closings/{periodId}/steps/{step}:reset")
+    public PeriodClosingResponses.Step reset(HttpServletRequest request,
+                                             @PathVariable UUID ledgerId,
+                                             @PathVariable UUID periodId,
+                                             @PathVariable PeriodClosingStepType step,
+                                             @Valid @RequestBody PeriodClosingRequests.Reset body) {
+        return service.resetStep(user(request), ledgerId, periodId, step, body.reason());
+    }
+
     @GetMapping("/period-closing-settings")
     public PeriodClosingResponses.Settings settings(HttpServletRequest request,
                                                     @PathVariable UUID ledgerId) {

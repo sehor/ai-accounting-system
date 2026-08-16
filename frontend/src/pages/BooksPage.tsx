@@ -1,10 +1,19 @@
-import { Alert, Card, Empty, Input, Pagination, Table, Tree, Typography } from 'antd'
+import { Alert, Card, Empty, Input, Pagination, Select, Space, Table, Tag, Tree, Typography } from 'antd'
 import type { DataNode } from 'antd/es/tree'
 import { useQuery } from '@tanstack/react-query'
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { apiFetch } from '../api/client'
-import type { Account, GeneralLedgerAccount, GeneralLedgerPage, SubLedgerEntry, SubLedgerPage, TrialBalanceLine } from '../api/types'
+import { apiData, apiHeaders, openApiClient } from '../api/client'
+import type { components } from '../api/generated'
+
+type Account = components['schemas']['Account']
+type DimensionLedgerPage = components['schemas']['DimensionLedgerPage']
+type DimensionType = components['schemas']['DimensionType']
+type GeneralLedgerAccount = components['schemas']['GeneralLedgerAccount']
+type GeneralLedgerPage = components['schemas']['GeneralLedgerPage']
+type SubLedgerEntry = components['schemas']['SubLedgerEntry']
+type SubLedgerPage = components['schemas']['SubLedgerPage']
+type TrialBalanceLine = components['schemas']['TrialBalanceLine']
 import { useAuth } from '../auth/AuthProvider'
 import { PeriodRangeSelector, usePeriodRangeFilter } from '../components/PeriodSelector'
 import { useWorkspaceSearchParams } from '../components/workspaceSearch'
@@ -13,6 +22,7 @@ const bookNames: Record<string, string> = {
   'trial-balance': '科目余额表',
   'general-ledger': '总账',
   'sub-ledger': '明细账',
+  'dimension-ledger': '辅助核算账',
 }
 
 const money = (value?: string) => value && Number(value) !== 0
@@ -24,7 +34,172 @@ export function BooksPage() {
   const { bookType = 'trial-balance' } = useParams()
   if (bookType === 'general-ledger') return <GeneralLedgerPageView />
   if (bookType === 'sub-ledger') return <SubLedgerPageView />
+  if (bookType === 'dimension-ledger') return <DimensionLedgerPageView />
   return <TrialBalancePage />
+}
+
+function dimensionLabel(dimensions: DimensionLedgerPage['balances'][number]['dimensions']) {
+  return dimensions.length
+    ? dimensions.map((dimension) => `${dimension.dimensionTypeName}：${dimension.dimensionValueCode} ${dimension.dimensionValueName}`).join(' / ')
+    : '未分配'
+}
+
+function runningNet(debit: string, credit: string) {
+  const net = Number(debit) - Number(credit)
+  if (net === 0) return '0.00'
+  return `${net < 0 ? '贷 ' : '借 '}${Math.abs(net).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+}
+
+function DimensionLedgerPageView() {
+  const { ledgerId = '' } = useParams()
+  const { session } = useAuth()
+  const [search, setSearch] = useWorkspaceSearchParams()
+  const { periodFrom, periodTo } = usePeriodRangeFilter(ledgerId)
+  const page = Number(search.get('page') || 1)
+  const accountId = search.get('accountId') || undefined
+  const [currency, setCurrency] = useState<string>()
+  const [dimensionValues, setDimensionValues] = useState<Record<string, string | undefined>>({})
+  const [groupTypeIds, setGroupTypeIds] = useState<string[]>([])
+  const accounts = useQuery({
+    queryKey: ['accounts', ledgerId],
+    queryFn: () => apiData(openApiClient.GET('/v1/ledgers/{ledgerId}/accounts', { params: { path: { ledgerId } }, headers: apiHeaders(session!) })),
+    enabled: Boolean(session && ledgerId),
+  })
+  const types = useQuery({
+    queryKey: ['dimension-types', ledgerId],
+    queryFn: () => apiData(openApiClient.GET('/v1/ledgers/{ledgerId}/dimension-types', { params: { path: { ledgerId } }, headers: apiHeaders(session!) })),
+    enabled: Boolean(session && ledgerId),
+  })
+  const firstLeaf = accounts.data?.find((account) => account.status === 'ACTIVE' && account.isLeaf)?.id
+  useEffect(() => {
+    if (accountId || !firstLeaf) return
+    const next = new URLSearchParams(search)
+    next.set('accountId', firstLeaf)
+    setSearch(next, { replace: true })
+  }, [accountId, firstLeaf, search, setSearch])
+  const account = accounts.data?.find((candidate) => candidate.id === accountId)
+  const requirements = account?.dimensionRequirements || []
+  const dimensionTypeIds = useMemo(
+    () => [...new Set(requirements.map((requirement) => requirement.dimensionTypeId))].sort(),
+    [requirements],
+  )
+  const values = useQuery({
+    queryKey: ['dimension-values', ledgerId, dimensionTypeIds],
+    queryFn: () => apiData(openApiClient.POST('/v1/ledgers/{ledgerId}/dimension-values:batch', {
+      params: { path: { ledgerId } }, headers: apiHeaders(session!), body: { dimensionTypeIds },
+    })),
+    enabled: Boolean(session && ledgerId && accountId && dimensionTypeIds.length),
+  })
+  const valuesByType = useMemo(
+    () => new Map((values.data?.groups || []).map((group) => [group.dimensionTypeId, group.values])),
+    [values.data],
+  )
+  useEffect(() => {
+    setDimensionValues({})
+    setGroupTypeIds([])
+  }, [accountId])
+  const selectedDimensions = requirements.flatMap((requirement) => {
+    const valueId = dimensionValues[requirement.dimensionTypeId]
+    return valueId ? [{ dimensionTypeId: requirement.dimensionTypeId, dimensionValueId: valueId }] : []
+  })
+  const query = useQuery({
+    queryKey: ['book', ledgerId, 'dimension-ledger', periodFrom, periodTo, accountId, currency,
+      selectedDimensions, groupTypeIds, page],
+    queryFn: () => apiData(openApiClient.POST('/v1/ledgers/{ledgerId}/books/dimension-ledger:query', {
+      params: { path: { ledgerId } }, headers: apiHeaders(session!), body: {
+        periodFrom: periodFrom!, periodTo: periodTo!, accountId: accountId!, currency: currency || undefined,
+        dimensionValues: selectedDimensions, groupDimensionTypeIds: groupTypeIds, page, pageSize: 50,
+      },
+    })),
+    enabled: Boolean(session && ledgerId && periodFrom && periodTo && accountId && account?.isLeaf),
+  })
+  const updateAccount = (value: string) => {
+    const next = new URLSearchParams(search)
+    next.set('accountId', value)
+    next.delete('page')
+    setSearch(next)
+  }
+  const updatePage = (nextPage: number) => {
+    const next = new URLSearchParams(search)
+    next.set('page', String(nextPage))
+    setSearch(next)
+  }
+  return <section className="financial-page">
+    <BookToolbar title={bookNames['dimension-ledger']} refreshing={query.isFetching} onRefresh={() => void query.refetch()} />
+    <Card className="financial-grid-card" style={{ marginBottom: 16 }}>
+      <Space wrap align="start">
+        <Select
+          aria-label="辅助账科目" showSearch optionFilterProp="label" style={{ minWidth: 260 }}
+          value={accountId} placeholder="选择叶子科目" loading={accounts.isLoading}
+          options={(accounts.data || []).filter((item) => item.isLeaf).map((item) => ({
+            value: item.id, label: `${item.code} ${item.name}${item.status === 'INACTIVE' ? '（停用）' : ''}`,
+          }))}
+          onChange={updateAccount}
+        />
+        <Select aria-label="辅助账币种" allowClear style={{ width: 130 }} value={currency}
+          placeholder="全部币种" options={['CNY', 'USD', 'EUR', 'HKD', 'JPY'].map((value) => ({ value, label: value }))}
+          onChange={(value) => { setCurrency(value); updatePage(1) }} />
+        {requirements.map((requirement, index) => <Select
+          key={requirement.dimensionTypeId} aria-label={`筛选${requirement.name}`} allowClear showSearch
+          optionFilterProp="label" style={{ minWidth: 180 }} placeholder={`全部${requirement.name}`}
+          value={dimensionValues[requirement.dimensionTypeId]}
+          loading={values.isLoading}
+          options={(valuesByType.get(requirement.dimensionTypeId) || []).map((value) => ({
+            value: value.id, label: `${value.code} ${value.name}${value.status === 'INACTIVE' ? '（停用）' : ''}`,
+          }))}
+          onChange={(value) => {
+            setDimensionValues((current) => ({ ...current, [requirement.dimensionTypeId]: value }))
+            updatePage(1)
+          }}
+        />)}
+        <Select aria-label="辅助账分组维度" mode="multiple" allowClear style={{ minWidth: 220 }}
+          placeholder="选择分组维度" value={groupTypeIds}
+          options={(types.data || []).filter((type) => requirements.some(
+            (requirement) => requirement.dimensionTypeId === type.id,
+          )).map((type) => ({ value: type.id, label: type.name }))}
+          onChange={(values) => { setGroupTypeIds(values.slice(0, 4)); updatePage(1) }} />
+      </Space>
+    </Card>
+    {query.isError && <Alert type="error" showIcon message="辅助核算账读取失败" />}
+    {query.data?.warnings.includes('LEGACY_UNMAPPED') && <Alert type="warning" showIcon
+      message="存在尚未映射的历史维度键" description="历史金额已保留，但需完成结构化映射后才能按维度筛选。" />}
+    <Card title="维度余额" className="financial-grid-card" style={{ marginBottom: 16 }}><Table
+      rowKey={(row) => `${row.combinationId}-${row.currency}`} size="small" pagination={false}
+      loading={query.isLoading} dataSource={query.data?.balances || []}
+      locale={{ emptyText: <Empty description="当前条件暂无维度余额" /> }} scroll={{ x: 1250 }}
+      columns={[
+        { title: '辅助核算', width: 320, render: (_, row) => <Space wrap>{row.groupKey && <Tag>{row.groupKey}</Tag>}<span>{dimensionLabel(row.dimensions)}</span>{row.combinationKind === 'LEGACY_UNMAPPED' && <Tag color="warning">历史未映射</Tag>}</Space> },
+        { title: '币种', dataIndex: 'currency', width: 80 },
+        { title: '原币期初借', width: 130, align: 'right', render: (_, row) => money(row.original.openingDebit) },
+        { title: '原币期初贷', width: 130, align: 'right', render: (_, row) => money(row.original.openingCredit) },
+        { title: '原币发生借', width: 130, align: 'right', render: (_, row) => money(row.original.periodDebit) },
+        { title: '原币发生贷', width: 130, align: 'right', render: (_, row) => money(row.original.periodCredit) },
+        { title: '本位币期末借', width: 140, align: 'right', render: (_, row) => money(row.base.closingDebit) },
+        { title: '本位币期末贷', width: 140, align: 'right', render: (_, row) => money(row.base.closingCredit) },
+      ]} />
+    </Card>
+    <Card title="可追溯明细" className="financial-grid-card"><Table
+      rowKey="lineId" size="small" pagination={false} loading={query.isLoading}
+      dataSource={query.data?.entries || []} locale={{ emptyText: <Empty description="当前条件暂无已记账明细" /> }}
+      scroll={{ x: 1450 }} columns={[
+        { title: '日期', dataIndex: 'voucherDate', width: 110 },
+        { title: '凭证字号', width: 130, render: (_, row) => <Link to={`/ledgers/${ledgerId}/vouchers/${row.voucherId}`}>{row.voucherNumber}</Link> },
+        { title: '行号', dataIndex: 'lineNo', width: 70 },
+        { title: '辅助核算', width: 330, render: (_, row) => <Space wrap>{row.groupKey && <Tag>{row.groupKey}</Tag>}<span>{dimensionLabel(row.dimensions)}</span>{row.combinationKind === 'LEGACY_UNMAPPED' && <Tag color="warning">历史未映射</Tag>}</Space> },
+        { title: '币种', dataIndex: 'currency', width: 75 },
+        { title: '原币借方', dataIndex: 'originalDebit', width: 120, align: 'right', render: money },
+        { title: '原币贷方', dataIndex: 'originalCredit', width: 120, align: 'right', render: money },
+        { title: '原币运行余额', width: 150, align: 'right', render: (_, row) => runningNet(row.runningOriginalDebit, row.runningOriginalCredit) },
+        { title: '本位币借方', dataIndex: 'baseDebit', width: 120, align: 'right', render: money },
+        { title: '本位币贷方', dataIndex: 'baseCredit', width: 120, align: 'right', render: money },
+        { title: '本位币运行余额', width: 160, align: 'right', render: (_, row) => runningNet(row.runningBaseDebit, row.runningBaseCredit) },
+      ]} />
+      {(query.data?.pagination.totalItems || 0) > 50 && <div className="financial-pagination"><Pagination
+        current={page} pageSize={50} total={query.data?.pagination.totalItems || 0} showSizeChanger={false}
+        showTotal={(total) => `共 ${total} 条明细`} onChange={updatePage}
+      /></div>}
+    </Card>
+  </section>
 }
 
 function BookToolbar({ title, refreshing, onRefresh }: { title: string; refreshing: boolean; onRefresh: () => void }) {
@@ -50,9 +225,9 @@ function TrialBalancePage() {
   const { periodFrom, periodTo } = usePeriodRangeFilter(ledgerId)
   const query = useQuery({
     queryKey: ['report', ledgerId, 'trial-balance', periodFrom, periodTo],
-    queryFn: () => apiFetch<TrialBalanceLine[]>(
-      `/ledgers/${ledgerId}/reports/trial-balance?periodFrom=${periodFrom}&periodTo=${periodTo}`, session!,
-    ),
+    queryFn: () => apiData(openApiClient.GET('/v1/ledgers/{ledgerId}/reports/trial-balance', {
+      params: { path: { ledgerId }, query: { periodFrom: periodFrom!, periodTo: periodTo! } }, headers: apiHeaders(session!),
+    })),
     enabled: Boolean(session && ledgerId && periodFrom && periodTo),
   })
   return <section className="financial-page">
@@ -85,9 +260,9 @@ function GeneralLedgerPageView() {
   const page = Number(search.get('page') || 1)
   const query = useQuery({
     queryKey: ['book', ledgerId, 'general-ledger', periodFrom, periodTo, page],
-    queryFn: () => apiFetch<GeneralLedgerPage>(
-      `/ledgers/${ledgerId}/books/general-ledger?periodFrom=${periodFrom}&periodTo=${periodTo}&page=${page}&pageSize=50`, session!,
-    ),
+    queryFn: () => apiData(openApiClient.GET('/v1/ledgers/{ledgerId}/books/general-ledger', {
+      params: { path: { ledgerId }, query: { periodFrom: periodFrom!, periodTo: periodTo!, page, pageSize: 50 } }, headers: apiHeaders(session!),
+    })),
     enabled: Boolean(session && ledgerId && periodFrom && periodTo),
   })
   const rows = useMemo(() => (query.data?.data || []).flatMap((account) => [
@@ -170,7 +345,7 @@ function SubLedgerPageView() {
   const [expandedKeys, setExpandedKeys] = useState<string[]>([])
   const accounts = useQuery({
     queryKey: ['accounts', ledgerId],
-    queryFn: () => apiFetch<Account[]>(`/ledgers/${ledgerId}/accounts`, session!),
+    queryFn: () => apiData(openApiClient.GET('/v1/ledgers/{ledgerId}/accounts', { params: { path: { ledgerId } }, headers: apiHeaders(session!) })),
     enabled: Boolean(session && ledgerId),
   })
   const firstAsset = accounts.data?.find((account) =>
@@ -187,9 +362,9 @@ function SubLedgerPageView() {
   useEffect(() => setExpandedKeys([]), [ledgerId])
   const query = useQuery({
     queryKey: ['book', ledgerId, 'sub-ledger', periodFrom, periodTo, accountId, page],
-    queryFn: () => apiFetch<SubLedgerPage>(
-      `/ledgers/${ledgerId}/books/sub-ledger?periodFrom=${periodFrom}&periodTo=${periodTo}&accountId=${accountId}&page=${page}&pageSize=50`, session!,
-    ),
+    queryFn: () => apiData(openApiClient.GET('/v1/ledgers/{ledgerId}/books/sub-ledger', {
+      params: { path: { ledgerId }, query: { periodFrom: periodFrom!, periodTo: periodTo!, accountId: accountId!, page, pageSize: 50 } }, headers: apiHeaders(session!),
+    })),
     enabled: Boolean(session && ledgerId && periodFrom && periodTo && accountId),
   })
   const tree = useMemo(() => filterTree(accountTree(accounts.data || []), keyword), [accounts.data, keyword])

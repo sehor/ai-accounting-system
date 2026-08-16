@@ -2,8 +2,7 @@ import { Alert, Button, Card, Form, Input, Space, Typography } from 'antd'
 import { LoginOutlined } from '@ant-design/icons'
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { ApiError, apiFetch } from '../api/client'
-import type { User } from '../api/types'
+import { ApiError, apiData, apiHeaders, openApiClient } from '../api/client'
 import { createLocalSession, isLocalAuthEnabled, isOidcConfigured, startOidcLogin } from '../auth/session'
 import { useAuth } from '../auth/AuthProvider'
 
@@ -19,7 +18,7 @@ export function LoginPage() {
     setSubmitting(true)
     const session = createLocalSession(username)
     try {
-      const user = await apiFetch<User>('/me', session)
+      const user = await apiData(openApiClient.GET('/v1/me', { headers: apiHeaders(session) }))
       signIn({ ...session, localUserId: user.id })
       navigate('/ledgers', { replace: true })
     } catch (cause) {

@@ -3,8 +3,8 @@ import type { TableProps } from 'antd'
 import { useQuery } from '@tanstack/react-query'
 import { useParams } from 'react-router-dom'
 import { useState } from 'react'
-import { apiFetch, apiFetchWithHeaders, ApiError } from '../api/client'
-import type { Ledger, Statement, StatutoryLine, StatutoryStatement, TrialBalanceLine } from '../api/types'
+import { apiHeaders, apiResponse, openApiClient, ApiError } from '../api/client'
+import type { components } from '../api/generated'
 import { useAuth } from '../auth/AuthProvider'
 import { PeriodRangeSelector, PeriodSelector, usePeriodFilter, usePeriodRangeFilter } from '../components/PeriodSelector'
 import { useWorkspaceSearchParams } from '../components/workspaceSearch'
@@ -14,6 +14,11 @@ const reportNames: Record<string, string> = {
   'balance-sheet': '资产负债表',
   'income-statement': '利润表',
 }
+
+type Statement = components['schemas']['AccountStatement']
+type StatutoryLine = components['schemas']['StatutoryStatementLine']
+type StatutoryStatement = components['schemas']['StatutoryStatement']
+type TrialBalanceLine = components['schemas']['TrialBalanceLine']
 
 export function reportRowKey(row: TrialBalanceLine | { code: string } | { voucherId: string }, index = 0): string {
   if ('accountId' in row) return row.accountId
@@ -80,27 +85,34 @@ export function ReportsPage() {
   const statement = reportType === 'balance-sheet' || reportType === 'income-statement'
   const ledger = useQuery({
     queryKey: ['ledger-profile', ledgerId],
-    queryFn: () => apiFetch<Ledger>(`/ledgers/${ledgerId}`, session!),
+    queryFn: async () => (await apiResponse(openApiClient.GET('/v1/ledgers/{ledgerId}', { params: { path: { ledgerId } }, headers: apiHeaders(session!) }))).data,
     enabled: Boolean(session && ledgerId),
   })
   const statutory = ledger.isSuccess && statement && ledger.data?.accountingStandardCode?.toUpperCase() === 'SME'
   const legacyReport = ledger.isSuccess && !statutory
   const { periods: rangePeriods, periodFrom, periodTo, setPeriodRange } = usePeriodRangeFilter(ledgerId, legacyReport)
   const { periods: singlePeriods, periodCode, setPeriodCode } = usePeriodFilter(ledgerId, statutory)
-  const reportParams = new URLSearchParams()
-  if (statutory && periodCode) reportParams.set('periodCode', periodCode)
-  if (!statutory && periodFrom) reportParams.set('periodFrom', periodFrom)
-  if (!statutory && periodTo) reportParams.set('periodTo', periodTo)
-  if (!statutory && reportType === 'trial-balance' && includeParents) reportParams.set('includeParents', 'true')
   const query = useQuery({
     queryKey: ['report', ledgerId, reportType, statutory, periodCode, periodFrom, periodTo, includeParents],
     queryFn: async () => {
-      const path = statutory
-        ? `/ledgers/${ledgerId}/reports/statutory/${reportType}?${reportParams}`
-        : `/ledgers/${ledgerId}/reports/${reportType}?${reportParams}`
-      const response = await apiFetchWithHeaders<TrialBalanceLine[] | Statement | StatutoryStatement>(path, session!)
-      setBalanceSource(response.headers.get('X-Balance-Source'))
-      return response.data
+      const options = { headers: apiHeaders(session!) }
+      const result = statutory
+        ? await apiResponse(openApiClient.GET('/v1/ledgers/{ledgerId}/reports/statutory/{reportType}', {
+            ...options, params: { path: { ledgerId, reportType }, query: { periodCode: periodCode! } },
+          }))
+        : reportType === 'trial-balance'
+          ? await apiResponse(openApiClient.GET('/v1/ledgers/{ledgerId}/reports/trial-balance', {
+              ...options, params: { path: { ledgerId }, query: { periodFrom: periodFrom!, periodTo: periodTo!, includeParents } },
+            }))
+          : reportType === 'balance-sheet'
+            ? await apiResponse(openApiClient.GET('/v1/ledgers/{ledgerId}/reports/balance-sheet', {
+                ...options, params: { path: { ledgerId }, query: { periodFrom: periodFrom!, periodTo: periodTo! } },
+              }))
+            : await apiResponse(openApiClient.GET('/v1/ledgers/{ledgerId}/reports/income-statement', {
+                ...options, params: { path: { ledgerId }, query: { periodFrom: periodFrom!, periodTo: periodTo! } },
+              }))
+      setBalanceSource(result.response.headers.get('X-Balance-Source'))
+      return result.data
     },
     enabled: Boolean(session && ledgerId && reportNames[reportType] && ledger.isSuccess
       && (statutory ? periodCode : periodFrom && periodTo)),

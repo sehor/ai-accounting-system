@@ -1,0 +1,1 @@
+{"runs":5,"metric":"applyPendingBatchDetailed transaction duration proxy, not database lock wait","legacyP50Ms":17,"legacyP95Ms":26,"batchP50Ms":7,"batchP95Ms":16}

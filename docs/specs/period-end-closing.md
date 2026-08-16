@@ -77,7 +77,7 @@
 
 新增 `periodclosing` 模块及服务：
 
-- `GET /v1/ledgers/{ledgerId}/period-closings/{periodId}`：返回步骤状态、金额、凭证 ID、阻塞原因、试算平衡结果和 `canClose`；
+- `GET /v1/ledgers/{ledgerId}/period-closings/{periodId}`：纯读返回步骤状态、金额、凭证 ID、阻塞原因、试算平衡结果和 `canClose`，不得执行 `INSERT`、`UPDATE` 或其他数据库写入；缺失步骤在响应中计算为 `PENDING`，`STALE`、`BLOCKED` 等临时状态也只在读取时计算；
 - `POST /v1/ledgers/{ledgerId}/period-closings/{periodId}/steps/{step}:generate`：按用户点击生成指定步骤，`step` 取值：
   - `DEPRECIATION`
   - `EXPENSE_TRANSFER`
@@ -89,7 +89,7 @@
 生成接口要求：
 
 - 校验账套角色、期间状态、期间顺序和科目配置；
-- 生成后立即记账，沿用 `VoucherService.createGenerated/replaceGenerated`；
+- 生成后立即记账，沿用 `VoucherService.createGenerated/replaceGenerated`；生成凭证归 `periodclosing` 来源模块所有，通用凭证修改、恢复和删除入口不得处理；
 - 重复点击幂等；
 - 输入指纹不一致时更新原生成凭证，而不是新建重复凭证；
 - 辅助核算必填但无法提供明细时返回结构化阻塞错误；

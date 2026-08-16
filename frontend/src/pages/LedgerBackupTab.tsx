@@ -2,8 +2,11 @@ import { DownloadOutlined, UploadOutlined } from '@ant-design/icons'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Alert, Button, Card, Form, Input, Space, Typography, Upload, message } from 'antd'
 import { useState } from 'react'
-import { ApiError, apiFetch, type ApiAuth } from '../api/client'
-import type { Ledger, LedgerRole } from '../api/types'
+import { ApiError, apiData, apiHeaders, openApiClient, type ApiAuth } from '../api/client'
+import type { components } from '../api/generated'
+
+type Ledger = components['schemas']['LedgerResponse']
+type LedgerRole = components['schemas']['Member']['role']
 
 const MAX_BACKUP_BYTES = 100 * 1024 * 1024
 
@@ -25,7 +28,7 @@ export function LedgerBackupTab({ ledgerId, session, role, onRestored }: {
   const [form] = Form.useForm<{ name?: string }>()
 
   const download = useMutation({
-    mutationFn: () => apiFetch<Blob>(`/ledgers/${ledgerId}/backup`, session),
+    mutationFn: () => apiData(openApiClient.GET('/v1/ledgers/{ledgerId}/backup', { params: { path: { ledgerId } }, headers: apiHeaders(session), parseAs: 'blob' })),
     onSuccess: (blob) => {
       const url = URL.createObjectURL(blob)
       const anchor = document.createElement('a')
@@ -43,7 +46,9 @@ export function LedgerBackupTab({ ledgerId, session, role, onRestored }: {
       const body = new FormData()
       body.append('file', archive)
       if (name?.trim()) body.append('name', name.trim())
-      return apiFetch<Ledger>('/ledger-restores', session, { method: 'POST', body })
+      return apiData(openApiClient.POST('/v1/ledger-restores', {
+        headers: apiHeaders(session), body: { file: archive as unknown as string, name: name?.trim() || undefined }, bodySerializer: () => body,
+      }))
     },
     onSuccess: (ledger) => {
       messageApi.success('账套恢复完成')

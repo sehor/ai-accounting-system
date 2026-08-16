@@ -48,6 +48,12 @@ public class DefaultBalanceProjectionService implements BalanceProjectionService
     }
 
     @Override
+    @Transactional
+    public void markFinalized(UUID ledgerId, UUID periodId) {
+        call(() -> repository.markFinalized(ledgerId, periodId));
+    }
+
+    @Override
     public ProjectionStatus status(UUID ledgerId, String periodCode) {
         return repository.status(ledgerId, periodCode);
     }

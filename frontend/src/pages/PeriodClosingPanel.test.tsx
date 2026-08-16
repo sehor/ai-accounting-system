@@ -1,13 +1,29 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { App, message } from 'antd'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { afterEach, describe, expect, it, vi } from 'vitest'
-import { apiFetch } from '../api/client'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { apiFetch, openApiClient } from '../api/client'
 import { PeriodClosingPanel } from './PeriodClosingPanel'
 
 vi.mock('../api/client', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../api/client')>()
-  return { ...actual, apiFetch: vi.fn() }
+  return { ...actual, apiFetch: vi.fn(), openApiClient: { GET: vi.fn(), POST: vi.fn(), PATCH: vi.fn() } }
+})
+
+const openResult = async (data: unknown) => ({ data: await data, response: new Response(null, { status: 200 }) })
+const getMock = openApiClient.GET as unknown as ReturnType<typeof vi.fn>
+const postMock = openApiClient.POST as unknown as ReturnType<typeof vi.fn>
+
+beforeEach(() => {
+  getMock.mockImplementation((path: string, options: { params: { path: { periodId?: string } } }) => {
+    const legacyPath = path.endsWith('/period-closing-settings')
+      ? '/ledgers/ledger-1/period-closing-settings'
+      : `/ledgers/ledger-1/period-closings/${options.params.path.periodId}`
+    return openResult(apiFetch(legacyPath, { localUserId: 'user-1' })) as never
+  })
+  postMock.mockImplementation((_path: string, options: { params: { path: { periodId: string; step: string } } }) => (
+    openResult(apiFetch(`/ledgers/ledger-1/period-closings/${options.params.path.periodId}/steps/${options.params.path.step}:generate`, { localUserId: 'user-1' }, { method: 'POST' })) as never
+  ))
 })
 
 const period = { id: 'period-1', ledgerId: 'ledger-1', periodCode: '2026-08', startDate: '2026-08-01', endDate: '2026-08-31', status: 'OPEN' as const }

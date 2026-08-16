@@ -6,6 +6,7 @@ import com.example.accounting.shared.web.ApiProblemException;
 import com.example.accounting.voucher.VoucherRequests;
 import com.example.accounting.voucher.VoucherResponses;
 import com.example.accounting.voucher.VoucherService;
+import io.swagger.v3.oas.annotations.media.Schema;
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.math.BigDecimal;
@@ -694,6 +695,7 @@ public class KingdeeExchange {
         return new ApiProblemException(status, code, title, detail, false);
     }
 
+    @Schema(name = "KingdeeImportResult", requiredProperties = {"voucherCount", "rowCount"})
     public record ImportResult(int voucherCount, int rowCount) {
     }
 

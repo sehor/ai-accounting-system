@@ -3,16 +3,19 @@ package com.example.accounting.reporting;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.example.accounting.identity.CurrentUserResolver;
 import java.math.BigDecimal;
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import org.springframework.http.MediaType;
 
 class BookControllerTest {
 
@@ -46,5 +49,32 @@ class BookControllerTest {
 
         verify(reportingService).generalLedgerBook(userId, ledgerId, "2026-06", 1, 50);
         verify(reportingService).subLedgerBook(userId, ledgerId, "2026-06", accountId, 1, 50);
+    }
+
+    @Test
+    void exposesDimensionLedgerContractAndProjectionMetadata() throws Exception {
+        UUID userId = UUID.randomUUID();
+        UUID ledgerId = UUID.randomUUID();
+        UUID accountId = UUID.randomUUID();
+        ReportResponses.DimensionLedgerPage page = new ReportResponses.DimensionLedgerPage("READY", List.of(),
+                List.of(), List.of(), new ReportResponses.Pagination(1, 50, 0, 0));
+        when(reportingService.dimensionLedger(org.mockito.ArgumentMatchers.eq(userId),
+                org.mockito.ArgumentMatchers.eq(ledgerId), org.mockito.ArgumentMatchers.any()))
+                .thenAnswer(ignored -> {
+                    BalanceReadMetadata.set("projection", OffsetDateTime.parse("2026-01-31T00:00:00Z"), 0);
+                    return page;
+                });
+
+        mockMvc.perform(post("/v1/ledgers/{ledgerId}/books/dimension-ledger:query", ledgerId)
+                        .header("X-User-Id", userId).contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"periodFrom":"2026-01","periodTo":"2026-01",
+                                 "accountId":"%s"}
+                                """.formatted(accountId)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.projectionStatus").value("READY"))
+                .andExpect(jsonPath("$.balances").isArray())
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers
+                        .header().string("X-Balance-Source", "projection"));
     }
 }

@@ -3,12 +3,15 @@ import { useQuery } from '@tanstack/react-query'
 import { Button, Select, Space, Typography } from 'antd'
 import dayjs from 'dayjs'
 import { useEffect, useMemo } from 'react'
-import { apiFetch } from '../api/client'
-import type { Period } from '../api/types'
+import { apiData, apiHeaders, openApiClient } from '../api/client'
+import type { components } from '../api/generated'
 import { useAuth } from '../auth/AuthProvider'
 import { useWorkspaceSearchParams } from './workspaceSearch'
 
-export function selectDefaultPeriod(periods: Period[], currentMonth = dayjs().format('YYYY-MM')): string | undefined {
+type Period = components['schemas']['Period']
+export type PeriodOption = Omit<Period, 'hasVouchers'> & { hasVouchers?: boolean }
+
+export function selectDefaultPeriod(periods: PeriodOption[], currentMonth = dayjs().format('YYYY-MM')): string | undefined {
   const withVouchers = periods.filter((period) => period.hasVouchers)
   return withVouchers.at(-1)?.periodCode
     || periods.find((period) => period.periodCode === currentMonth)?.periodCode
@@ -20,7 +23,7 @@ export function usePeriodFilter(ledgerId: string, active = true) {
   const [search, setSearch] = useWorkspaceSearchParams()
   const periods = useQuery({
     queryKey: ['periods', ledgerId],
-    queryFn: () => apiFetch<Period[]>(`/ledgers/${ledgerId}/periods`, session!),
+    queryFn: () => apiData(openApiClient.GET('/v1/ledgers/{ledgerId}/periods', { headers: apiHeaders(session!), params: { path: { ledgerId } } })),
     enabled: Boolean(active && session && ledgerId),
   })
   const requested = search.get('periodCode') || undefined
@@ -58,7 +61,7 @@ export function usePeriodRangeFilter(ledgerId: string, active = true) {
   const [search, setSearch] = useWorkspaceSearchParams()
   const periods = useQuery({
     queryKey: ['periods', ledgerId],
-    queryFn: () => apiFetch<Period[]>(`/ledgers/${ledgerId}/periods`, session!),
+    queryFn: () => apiData(openApiClient.GET('/v1/ledgers/{ledgerId}/periods', { headers: apiHeaders(session!), params: { path: { ledgerId } } })),
     enabled: Boolean(active && session && ledgerId),
   })
   const codes = useMemo(() => (periods.data || []).map((period) => period.periodCode), [periods.data])
@@ -99,7 +102,7 @@ export function PeriodRangeSelector({
 }: {
   periodFrom?: string
   periodTo?: string
-  periods: Period[]
+  periods: PeriodOption[]
   loading?: boolean
   refreshing?: boolean
   onChange: (periodFrom: string, periodTo: string) => void
@@ -127,7 +130,7 @@ export function PeriodSelector({
 }: {
   label?: string
   periodCode?: string
-  periods: Period[]
+  periods: PeriodOption[]
   loading?: boolean
   refreshing?: boolean
   onChange: (periodCode: string) => void

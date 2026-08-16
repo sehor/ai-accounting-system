@@ -187,6 +187,86 @@ public class JdbcPeriodClosingRepository implements PeriodClosingRepository {
                 """, Boolean.class, ledgerId, accountId));
     }
 
+    @Override
+    public Optional<StepRecord> stepForUpdate(UUID ledgerId, UUID periodId, PeriodClosingStepType type) {
+        return Optional.ofNullable(jdbc.query("""
+                select id, ledger_id, period_id, step_type, status, amount, input_fingerprint,
+                    voucher_id, blocker_code, blocker_detail, updated_at
+                from period_closing_step where ledger_id = ? and period_id = ? and step_type = ?
+                for update
+                """, rs -> rs.next() ? mapStep(rs) : null, ledgerId, periodId, type.name()));
+    }
+
+    @Override
+    public StepRecord ensureStep(UUID id, UUID ledgerId, UUID periodId, PeriodClosingStepType type) {
+        jdbc.update("""
+                insert into period_closing_step (id, ledger_id, period_id, step_type, status, amount)
+                values (?, ?, ?, ?, 'PENDING', 0)
+                on conflict (ledger_id, period_id, step_type) do nothing
+                """, id, ledgerId, periodId, type.name());
+        return stepForUpdate(ledgerId, periodId, type).orElseThrow();
+    }
+
+    @Override
+    public String baseCurrency(UUID ledgerId) {
+        return jdbc.queryForObject("select base_currency from ledger where id = ?", String.class, ledgerId);
+    }
+
+    @Override
+    public TrialBalanceAmounts trialBalanceAmounts(UUID ledgerId, String periodCode) {
+        return jdbc.queryForObject("""
+                with opening_amounts as (
+                    select coalesce(sum(ob.debit_base), 0) opening_debit,
+                        coalesce(sum(ob.credit_base), 0) opening_credit
+                    from opening_balance ob
+                    join ledger_account a on a.ledger_id = ob.ledger_id and a.id = ob.account_id
+                    where ob.ledger_id = ? and ob.confirmed
+                      and not exists (select 1 from ledger_account child
+                                      where child.ledger_id = a.ledger_id and child.parent_id = a.id)
+                ), prior_voucher_amounts as (
+                    select coalesce(sum(case when vl.side = 'DEBIT' then vl.base_amount else 0 end), 0) debit,
+                        coalesce(sum(case when vl.side = 'CREDIT' then vl.base_amount else 0 end), 0) credit
+                    from voucher_line vl
+                    join voucher v on v.ledger_id = vl.ledger_id and v.id = vl.voucher_id
+                    join accounting_period p on p.ledger_id = v.ledger_id and p.id = v.period_id
+                    join ledger_account a on a.ledger_id = vl.ledger_id and a.id = vl.account_id
+                    where v.ledger_id = ? and v.status = 'POSTED' and v.deleted_at is null
+                      and p.period_code < ?
+                      and not exists (select 1 from ledger_account child
+                                      where child.ledger_id = a.ledger_id and child.parent_id = a.id)
+                ), period_voucher_amounts as (
+                    select coalesce(sum(case when vl.side = 'DEBIT' then vl.base_amount else 0 end), 0) debit,
+                        coalesce(sum(case when vl.side = 'CREDIT' then vl.base_amount else 0 end), 0) credit
+                    from voucher_line vl
+                    join voucher v on v.ledger_id = vl.ledger_id and v.id = vl.voucher_id
+                    join accounting_period p on p.ledger_id = v.ledger_id and p.id = v.period_id
+                    join ledger_account a on a.ledger_id = vl.ledger_id and a.id = vl.account_id
+                    where v.ledger_id = ? and v.status = 'POSTED' and v.deleted_at is null
+                      and p.period_code = ?
+                      and not exists (select 1 from ledger_account child
+                                      where child.ledger_id = a.ledger_id and child.parent_id = a.id)
+                )
+                select opening_amounts.opening_debit + prior_voucher_amounts.debit opening_debit,
+                    opening_amounts.opening_credit + prior_voucher_amounts.credit opening_credit,
+                    period_voucher_amounts.debit period_debit,
+                    period_voucher_amounts.credit period_credit
+                from opening_amounts, prior_voucher_amounts, period_voucher_amounts
+                """, (rs, rowNum) -> new TrialBalanceAmounts(
+                rs.getBigDecimal("opening_debit"), rs.getBigDecimal("opening_credit"),
+                rs.getBigDecimal("period_debit"), rs.getBigDecimal("period_credit")),
+                ledgerId, ledgerId, periodCode, ledgerId, periodCode);
+    }
+
+    @Override
+    public Optional<UUID> depreciationRunId(UUID ledgerId, UUID periodId, UUID voucherId) {
+        return Optional.ofNullable(jdbc.query("""
+                select id from fixed_asset_depreciation_run
+                where ledger_id = ? and period_id = ? and voucher_id = ?
+                  and run_type = 'MONTH_END' and status = 'POSTED'
+                """, rs -> rs.next() ? rs.getObject("id", UUID.class) : null,
+                ledgerId, periodId, voucherId));
+    }
+
     private StepRecord mapStep(java.sql.ResultSet rs) throws java.sql.SQLException {
         return new StepRecord(rs.getObject("id", UUID.class), rs.getObject("ledger_id", UUID.class),
                 rs.getObject("period_id", UUID.class), PeriodClosingStepType.valueOf(rs.getString("step_type")),
