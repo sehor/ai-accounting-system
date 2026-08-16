@@ -54,7 +54,7 @@ export function describeTab(pathname: string, search: string): WorkspaceTab | un
   const reportType = pathname.match(/\/reports\/([^/]+)$/)?.[1]
   if (reportType) return {
     id: `report-${reportType}`,
-    title: { 'balance-sheet': '资产负债表', 'income-statement': '利润表', 'trial-balance': '科目余额表' }[reportType] || '报表',
+    title: { 'balance-sheet': '资产负债表', 'income-statement': '利润表', 'cash-flow': '现金流量表', 'trial-balance': '科目余额表' }[reportType] || '报表',
     location,
     closable: true,
   }
@@ -100,6 +100,12 @@ export function AppShell() {
     queryFn: () => apiData(openApiClient.GET('/v1/ledgers', { headers: apiHeaders(session!) })),
     enabled: Boolean(session),
   })
+  const ledgerProfile = useQuery({
+    queryKey: ['ledger-profile', ledgerId],
+    queryFn: () => apiData(openApiClient.GET('/v1/ledgers/{ledgerId}', { params: { path: { ledgerId: ledgerId! } }, headers: apiHeaders(session!) })),
+    enabled: Boolean(session && ledgerId),
+  })
+  const smeLedger = ledgerProfile.data?.accountingStandardCode?.toUpperCase() === 'SME'
   const me = useQuery({
     queryKey: ['me'],
     queryFn: () => apiData(openApiClient.GET('/v1/me', { headers: apiHeaders(session!) })),
@@ -163,6 +169,7 @@ export function AppShell() {
     if (path.includes('/books/dimension-ledger')) return 'dimension-ledger'
     if (path.includes('/reports/balance-sheet')) return 'balance-sheet'
     if (path.includes('/reports/income-statement')) return 'income-statement'
+    if (path.includes('/reports/cash-flow')) return 'cash-flow'
     if (path.includes('/fixed-assets')) return 'fixed-assets'
     if (path.includes('/documents')) return 'documents'
     if (path.includes('/accounts')) return 'accounts'
@@ -231,6 +238,7 @@ export function AppShell() {
           { key: 'reports-group', icon: <FileTextOutlined />, label: '报表', children: [
             { key: 'balance-sheet', label: '资产负债表', onClick: () => go('reports/balance-sheet') },
             { key: 'income-statement', label: '利润表', onClick: () => go('reports/income-statement') },
+            ...(smeLedger ? [{ key: 'cash-flow', label: '现金流量表', onClick: () => go('reports/cash-flow') }] : []),
           ] },
           { key: 'fixed-assets', icon: <HddOutlined />, label: '固定资产', onClick: () => go('fixed-assets') },
           { key: 'documents', icon: <FileSearchOutlined />, label: '附件', onClick: () => go('documents') },

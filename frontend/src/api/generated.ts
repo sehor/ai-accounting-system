@@ -2858,10 +2858,37 @@ export interface components {
             difference: string;
         };
         /** @default null */
+        DataQuality: {
+            status: string;
+            /** Format: int32 */
+            primaryUnclassifiedVoucherCount: number;
+            /** Format: int32 */
+            primaryUnclassifiedLineCount: number;
+            /** Format: int32 */
+            comparativeUnclassifiedVoucherCount: number;
+            /** Format: int32 */
+            comparativeUnclassifiedLineCount: number;
+            samples: components["schemas"]["QualitySample"][];
+        };
+        /** @default null */
         Group: {
             key: string;
             title: string;
             lines: components["schemas"]["StatutoryStatementLine"][];
+        };
+        /** @default null */
+        QualitySample: {
+            /** Format: uuid */
+            voucherId: string;
+            voucherNumber: string;
+            periodCode: string;
+            /** Format: date */
+            voucherDate: string;
+            /** Format: int32 */
+            lineNo: number;
+            side: string;
+            baseAmount: string;
+            reason: string;
         };
         /** @default null */
         StatutoryStatement: {
@@ -2881,6 +2908,7 @@ export interface components {
              * @default
              */
             formulaVersion: number | null;
+            dataQuality: components["schemas"]["DataQuality"];
         };
         /** @default null */
         StatutoryStatementLine: {

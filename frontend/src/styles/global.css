@@ -186,6 +186,21 @@ a { color: #1677a7; }
 .statutory-statement-table .statutory-row-calculation td { font-weight: 600; border-top: 2px solid #aeb6bf; }
 .statutory-loading { display: flex; justify-content: center; padding: 28px; }
 
+/* Cash-flow statement: single continuous table with grey in-table section rows. */
+.cash-flow-scroll { max-height: calc(100vh - 300px); overflow: auto; }
+.cash-flow-statement-table { min-width: 640px; }
+.cash-flow-statement-table thead th { position: sticky; top: 0; z-index: 3; }
+.cash-flow-statement-table th:first-child,
+.cash-flow-statement-table td:first-child { position: sticky; left: 0; background: #fff; z-index: 2; }
+.cash-flow-statement-table thead th:first-child { z-index: 4; }
+.cash-flow-statement-table tbody tr:nth-child(even) td:first-child { background: #fbfbfc; }
+.cash-flow-statement-table .statutory-row-section td { background: #f5f6f7; }
+.cash-flow-statement-table .statutory-row-section td:first-child { background: #f5f6f7; }
+.cash-flow-quality { margin-bottom: 0; }
+.cash-flow-checks { margin-bottom: 0; }
+.cash-flow-quality .ant-collapse-header { padding: 4px 0; }
+.cash-flow-quality .ant-alert-description { max-width: 100%; }
+
 .voucher-editor-card {
   border-color: #c7cdd4;
   border-radius: 0;

@@ -4,9 +4,9 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import dayjs from 'dayjs'
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
-import { apiFetch, apiFetchWithHeaders, openApiClient } from '../api/client'
+import { apiFetch, apiFetchWithHeaders, openApiClient, ApiError } from '../api/client'
 import { WorkspaceTabsProvider } from '../components/workspaceTabs'
-import { buildVoucherRequestBody, dateBelongsToPeriod, openPeriodForDate, voucherAmountPattern, VoucherEditorPage, VoucherListPage } from './VoucherPages'
+import { buildVoucherRequestBody, dateBelongsToPeriod, openPeriodForDate, validateCashFlowLines, voucherAmountPattern, VoucherEditorPage, VoucherListPage } from './VoucherPages'
 
 vi.mock('../api/client', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../api/client')>()
@@ -62,6 +62,7 @@ beforeEach(() => {
       .replace('/v1', '')
       .replace('{ledgerId}', pathParameters.ledgerId || '')
       .replace('{voucherId}', pathParameters.voucherId || '')
+      .replace('{code}', pathParameters.code || '')
       + (query.size ? `?${query}` : '')
     if (path.endsWith('/vouchers')) {
       const response = await apiFetchWithHeaders(legacyPath, { localUserId: 'user-1', localUserName: 'admin' })
@@ -719,5 +720,279 @@ describe('VoucherEditorPage', () => {
     expect(screen.getByLabelText('已结账凭证，只读')).toHaveAttribute('inert')
     expect(screen.queryByRole('button', { name: '保存修改' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '删除凭证' })).not.toBeInTheDocument()
+  })
+})
+
+describe('cash-flow voucher classification', () => {
+  const baseAccount = {
+    ledgerId: 'ledger-1', category: 'CURRENT_ASSET', normalBalance: 'DEBIT', status: 'ACTIVE',
+    parentId: null, level: 1, isLeaf: true, isTemplate: false, hasBusinessUsage: false, coreLocked: false,
+    legacyCode: false, version: 0, quantityEnabled: false, unitName: null, createdAt: null,
+    dimensionRequirements: [],
+  }
+  // Like the SME template: cash accounts are NOT flagged cashFlowRequired; they are
+  // identified through the published formula's cash account references.
+  const cashAccount = {
+    ...baseAccount, id: 'account-cash', code: '1001', name: '库存现金', standardAccountKey: 'ASSET.CASH', cashFlowRequired: false, defaultCashFlowItemId: null,
+  }
+  const bankAccount = {
+    ...baseAccount, id: 'account-bank', code: '1002', name: '银行存款', standardAccountKey: 'ASSET.BANK_DEPOSIT', cashFlowRequired: false, defaultCashFlowItemId: 'item-sales',
+  }
+  const expenseAccount = {
+    ...baseAccount, id: 'account-expense', code: '6602', name: '管理费用', standardAccountKey: null, cashFlowRequired: false, defaultCashFlowItemId: null,
+  }
+  const items = [
+    { id: 'item-sales', ledgerId: 'ledger-1', code: 'SME_CF_01_SALES_RECEIPTS', name: '销售产成品、商品、提供劳务收到的现金', status: 'ACTIVE', template: true },
+    { id: 'item-tax', ledgerId: 'ledger-1', code: 'SME_CF_05_TAX_PAYMENTS', name: '支付的税费', status: 'ACTIVE', template: true },
+    { id: 'item-inactive', ledgerId: 'ledger-1', code: 'SME_CF_02_OTHER_OPERATING_RECEIPTS', name: '收到其他与经营活动有关的现金', status: 'INACTIVE', template: true },
+    { id: 'item-not-in-formula', ledgerId: 'ledger-1', code: 'SME_CF_03_PURCHASE_PAYMENTS', name: '购买原材料支付的现金', status: 'ACTIVE', template: true },
+  ]
+  const cashAccountRefs = [
+    { type: 'STANDARD_ACCOUNT_KEY', value: 'ASSET.CASH' },
+    { type: 'STANDARD_ACCOUNT_KEY', value: 'ASSET.BANK_DEPOSIT' },
+  ]
+  const formulaWorkspace = {
+    code: 'CASH_FLOW', name: '现金流量表', kind: 'FIXED_LINES', reportType: 'CASH_FLOW',
+    templateCode: 'SME-2011-17-CASH-FLOW', publishedVersion: 1,
+    publishedDefinition: {
+      schemaVersion: 1, kind: 'FIXED_LINES', reportType: 'CASH_FLOW', templateCode: 'SME-2011-17-CASH-FLOW',
+      columnPolicy: { primary: 'ACTIVITY', comparative: 'ACTIVITY' },
+      groups: [{
+        key: 'OPERATING', title: '一、经营活动产生的现金流量', lines: [
+          { key: 'cf-1', lineNo: 1, indent: 0, rowType: 'DETAIL', name: '销售收到的现金', expression: { type: 'CASH_FLOW_ITEM_AMOUNT', direction: 'INFLOW', itemCodes: ['SME_CF_01_SALES_RECEIPTS'], cashAccounts: cashAccountRefs } },
+          { key: 'cf-5', lineNo: 5, indent: 0, rowType: 'DETAIL', name: '支付的税费', expression: { type: 'CASH_FLOW_ITEM_AMOUNT', direction: 'OUTFLOW', itemCodes: ['SME_CF_05_TAX_PAYMENTS'], cashAccounts: cashAccountRefs } },
+        ],
+      }],
+      rules: [], checks: [],
+    },
+    draft: null,
+  }
+  const cashFlowLine = (accountId: string, side: 'DEBIT' | 'CREDIT', amount: string, cashFlowItemId?: string) => ({
+    accountId, side, currency: 'CNY', originalAmount: amount, exchangeRate: '1', cashFlowItemId,
+  })
+  const persistedDraftVoucher = {
+    id: 'voucher-1', ledgerId: 'ledger-1', periodId: 'period-open', voucherDate: '2026-08-16',
+    voucherType: '记', voucherNumber: '5', summary: '外部现金收支', status: 'DRAFT', approvalRequired: false, version: 1,
+    lines: [
+      { id: 'line-1', lineNo: 1, accountId: 'account-cash', side: 'DEBIT', currency: 'CNY', originalAmount: '100', exchangeRate: '1', baseAmount: '100.00', summary: null, cashFlowItemId: 'item-sales', quantity: null, unitPrice: null, dimensions: [] },
+      { id: 'line-2', lineNo: 2, accountId: 'account-expense', side: 'CREDIT', currency: 'CNY', originalAmount: '100', exchangeRate: '1', baseAmount: '100.00', summary: null, cashFlowItemId: null, quantity: null, unitPrice: null, dimensions: [] },
+    ],
+  }
+  const staleVoucher = {
+    ...persistedDraftVoucher,
+    id: 'voucher-stale',
+    lines: [
+      { id: 'line-1', lineNo: 1, accountId: 'account-cash', side: 'DEBIT', currency: 'CNY', originalAmount: '100', exchangeRate: '1', baseAmount: '100.00', summary: null, cashFlowItemId: 'item-inactive', quantity: null, unitPrice: null, dimensions: [] },
+      { id: 'line-2', lineNo: 2, accountId: 'account-expense', side: 'CREDIT', currency: 'CNY', originalAmount: '100', exchangeRate: '1', baseAmount: '100.00', summary: null, cashFlowItemId: null, quantity: null, unitPrice: null, dimensions: [] },
+    ],
+  }
+
+  const installCashFlowBackend = (options: { formulaError?: boolean; postError?: unknown } = {}) => {
+    const postedBodies: Record<string, unknown>[] = []
+    vi.mocked(apiFetch).mockImplementation((path, _session, init) => {
+      if (path.endsWith('/periods')) return Promise.resolve([{
+        id: 'period-open', ledgerId: 'ledger-1', periodCode: '2026-08', startDate: '2026-08-01', endDate: '2026-08-31', status: 'OPEN', hasVouchers: true,
+      }])
+      if (path.endsWith('/accounts')) return Promise.resolve([cashAccount, bankAccount, expenseAccount])
+      if (path.endsWith('/cash-flow-items')) return Promise.resolve(items)
+      if (path.endsWith('/report-formulas/CASH_FLOW')) {
+        if (options.formulaError) return Promise.reject(new ApiError(500, { code: 'STATUTORY_FORMULA_NOT_FOUND', title: '法定报表公式缺失', detail: '缺少公式' }))
+        return Promise.resolve(formulaWorkspace)
+      }
+      if (path.endsWith('/vouchers/voucher-1')) {
+        return Promise.resolve(persistedDraftVoucher)
+      }
+      if (path.endsWith('/vouchers/voucher-stale')) {
+        return Promise.resolve(staleVoucher)
+      }
+      if (path.includes('/vouchers') && init?.method === 'POST') {
+        if (options.postError) return Promise.reject(options.postError)
+        if (path.endsWith('/vouchers')) {
+          postedBodies.push(JSON.parse(String(init.body)))
+          return Promise.resolve({
+            id: 'voucher-created', ledgerId: 'ledger-1', periodId: 'period-open', voucherDate: '2026-08-16',
+            voucherType: '记', voucherNumber: '1', summary: null, status: 'POSTED', approvalRequired: false, version: 0, lines: [],
+          })
+        }
+        return Promise.resolve(persistedDraftVoucher)
+      }
+      return Promise.resolve([])
+    })
+    return postedBodies
+  }
+
+  const renderEditor = (initial = '/ledgers/ledger-1/vouchers/new') => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    render(
+      <QueryClientProvider client={queryClient}>
+        <App>
+          <MemoryRouter initialEntries={[initial]}>
+            <Routes><Route path="/ledgers/:ledgerId/vouchers/:voucherId" element={<VoucherEditorPage />} /></Routes>
+          </MemoryRouter>
+        </App>
+      </QueryClientProvider>,
+    )
+  }
+  const chooseSelectOption = async (label: string, optionName: string) => {
+    fireEvent.mouseDown(screen.getByRole('combobox', { name: label }))
+    await screen.findAllByText(optionName)
+    const openDropdowns = Array.from(document.querySelectorAll<HTMLElement>('.ant-select-dropdown:not(.ant-select-dropdown-hidden)'))
+    fireEvent.click(within(openDropdowns.at(-1)!).getByText(optionName))
+  }
+  const fillAmount = (index: number, side: '借方' | '贷方', amount: string) => {
+    fireEvent.change(screen.getByLabelText(`第 ${index} 条分录${side}金额`), { target: { value: amount } })
+  }
+  const save = async () => {
+    fireEvent.click(screen.getByRole('button', { name: '保存并记账' }))
+  }
+
+  describe('validateCashFlowLines', () => {
+    // Cash accounts are identified via the published formula, not the cashFlowRequired flag.
+    const isCashAccount = (accountId?: string) => accountId === 'account-cash' || accountId === 'account-bank'
+    const reportable = items.filter((item) => item.status === 'ACTIVE' && (item.code === 'SME_CF_01_SALES_RECEIPTS' || item.code === 'SME_CF_05_TAX_PAYMENTS'))
+
+    it('requires an item on every cash line when a non-cash counterpart exists', () => {
+      const errors = validateCashFlowLines([
+        cashFlowLine('account-cash', 'DEBIT', '100'),
+        cashFlowLine('account-expense', 'CREDIT', '100'),
+      ], isCashAccount, reportable)
+      expect(errors).toEqual([{ lineIndex: 0, message: '第 1 条分录的现金收支必须选择现金流项目' }])
+    })
+
+    it('checks compound vouchers line by line', () => {
+      const errors = validateCashFlowLines([
+        cashFlowLine('account-cash', 'DEBIT', '100', 'item-sales'),
+        cashFlowLine('account-bank', 'DEBIT', '50'),
+        cashFlowLine('account-expense', 'CREDIT', '150'),
+      ], isCashAccount, reportable)
+      expect(errors.map((error) => error.lineIndex)).toEqual([1])
+    })
+
+    it('exempts pure cash internal transfers', () => {
+      expect(validateCashFlowLines([
+        cashFlowLine('account-cash', 'DEBIT', '100'),
+        cashFlowLine('account-bank', 'CREDIT', '100'),
+      ], isCashAccount, reportable)).toEqual([])
+    })
+
+    it('rejects inactive or non-formula items with a located message', () => {
+      const errors = validateCashFlowLines([
+        cashFlowLine('account-cash', 'DEBIT', '100', 'item-inactive'),
+        cashFlowLine('account-expense', 'CREDIT', '100'),
+      ], isCashAccount, reportable)
+      expect(errors[0].message).toContain('不在当前报表公式中')
+    })
+
+    it('skips validation when the published formula is unavailable', () => {
+      expect(validateCashFlowLines([
+        cashFlowLine('account-cash', 'DEBIT', '100'),
+        cashFlowLine('account-expense', 'CREDIT', '100'),
+      ], isCashAccount, null)).toEqual([])
+    })
+
+    it('ignores vouchers without cash lines', () => {
+      expect(validateCashFlowLines([
+        cashFlowLine('account-expense', 'DEBIT', '100'),
+        cashFlowLine('account-expense', 'CREDIT', '100'),
+      ], isCashAccount, reportable)).toEqual([])
+    })
+  })
+
+  it('blocks saving an external cash receipt without a cash-flow item', async () => {
+    const postedBodies = installCashFlowBackend()
+    renderEditor()
+    await screen.findByRole('heading', { name: '记账凭证' })
+
+    await chooseSelectOption('第 1 条分录会计科目', '1001 库存现金')
+    await chooseSelectOption('第 2 条分录会计科目', '6602 管理费用')
+    fillAmount(1, '借方', '100')
+    fillAmount(2, '贷方', '100')
+    await save()
+
+    // The inline row-level rule points at the exact cash line and the request never leaves.
+    expect(await screen.findByText('请选择现金流项目')).toBeInTheDocument()
+    await waitFor(() => expect(postedBodies).toHaveLength(0))
+  })
+
+  it('auto-fills the account default item when it is still reportable', async () => {
+    installCashFlowBackend()
+    renderEditor()
+    await screen.findByRole('heading', { name: '记账凭证' })
+
+    await chooseSelectOption('第 1 条分录会计科目', '1002 银行存款')
+    await chooseSelectOption('第 2 条分录会计科目', '6602 管理费用')
+    fillAmount(1, '借方', '100')
+    fillAmount(2, '贷方', '100')
+
+    const itemSelect = await screen.findByRole('combobox', { name: '第 1 条分录现金流项目' })
+    expect(itemSelect).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByText('SME_CF_01_SALES_RECEIPTS 销售产成品、商品、提供劳务收到的现金')).toBeInTheDocument())
+  })
+
+  it('only offers active items referenced by the published formula', async () => {
+    installCashFlowBackend()
+    renderEditor()
+    await screen.findByRole('heading', { name: '记账凭证' })
+
+    await chooseSelectOption('第 1 条分录会计科目', '1001 库存现金')
+    await waitFor(() => expect(screen.getByRole('combobox', { name: '第 1 条分录现金流项目' })).toBeInTheDocument())
+    fireEvent.mouseDown(screen.getByRole('combobox', { name: '第 1 条分录现金流项目' }))
+
+    await waitFor(() => expect(screen.getByText('SME_CF_01_SALES_RECEIPTS 销售产成品、商品、提供劳务收到的现金')).toBeInTheDocument())
+    expect(screen.getByText('SME_CF_05_TAX_PAYMENTS 支付的税费')).toBeInTheDocument()
+    expect(screen.queryByText('收到其他与经营活动有关的现金')).not.toBeInTheDocument()
+    expect(screen.queryByText('购买原材料支付的现金')).not.toBeInTheDocument()
+  })
+
+  it('keeps internal transfers optional and still posts', async () => {
+    const postedBodies = installCashFlowBackend()
+    renderEditor()
+    await screen.findByRole('heading', { name: '记账凭证' })
+
+    await chooseSelectOption('第 1 条分录会计科目', '1001 库存现金')
+    await chooseSelectOption('第 2 条分录会计科目', '1002 银行存款')
+    fillAmount(1, '借方', '100')
+    fillAmount(2, '贷方', '100')
+    await save()
+
+    await waitFor(() => expect(postedBodies).toHaveLength(1))
+    const lines = postedBodies[0].lines as { cashFlowItemId?: string }[]
+    expect(lines[0].cashFlowItemId).toBeUndefined()
+  })
+
+  it('keeps a clear message when the backend rejects classification after formula changes', async () => {
+    installCashFlowBackend({
+      formulaError: true,
+      postError: new ApiError(422, { code: 'CASH_FLOW_ITEM_NOT_REPORTABLE', title: '现金流项目不可用', detail: '第 1 行使用的现金流项目不在当前报表公式中：SME_CF_01_SALES_RECEIPTS' }),
+    })
+    renderEditor('/ledgers/ledger-1/vouchers/voucher-1')
+    await screen.findByRole('heading', { name: '记账凭证' })
+
+    // The published formula is unavailable, so the frontend skips its own check and the
+    // backend's 422 must still surface as a clear, located message.
+    fireEvent.click(screen.getByRole('button', { name: /^校\s*验$/ }))
+    expect((await screen.findAllByText('现金流项目不符合要求')).length).toBeGreaterThan(0)
+    expect(screen.getByText(/第 1 行使用的现金流项目不在当前报表公式中：SME_CF_01_SALES_RECEIPTS/)).toBeInTheDocument()
+  })
+
+  it('shows a stale persisted item clearly marked instead of a raw id', async () => {
+    installCashFlowBackend()
+    renderEditor('/ledgers/ledger-1/vouchers/voucher-stale')
+    await screen.findByRole('heading', { name: '记账凭证' })
+
+    await waitFor(() => expect(screen.getByText('SME_CF_02_OTHER_OPERATING_RECEIPTS 收到其他与经营活动有关的现金（已停用或不在公式中）')).toBeInTheDocument())
+  })
+
+  it('preserves cashFlowItemId in the save request body', () => {
+    const body = buildVoucherRequestBody({
+      voucherDate: dayjs('2026-08-16'),
+      voucherType: '记',
+      lines: [
+        { accountId: 'account-cash', side: 'DEBIT', currency: 'CNY', originalAmount: '100', exchangeRate: '1', cashFlowItemId: 'item-sales' },
+        { accountId: 'account-expense', side: 'CREDIT', currency: 'CNY', originalAmount: '100', exchangeRate: '1' },
+        { side: 'DEBIT', currency: 'CNY', originalAmount: '', exchangeRate: '1' },
+      ],
+    }, false)
+    expect(body.lines[0]).toHaveProperty('cashFlowItemId', 'item-sales')
   })
 })

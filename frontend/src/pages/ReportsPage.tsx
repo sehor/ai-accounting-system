@@ -1,18 +1,22 @@
-import { Alert, Card, Empty, Space, Spin, Switch, Table, Tag, Typography } from 'antd'
+import { Alert, Button, Card, Empty, Space, Spin, Switch, Table, Tag, Typography } from 'antd'
 import type { TableProps } from 'antd'
 import { useQuery } from '@tanstack/react-query'
-import { useParams } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import { useState } from 'react'
 import { apiHeaders, apiResponse, openApiClient, ApiError } from '../api/client'
 import type { components } from '../api/generated'
 import { useAuth } from '../auth/AuthProvider'
 import { PeriodRangeSelector, PeriodSelector, usePeriodFilter, usePeriodRangeFilter } from '../components/PeriodSelector'
+import { CashFlowChecksAlert, CashFlowQualityAlert, CashFlowStatementTable, formatReportAmount } from '../components/CashFlowStatement'
 import { useWorkspaceSearchParams } from '../components/workspaceSearch'
+
+export { formatReportAmount }
 
 const reportNames: Record<string, string> = {
   'trial-balance': '科目余额表',
   'balance-sheet': '资产负债表',
   'income-statement': '利润表',
+  'cash-flow': '现金流量表',
 }
 
 type Statement = components['schemas']['AccountStatement']
@@ -20,16 +24,19 @@ type StatutoryLine = components['schemas']['StatutoryStatementLine']
 type StatutoryStatement = components['schemas']['StatutoryStatement']
 type TrialBalanceLine = components['schemas']['TrialBalanceLine']
 
+/** Friendlier cash-flow error hints keyed by backend problem code. */
+const cashFlowErrorHints: Record<string, string> = {
+  STATUTORY_REPORT_UNSUPPORTED_STANDARD: '当前账套不是小企业会计准则，暂不提供法定报表',
+  STATUTORY_REPORT_CURRENCY_UNSUPPORTED: '小企业会计准则法定报表首版仅支持人民币账套',
+  STATUTORY_REPORT_PROJECTION_PENDING: '余额投影正在更新，请稍后刷新报表',
+  STATUTORY_FORMULA_NOT_FOUND: '当前账套缺少已发布的报表公式',
+  PERIOD_NOT_FOUND: '所选年度没有可用会计期间',
+}
+
 export function reportRowKey(row: TrialBalanceLine | { code: string } | { voucherId: string }, index = 0): string {
   if ('accountId' in row) return row.accountId
   if ('voucherId' in row) return `${row.voucherId}-${index}`
   return `${row.code}-${index}`
-}
-
-export function formatReportAmount(value: string | number | null | undefined): string {
-  const amount = typeof value === 'number' ? value : Number(value)
-  if (!Number.isFinite(amount) || amount === 0) return ''
-  return new Intl.NumberFormat('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(amount)
 }
 
 function statutoryRowClass(row: StatutoryLine): string {
@@ -76,19 +83,33 @@ function StatutoryStatementView({ statement }: { statement: StatutoryStatement }
   return <div className="statutory-income-layout">{tables}</div>
 }
 
+function CashFlowStatementView({ statement, ledgerId }: { statement: StatutoryStatement; ledgerId: string }) {
+  return <Space direction="vertical" size={12} style={{ width: '100%' }}>
+    <CashFlowChecksAlert checks={statement.checks} />
+    <CashFlowQualityAlert dataQuality={statement.dataQuality} ledgerId={ledgerId} />
+    <Card className="financial-grid-card">
+      <CashFlowStatementTable statement={statement} />
+    </Card>
+  </Space>
+}
+
 export function ReportsPage() {
   const { ledgerId = '', reportType = 'balance-sheet' } = useParams()
   const { session } = useAuth()
+  const navigate = useNavigate()
   const [search, setSearch] = useWorkspaceSearchParams()
   const includeParents = search.get('includeParents') === 'true'
   const [balanceSource, setBalanceSource] = useState<string | null>(null)
-  const statement = reportType === 'balance-sheet' || reportType === 'income-statement'
+  const cashFlow = reportType === 'cash-flow'
+  const statement = reportType === 'balance-sheet' || reportType === 'income-statement' || cashFlow
   const ledger = useQuery({
     queryKey: ['ledger-profile', ledgerId],
     queryFn: async () => (await apiResponse(openApiClient.GET('/v1/ledgers/{ledgerId}', { params: { path: { ledgerId } }, headers: apiHeaders(session!) }))).data,
     enabled: Boolean(session && ledgerId),
   })
-  const statutory = ledger.isSuccess && statement && ledger.data?.accountingStandardCode?.toUpperCase() === 'SME'
+  // The cash-flow report has no legacy fallback: always call the statutory endpoint
+  // and surface the backend's standard/currency errors for unsupported ledgers.
+  const statutory = ledger.isSuccess && statement && (ledger.data?.accountingStandardCode?.toUpperCase() === 'SME' || cashFlow)
   const legacyReport = ledger.isSuccess && !statutory
   const { periods: rangePeriods, periodFrom, periodTo, setPeriodRange } = usePeriodRangeFilter(ledgerId, legacyReport)
   const { periods: singlePeriods, periodCode, setPeriodCode } = usePeriodFilter(ledgerId, statutory)
@@ -141,8 +162,10 @@ export function ReportsPage() {
     else next.delete('includeParents')
     setSearch(next)
   }
-  const queryError = query.error instanceof ApiError ? query.error.problem.detail : undefined
-  const profileError = ledger.error instanceof ApiError ? ledger.error.problem.detail : undefined
+  const problemCode = query.error instanceof ApiError ? query.error.problem.code : undefined
+  const queryError = query.error instanceof ApiError ? query.error.message : undefined
+  const cashFlowHint = cashFlow && problemCode ? cashFlowErrorHints[problemCode] : undefined
+  const profileError = ledger.error instanceof ApiError ? ledger.error.message : undefined
   const statutoryData = statutory ? query.data as StatutoryStatement | undefined : undefined
 
   return <section className="financial-page" aria-labelledby="report-title">
@@ -182,25 +205,28 @@ export function ReportsPage() {
               onChange={setPeriodRange}
               onRefresh={() => void query.refetch()}
             />}
+        {cashFlow && statutoryData && <Button onClick={() => navigate(`/ledgers/${ledgerId}/settings/report-formulas?formula=CASH_FLOW`)}>调整公式</Button>}
       </Space>
     </div>
     {profileError && <Alert type="error" showIcon message="账套信息读取失败" description={profileError} />}
-    {query.isError && <Alert type="error" showIcon message="报表读取失败" description={queryError || '请检查期间、币种或权限后重试。'} />}
-    {statutoryData
-      ? <StatutoryStatementView statement={statutoryData} />
-      : <Card className="financial-grid-card">
-          <Table
-            rowKey={reportRowKey}
-            size="small"
-            className="financial-table"
-            loading={query.isLoading || !periodFrom || !periodTo || !ledger.isSuccess}
-            dataSource={rows as TrialBalanceLine[]}
-            locale={{ emptyText: <Empty description="当前期间暂无报表数据" /> }}
-            columns={columns}
-            pagination={false}
-            scroll={{ x: 1260 }}
-          />
-        </Card>}
+    {query.isError && <Alert type="error" showIcon message={cashFlowHint || '报表读取失败'} description={queryError || cashFlowHint || '请检查期间、币种或权限后重试。'} />}
+    {cashFlow && statutoryData
+      ? <CashFlowStatementView statement={statutoryData} ledgerId={ledgerId} />
+      : statutoryData
+        ? <StatutoryStatementView statement={statutoryData} />
+        : <Card className="financial-grid-card">
+            <Table
+              rowKey={reportRowKey}
+              size="small"
+              className="financial-table"
+              loading={query.isLoading || !periodFrom || !periodTo || !ledger.isSuccess}
+              dataSource={rows as TrialBalanceLine[]}
+              locale={{ emptyText: <Empty description="当前期间暂无报表数据" /> }}
+              columns={columns}
+              pagination={false}
+              scroll={{ x: 1260 }}
+            />
+          </Card>}
     {statutory && query.isLoading && <div className="statutory-loading"><Spin tip="正在生成法定报表…" /></div>}
   </section>
 }

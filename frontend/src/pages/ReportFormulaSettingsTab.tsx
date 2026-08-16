@@ -13,18 +13,26 @@ import { FormulaPreviewPane } from './FormulaPreviewPane'
 import { FormulaVersionDrawer } from './FormulaVersionDrawer'
 import { definitionFromJson } from '../features/reportFormulas/types'
 import type { FormulaDefinition, FormulaLine } from '../features/reportFormulas/types'
+import { useWorkspaceSearchParams } from '../components/workspaceSearch'
 
 type Workspace = components['schemas']['ReportFormulaWorkspace']
 type Draft = components['schemas']['ReportFormulaDraft']
 type Account = components['schemas']['Account']
 
-type FormulaCode = 'BALANCE_SHEET' | 'INCOME_STATEMENT'
+export type FormulaCode = 'BALANCE_SHEET' | 'INCOME_STATEMENT' | 'CASH_FLOW'
+
+const formulaOptions: { value: FormulaCode; label: string }[] = [
+  { value: 'BALANCE_SHEET', label: '资产负债表' },
+  { value: 'INCOME_STATEMENT', label: '利润表' },
+  { value: 'CASH_FLOW', label: '现金流量表' },
+]
 
 export function ReportFormulaSettingsTab() {
   const { ledgerId = '' } = useParams()
   const { session } = useAuth()
   const client = useQueryClient()
   const { modal } = AntApp.useApp()
+  const [search] = useWorkspaceSearchParams()
   const [code, setCode] = useState<FormulaCode>('BALANCE_SHEET')
   const [edited, setEdited] = useState<FormulaDefinition>()
   const [dirty, setDirty] = useState(false)
@@ -35,6 +43,14 @@ export function ReportFormulaSettingsTab() {
   const [periodFrom, setPeriodFrom] = useState<string>()
   const [periodTo, setPeriodTo] = useState<string>()
   const [messageApi, contextHolder] = message.useMessage()
+
+  // Preselect the formula from ?formula=CASH_FLOW (e.g. the cash-flow page's 调整公式).
+  const requestedFormula = search.get('formula')
+  useEffect(() => {
+    if (requestedFormula === 'BALANCE_SHEET' || requestedFormula === 'INCOME_STATEMENT' || requestedFormula === 'CASH_FLOW') {
+      setCode(requestedFormula as FormulaCode)
+    }
+  }, [requestedFormula])
 
   const workspace = useQuery({
     queryKey: ['report-formula', ledgerId, code],
@@ -49,6 +65,13 @@ export function ReportFormulaSettingsTab() {
       params: { path: { ledgerId } }, headers: apiHeaders(session!),
     })),
     enabled: Boolean(session && ledgerId),
+  })
+  const cashFlowItems = useQuery({
+    queryKey: ['cash-flow-items', ledgerId],
+    queryFn: () => apiData(openApiClient.GET('/v1/ledgers/{ledgerId}/cash-flow-items', {
+      params: { path: { ledgerId } }, headers: apiHeaders(session!),
+    })),
+    enabled: Boolean(session && ledgerId && code === 'CASH_FLOW'),
   })
   const periods = useQuery({
     queryKey: ['periods', ledgerId],
@@ -72,6 +95,7 @@ export function ReportFormulaSettingsTab() {
   const previewedVersion = data?.draft?.lastPreviewedDraftVersion ?? null
   const previewHasWarnings = Boolean(data?.draft?.previewHasWarnings)
   const balanceSheet = code === 'BALANCE_SHEET'
+  const cashFlow = code === 'CASH_FLOW'
 
   // Load the editable definition: the draft when present, else the published one.
   useEffect(() => {
@@ -225,7 +249,7 @@ export function ReportFormulaSettingsTab() {
         extra={<Space wrap>
           <Segmented
             value={code}
-            options={[{ value: 'BALANCE_SHEET', label: '资产负债表' }, { value: 'INCOME_STATEMENT', label: '利润表' }]}
+            options={formulaOptions}
             onChange={(value) => setCode(value as FormulaCode)}
           />
           <Tag>当前发布版本 v{data?.publishedVersion ?? '—'}</Tag>
@@ -262,7 +286,9 @@ export function ReportFormulaSettingsTab() {
                 definition={edited}
                 onLineChange={onLineChange}
                 accounts={accounts.data || []}
+                cashFlowItems={cashFlowItems.data || []}
                 balanceSheet={balanceSheet}
+                cashFlow={cashFlow}
                 readOnly={readOnly}
               />
             : <FormulaDetailRuleEditor
@@ -289,6 +315,7 @@ export function ReportFormulaSettingsTab() {
           result={preview}
           loading={previewDraft.isPending}
           definition={definition}
+          ledgerId={ledgerId}
           canPublish={canPublish}
           publishing={publishDraft.isPending}
           acknowledged={acknowledged}

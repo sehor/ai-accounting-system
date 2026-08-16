@@ -11,6 +11,7 @@ import { useAuth } from '../auth/AuthProvider'
 import { clearWorkspaceTabDirty, setWorkspaceTabDirty } from '../components/workspaceDirty'
 import { useWorkspaceTabs } from '../components/workspaceTabs'
 import { voucherTotals } from '../features/vouchers/money'
+import { cashFlowAccountReferences, cashFlowItemCodes, definitionFromJson } from '../features/reportFormulas/types'
 
 export { VoucherListPage } from './VoucherListPage'
 
@@ -21,6 +22,7 @@ type Period = components['schemas']['Period']
 type Voucher = components['schemas']['Voucher']
 type VoucherCreateRequest = components['schemas']['VoucherCreateRequest']
 type VoucherUpdateRequest = components['schemas']['VoucherUpdateRequest']
+type CashFlowItem = components['schemas']['LedgerCashFlowItem']
 
 type VoucherForm = { periodId?: string; voucherDate: Dayjs; voucherType: string; voucherNumber?: string; summary?: string; lines: Array<{ accountId?: string; side: 'DEBIT' | 'CREDIT'; currency: string; originalAmount: string; exchangeRate: string; summary?: string; cashFlowItemId?: string; quantity?: string; unitPrice?: string; dimensionValues?: Record<string, string> }> }
 const emptyLines: VoucherForm['lines'] = []
@@ -28,6 +30,55 @@ const blankLine = (): VoucherForm['lines'][number] => ({ side: 'DEBIT', currency
 const fiveBlankLines = () => Array.from({ length: 5 }, blankLine)
 export const voucherAmountPattern = /^-?\d+(?:\.\d+)?$/
 type PeriodDateRange = Pick<Period, 'startDate' | 'endDate' | 'status'>
+
+export interface CashFlowLineValidation {
+  lineIndex: number
+  message: string
+}
+
+export class CashFlowValidationError extends Error {
+  readonly lines: CashFlowLineValidation[]
+
+  constructor(lines: CashFlowLineValidation[]) {
+    super(lines.map((line) => line.message).join('；'))
+    this.name = 'CashFlowValidationError'
+    this.lines = lines
+  }
+}
+
+/**
+ * Frontend mirror of the backend cash-flow classification constraint. Cash lines are
+ * lines whose account belongs to the published formula's cash account set (or is
+ * flagged `cashFlowRequired`). Pure cash internal transfers stay optional; a compound
+ * voucher with non-cash lines requires every cash line to carry an active item
+ * referenced by the published CASH_FLOW formula.
+ *
+ * Pass `reportableItems: null` when the published formula is unavailable so the
+ * required-check is skipped (the backend then decides).
+ */
+export function validateCashFlowLines(
+  lines: VoucherForm['lines'],
+  isCashAccount: (accountId?: string) => boolean,
+  reportableItems: CashFlowItem[] | null,
+): CashFlowLineValidation[] {
+  if (!reportableItems) return []
+  const cashIndexes = lines
+    .map((line, index) => ({ line, index }))
+    .filter(({ line }) => isCashAccount(line.accountId))
+  if (cashIndexes.length === 0) return []
+  const hasNonCashLine = lines.some((line) => Boolean(line.accountId) && !isCashAccount(line.accountId))
+  if (!hasNonCashLine) return []
+  const reportableIds = new Set(reportableItems.map((item) => item.id))
+  const errors: CashFlowLineValidation[] = []
+  for (const { line, index } of cashIndexes) {
+    if (!line.cashFlowItemId) {
+      errors.push({ lineIndex: index, message: `第 ${index + 1} 条分录的现金收支必须选择现金流项目` })
+    } else if (!reportableIds.has(line.cashFlowItemId)) {
+      errors.push({ lineIndex: index, message: `第 ${index + 1} 条分录使用的现金流项目不在当前报表公式中（或已停用）` })
+    }
+  }
+  return errors
+}
 
 export const dateBelongsToPeriod = (period: PeriodDateRange | undefined, date: Dayjs | undefined) => {
   const value = date?.format('YYYY-MM-DD')
@@ -117,6 +168,57 @@ function VoucherDimensionFields({ form, fieldName, accountsById, dimensionTypesB
   </Space>
 }
 
+function VoucherCashFlowItemCell({ form, fieldName, accountsById, lines, reportableItems, allItems, isCashAccount }: {
+  form: FormInstance<VoucherForm>
+  fieldName: number
+  accountsById: Map<string, Account>
+  lines: VoucherForm['lines']
+  reportableItems: CashFlowItem[]
+  allItems: CashFlowItem[]
+  isCashAccount: (accountId?: string) => boolean
+}) {
+  const accountId = Form.useWatch(['lines', fieldName, 'accountId'], form)
+  const currentItemId = Form.useWatch(['lines', fieldName, 'cashFlowItemId'], form)
+  const account = accountId ? accountsById.get(accountId) : undefined
+  const isCash = isCashAccount(accountId)
+  // Auto-fill the account's default item once the item catalogue is available and the
+  // default is still active and referenced by the published formula.
+  useEffect(() => {
+    if (!isCash || reportableItems.length === 0) return
+    const defaultItemId = account?.defaultCashFlowItemId
+    if (defaultItemId && reportableItems.some((item) => item.id === defaultItemId)
+      && !form.getFieldValue(['lines', fieldName, 'cashFlowItemId'])) {
+      form.setFieldValue(['lines', fieldName, 'cashFlowItemId'], defaultItemId)
+    }
+  }, [account, fieldName, form, isCash, reportableItems])
+  if (!isCash) return <Typography.Text type="secondary">—</Typography.Text>
+  const hasNonCashLine = lines.some((line, index) =>
+    index !== fieldName && Boolean(line.accountId) && !isCashAccount(line.accountId))
+  const required = hasNonCashLine
+  const options = reportableItems.map((item) => ({ value: item.id, label: `${item.code} ${item.name}` }))
+  // Keep a stale persisted item visible (clearly marked) instead of showing a raw id.
+  if (currentItemId && !reportableItems.some((item) => item.id === currentItemId)) {
+    const stale = allItems.find((item) => item.id === currentItemId)
+    options.push({
+      value: currentItemId,
+      label: stale ? `${stale.code} ${stale.name}（已停用或不在公式中）` : `${currentItemId}（已失效）`,
+    })
+  }
+  return <Form.Item
+    name={[fieldName, 'cashFlowItemId']}
+    rules={required ? [{ required: true, message: '请选择现金流项目' }] : undefined}
+  >
+    <Select
+      allowClear
+      showSearch
+      optionFilterProp="label"
+      aria-label={`第 ${fieldName + 1} 条分录现金流项目`}
+      placeholder={required ? '选择现金流项目（必选）' : '内部划转，可不选'}
+      options={options}
+    />
+  </Form.Item>
+}
+
 export function VoucherEditorPage() {
   const { ledgerId = '', voucherId } = useParams(); const { session } = useAuth(); const client = useQueryClient(); const navigate = useNavigate(); const { modal, message } = AntApp.useApp(); const { closeTab } = useWorkspaceTabs(); const [form] = Form.useForm<VoucherForm>(); const [commentAction, setCommentAction] = useState<'approve' | 'reject' | null>(null); const [pendingAction, setPendingAction] = useState<string | null>(null)
   const [savedVoucher, setSavedVoucher] = useState<Voucher | null>(null)
@@ -125,9 +227,38 @@ export function VoucherEditorPage() {
   const dimensionTypes = useQuery({ queryKey: ['dimension-types', ledgerId], queryFn: () => apiData(openApiClient.GET('/v1/ledgers/{ledgerId}/dimension-types', { headers: apiHeaders(session!), params: { path: { ledgerId } } })), enabled: Boolean(session && ledgerId) })
   const periods = useQuery({ queryKey: ['periods', ledgerId], queryFn: () => apiData(openApiClient.GET('/v1/ledgers/{ledgerId}/periods', { headers: apiHeaders(session!), params: { path: { ledgerId } } })), enabled: Boolean(session && ledgerId) })
   const voucher = useQuery({ queryKey: ['voucher', ledgerId, voucherId], queryFn: () => apiData(openApiClient.GET('/v1/ledgers/{ledgerId}/vouchers/{voucherId}', { headers: apiHeaders(session!), params: { path: { ledgerId, voucherId: voucherId! } } })), enabled: Boolean(session && ledgerId && voucherId && voucherId !== 'new') })
+  const cashFlowItems = useQuery({ queryKey: ['cash-flow-items', ledgerId], queryFn: () => apiData(openApiClient.GET('/v1/ledgers/{ledgerId}/cash-flow-items', { headers: apiHeaders(session!), params: { path: { ledgerId } } })), enabled: Boolean(session && ledgerId) })
+  const cashFlowFormula = useQuery({ queryKey: ['report-formula', ledgerId, 'CASH_FLOW'], queryFn: () => apiData(openApiClient.GET('/v1/ledgers/{ledgerId}/report-formulas/{code}', { headers: apiHeaders(session!), params: { path: { ledgerId, code: 'CASH_FLOW' } } })), enabled: Boolean(session && ledgerId) })
+  const accountsById = useMemo(() => new Map((accounts.data || []).map((account) => [account.id, account])), [accounts.data])
+  const reportableCashFlowItemCodes = useMemo(() => {
+    const definition = cashFlowFormula.data?.publishedDefinition
+    return definition ? new Set(cashFlowItemCodes(definitionFromJson(definition))) : new Set<string>()
+  }, [cashFlowFormula.data])
+  const reportableCashFlowItems = useMemo(() => (cashFlowItems.data || [])
+    .filter((item) => item.status === 'ACTIVE' && reportableCashFlowItemCodes.has(item.code)), [cashFlowItems.data, reportableCashFlowItemCodes])
+  const cashFlowPolicyReady = cashFlowFormula.isSuccess && !cashFlowFormula.isError
+  // Cash accounts come from the published formula (standard keys expanded to leaf
+  // accounts plus concrete ids), matching the backend voucher-side contract; the
+  // legacy `cashFlowRequired` account flag is honoured as an additional signal.
+  const cashAccountIds = useMemo(() => {
+    const definition = cashFlowFormula.data?.publishedDefinition
+    if (!definition) return new Set<string>()
+    const ids = new Set<string>()
+    for (const reference of cashFlowAccountReferences(definitionFromJson(definition))) {
+      if (reference.type === 'ACCOUNT_ID') {
+        ids.add(reference.value)
+      } else {
+        for (const account of accounts.data || []) {
+          if (account.standardAccountKey === reference.value) ids.add(account.id)
+        }
+      }
+    }
+    return ids
+  }, [accounts.data, cashFlowFormula.data])
+  const isCashAccount = (accountId?: string) => Boolean(accountId)
+    && (accountsById.get(accountId!)?.cashFlowRequired || cashAccountIds.has(accountId!))
   const watchedLines = Form.useWatch('lines', form)
   const lines = watchedLines ?? emptyLines
-  const accountsById = useMemo(() => new Map((accounts.data || []).map((account) => [account.id, account])), [accounts.data])
   const dimensionTypesById = useMemo(() => new Map((dimensionTypes.data || []).map((type) => [type.id, type])), [dimensionTypes.data])
   const requiredDimensionTypeIds = useMemo(() => Array.from(new Set(lines.flatMap((line) => (
     accountsById.get(line.accountId || '')?.dimensionRequirements.map((requirement) => requirement.dimensionTypeId) || []
@@ -154,6 +285,8 @@ export function VoucherEditorPage() {
   const editable = !persistedVoucher || voucherPeriod?.status === 'OPEN'
   const save = useMutation({
     mutationFn: async (value: VoucherForm) => {
+      const validation = validateCashFlowLines(value.lines, isCashAccount, cashFlowPolicyReady ? reportableCashFlowItems : null)
+      if (validation.length > 0) throw new CashFlowValidationError(validation)
       const targetVoucher = persistedVoucher
       const targetVoucherId = targetVoucher?.id
       const openPeriod = targetVoucher ? undefined : openPeriodForDate(periods.data || [], value.voucherDate)
@@ -182,13 +315,27 @@ export function VoucherEditorPage() {
       void client.invalidateQueries({ queryKey: ['vouchers', ledgerId] })
       message.success(wasExisting ? '凭证修改成功' : '凭证保存成功')
     },
-    onError: (error) => message.error(error instanceof ApiError && error.problem.code === 'VOUCHER_NOT_BALANCED'
-      ? '借贷金额不平衡，凭证未保存。'
-      : error instanceof ApiError && error.problem.code === 'VOUCHER_PERIOD_IMMUTABLE'
-        ? '凭证保存后不能修改会计期间。'
-        : error instanceof ApiError || error instanceof Error ? error.message : '凭证保存失败，请稍后重试。'),
+    onError: (error) => {
+      if (error instanceof CashFlowValidationError) {
+        modal.error({ title: '现金流项目未分类', content: <ul style={{ margin: 0, paddingLeft: 20 }}>{error.lines.map((line) => <li key={line.lineIndex}>{line.message}</li>)}</ul> })
+        return
+      }
+      message.error(error instanceof ApiError && error.problem.code === 'VOUCHER_NOT_BALANCED'
+        ? '借贷金额不平衡，凭证未保存。'
+        : error instanceof ApiError && error.problem.code === 'VOUCHER_PERIOD_IMMUTABLE'
+          ? '凭证保存后不能修改会计期间。'
+          : error instanceof ApiError && (error.problem.code === 'CASH_FLOW_CLASSIFICATION_REQUIRED' || error.problem.code === 'CASH_FLOW_ITEM_NOT_REPORTABLE')
+            ? '现金流项目不符合当前公式要求：' + error.message
+            : error instanceof ApiError || error instanceof Error ? error.message : '凭证保存失败，请稍后重试。')
+    },
   })
-  const action = async (name: 'validate' | 'submit' | 'approve' | 'reject' | 'post', body?: { comment: string }): Promise<boolean> => { if (!voucherId || voucherId === 'new' || pendingAction) return false; setPendingAction(name); try { const request = { headers: apiHeaders(session!), params: { path: { ledgerId, voucherId } } }; if (name === 'validate') await apiData(openApiClient.POST('/v1/ledgers/{ledgerId}/vouchers/{voucherId}:validate', request)); if (name === 'submit') await apiData(openApiClient.POST('/v1/ledgers/{ledgerId}/vouchers/{voucherId}:submit', request)); if (name === 'approve') await apiData(openApiClient.POST('/v1/ledgers/{ledgerId}/vouchers/{voucherId}:approve', { ...request, body: body! })); if (name === 'reject') await apiData(openApiClient.POST('/v1/ledgers/{ledgerId}/vouchers/{voucherId}:reject', { ...request, body: body! })); if (name === 'post') await apiData(openApiClient.POST('/v1/ledgers/{ledgerId}/vouchers/{voucherId}:post', request)); await voucher.refetch(); void client.invalidateQueries({ queryKey: ['vouchers', ledgerId] }); return true } catch (error) { modal.error(error instanceof ApiError && error.problem.code === 'RESOURCE_VERSION_CONFLICT' ? { title: '凭证已被其他人修改', content: '请刷新后确认是否放弃本地修改。' } : { title: '凭证操作失败', content: error instanceof ApiError ? error.message : '请稍后重试。' }); return false } finally { setPendingAction(null) } }
+  const action = async (name: 'validate' | 'submit' | 'approve' | 'reject' | 'post', body?: { comment: string }): Promise<boolean> => {
+    const validation = validateCashFlowLines(form.getFieldValue('lines') || [], isCashAccount, cashFlowPolicyReady ? reportableCashFlowItems : null)
+    if (validation.length > 0) {
+      modal.error({ title: '现金流项目未分类', content: <ul style={{ margin: 0, paddingLeft: 20 }}>{validation.map((line) => <li key={line.lineIndex}>{line.message}</li>)}</ul> })
+      return false
+    }
+    if (!voucherId || voucherId === 'new' || pendingAction) return false; setPendingAction(name); try { const request = { headers: apiHeaders(session!), params: { path: { ledgerId, voucherId } } }; if (name === 'validate') await apiData(openApiClient.POST('/v1/ledgers/{ledgerId}/vouchers/{voucherId}:validate', request)); if (name === 'submit') await apiData(openApiClient.POST('/v1/ledgers/{ledgerId}/vouchers/{voucherId}:submit', request)); if (name === 'approve') await apiData(openApiClient.POST('/v1/ledgers/{ledgerId}/vouchers/{voucherId}:approve', { ...request, body: body! })); if (name === 'reject') await apiData(openApiClient.POST('/v1/ledgers/{ledgerId}/vouchers/{voucherId}:reject', { ...request, body: body! })); if (name === 'post') await apiData(openApiClient.POST('/v1/ledgers/{ledgerId}/vouchers/{voucherId}:post', request)); await voucher.refetch(); void client.invalidateQueries({ queryKey: ['vouchers', ledgerId] }); return true } catch (error) { modal.error(error instanceof ApiError && error.problem.code === 'RESOURCE_VERSION_CONFLICT' ? { title: '凭证已被其他人修改', content: '请刷新后确认是否放弃本地修改。' } : error instanceof ApiError && (error.problem.code === 'CASH_FLOW_CLASSIFICATION_REQUIRED' || error.problem.code === 'CASH_FLOW_ITEM_NOT_REPORTABLE') ? { title: '现金流项目不符合要求', content: error.message } : { title: '凭证操作失败', content: error instanceof ApiError ? error.message : '请稍后重试。' }); return false } finally { setPendingAction(null) } }
   const removeVoucher = async () => { if (!voucherId || voucherId === 'new' || pendingAction) return; setPendingAction('delete'); try { await apiData(openApiClient.DELETE('/v1/ledgers/{ledgerId}/vouchers/{voucherId}', { headers: apiHeaders(session!), params: { path: { ledgerId, voucherId } } })); clearWorkspaceTabDirty(tabId); client.removeQueries({ queryKey: ['voucher', ledgerId, voucherId], exact: true }); void client.invalidateQueries({ queryKey: ['vouchers', ledgerId] }); message.success('凭证删除成功'); closeTab(tabId, { discardChanges: true }); navigate(`/ledgers/${ledgerId}/vouchers`) } catch (error) { message.error(error instanceof ApiError ? error.message : '删除凭证失败，请稍后重试。'); throw error } finally { setPendingAction(null) } }
   const initial = voucher.data ? { ...voucher.data, voucherDate: dayjs(voucher.data.voucherDate), lines: voucher.data.lines.map((line) => ({ ...line, originalAmount: line.originalAmount, exchangeRate: line.exchangeRate, dimensionValues: Object.fromEntries(line.dimensions.map((dimension) => [dimension.dimensionTypeId, dimension.dimensionValueId])) })) } : { voucherDate: dayjs(), voucherType: '记', lines: fiveBlankLines() }
   useEffect(() => { if (voucher.data) form.setFieldsValue({ ...voucher.data, voucherDate: dayjs(voucher.data.voucherDate), lines: voucher.data.lines.map((line) => ({ ...line, originalAmount: line.originalAmount, exchangeRate: line.exchangeRate, dimensionValues: Object.fromEntries(line.dimensions.map((dimension) => [dimension.dimensionTypeId, dimension.dimensionValueId])) })) } as VoucherForm) }, [voucher.data, form])
@@ -219,7 +366,7 @@ export function VoucherEditorPage() {
         </div>
       </div>
       <Form.List name="lines">{(fields, { add, remove }) => <>
-        <Table className="voucher-entry-table" bordered size="middle" pagination={false} scroll={{ x: 1180 }} rowKey="key" dataSource={fields}
+        <Table className="voucher-entry-table" bordered size="middle" pagination={false} scroll={{ x: 1400 }} rowKey="key" dataSource={fields}
           locale={{ emptyText: <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无分录" /> }}
           columns={[
             { title: '操作', width: 118, align: 'center', render: (_, field) => <Space size={0} className="voucher-line-actions"><Button type="link" icon={<PlusOutlined />} onClick={() => add({ side: 'DEBIT', currency: 'CNY', originalAmount: '', exchangeRate: '1' }, field.name)}>插入</Button><Button type="text" danger icon={<DeleteOutlined />} aria-label={`删除第 ${field.name + 1} 条分录`} onClick={() => remove(field.name)} /></Space> },
@@ -230,15 +377,19 @@ export function VoucherEditorPage() {
               form.setFieldValue(['lines', field.name, 'dimensionValues'], Object.fromEntries(
                 Object.entries(currentDimensionValues).filter(([dimensionTypeId]) => allowedDimensionTypeIds.has(dimensionTypeId)),
               ))
+              // Reset the cash-flow item on account change; the item cell auto-fills the
+              // new account's default once the reportable item catalogue is available.
+              form.setFieldValue(['lines', field.name, 'cashFlowItemId'], undefined)
             }} options={(accounts.data || []).filter((account) => account.status === 'ACTIVE' && account.isLeaf).map((account) => ({ value: account.id, label: `${account.code} ${account.name}` }))} /></Form.Item> },
             { title: '辅助核算', width: 280, render: (_, field) => <VoucherDimensionFields form={form} fieldName={field.name} accountsById={accountsById} dimensionTypesById={dimensionTypesById} dimensionValuesByType={dimensionValuesByType} /> },
+            { title: '现金流项目', width: 210, render: (_, field) => <VoucherCashFlowItemCell form={form} fieldName={field.name} accountsById={accountsById} lines={lines} reportableItems={reportableCashFlowItems} allItems={cashFlowItems.data || []} isCashAccount={isCashAccount} /> },
             { title: '借方金额', width: 150, align: 'right', className: 'voucher-amount-column voucher-debit-column', render: (_, field) => <VoucherAmountCell form={form} fieldName={field.name} side="DEBIT" onChange={() => setDirty(true)} /> },
             { title: '贷方金额', width: 150, align: 'right', className: 'voucher-amount-column voucher-credit-column', render: (_, field) => <VoucherAmountCell form={form} fieldName={field.name} side="CREDIT" onChange={() => setDirty(true)} /> },
           ]}
           summary={() => <Table.Summary fixed><Table.Summary.Row className="voucher-total-row">
-            <Table.Summary.Cell index={0} colSpan={4}><span>合计（本位币）</span></Table.Summary.Cell>
-            <Table.Summary.Cell index={4} className="voucher-total-amount">{hasDebitAmount ? totals.debit.toFixed(2) : ''}</Table.Summary.Cell>
-            <Table.Summary.Cell index={5} className="voucher-total-amount">{hasCreditAmount ? totals.credit.toFixed(2) : ''}</Table.Summary.Cell>
+            <Table.Summary.Cell index={0} colSpan={5}><span>合计（本位币）</span></Table.Summary.Cell>
+            <Table.Summary.Cell index={5} className="voucher-total-amount">{hasDebitAmount ? totals.debit.toFixed(2) : ''}</Table.Summary.Cell>
+            <Table.Summary.Cell index={6} className="voucher-total-amount">{hasCreditAmount ? totals.credit.toFixed(2) : ''}</Table.Summary.Cell>
           </Table.Summary.Row></Table.Summary>}
         />
         <Button className="voucher-add-line" icon={<PlusOutlined />} onClick={() => add({ side: 'DEBIT', currency: 'CNY', originalAmount: '', exchangeRate: '1' })}>新增分录</Button>
