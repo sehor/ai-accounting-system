@@ -167,6 +167,9 @@ export function ReportsPage() {
   const cashFlowHint = cashFlow && problemCode ? cashFlowErrorHints[problemCode] : undefined
   const profileError = ledger.error instanceof ApiError ? ledger.error.message : undefined
   const statutoryData = statutory ? query.data as StatutoryStatement | undefined : undefined
+  const statutoryPeriodsError = singlePeriods.error instanceof ApiError ? singlePeriods.error.message : undefined
+  const noStatutoryPeriods = statutory && singlePeriods.isSuccess && (singlePeriods.data?.length || 0) === 0
+  const statutoryLoading = statutory && (singlePeriods.isLoading || query.isLoading)
 
   return <section className="financial-page" aria-labelledby="report-title">
     <div className="financial-toolbar">
@@ -209,12 +212,22 @@ export function ReportsPage() {
       </Space>
     </div>
     {profileError && <Alert type="error" showIcon message="账套信息读取失败" description={profileError} />}
+    {statutory && singlePeriods.isError && <Alert type="error" showIcon message="会计期间读取失败" description={statutoryPeriodsError || '请稍后重试。'} />}
+    {noStatutoryPeriods && <Alert
+      type="warning"
+      showIcon
+      message="尚未设置会计期间"
+      description="请先到账套设置中创建会计期间，再生成法定报表。"
+      action={<Button size="small" onClick={() => navigate(`/ledgers/${ledgerId}/settings/periods`)}>设置会计期间</Button>}
+    />}
     {query.isError && <Alert type="error" showIcon message={cashFlowHint || '报表读取失败'} description={queryError || cashFlowHint || '请检查期间、币种或权限后重试。'} />}
-    {cashFlow && statutoryData
-      ? <CashFlowStatementView statement={statutoryData} ledgerId={ledgerId} />
-      : statutoryData
-        ? <StatutoryStatementView statement={statutoryData} />
-        : <Card className="financial-grid-card">
+    {statutory
+      ? statutoryData
+        ? cashFlow
+          ? <CashFlowStatementView statement={statutoryData} ledgerId={ledgerId} />
+          : <StatutoryStatementView statement={statutoryData} />
+        : null
+      : <Card className="financial-grid-card">
             <Table
               rowKey={reportRowKey}
               size="small"
@@ -227,6 +240,6 @@ export function ReportsPage() {
               scroll={{ x: 1260 }}
             />
           </Card>}
-    {statutory && query.isLoading && <div className="statutory-loading"><Spin tip="正在生成法定报表…" /></div>}
+    {statutoryLoading && <div className="statutory-loading" role="status" aria-label="正在生成法定报表"><Spin /><Typography.Text>正在生成法定报表…</Typography.Text></div>}
   </section>
 }

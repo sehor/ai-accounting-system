@@ -1,5 +1,6 @@
 import { Alert, Collapse, Space, Table, Tag, Typography } from 'antd'
 import type { TableProps } from 'antd'
+import { Fragment } from 'react'
 import type { components } from '../api/generated'
 
 type StatutoryStatement = components['schemas']['StatutoryStatement']
@@ -43,8 +44,8 @@ export function CashFlowStatementTable({ statement }: { statement: StatutoryStat
         <th scope="col" className="statutory-amount">{statement.comparativeColumn}</th>
       </tr></thead>
       <tbody>
-        {statement.groups.map((group) => <>
-          <tr key={`${group.key}-title`} className="statutory-row statutory-row-section">
+        {statement.groups.map((group) => <Fragment key={group.key}>
+          <tr className="statutory-row statutory-row-section">
             <td className="statutory-name">{group.title}</td>
             <td className="statutory-line-no" />
             <td className="statutory-amount" />
@@ -56,7 +57,7 @@ export function CashFlowStatementTable({ statement }: { statement: StatutoryStat
             <td className="statutory-amount">{formatReportAmount(row.primaryAmount)}</td>
             <td className="statutory-amount">{formatReportAmount(row.comparativeAmount)}</td>
           </tr>)}
-        </>)}
+        </Fragment>)}
       </tbody>
     </table>
   </div>

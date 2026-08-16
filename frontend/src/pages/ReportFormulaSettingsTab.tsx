@@ -27,13 +27,18 @@ const formulaOptions: { value: FormulaCode; label: string }[] = [
   { value: 'CASH_FLOW', label: '现金流量表' },
 ]
 
+function isFormulaCode(value: string | null): value is FormulaCode {
+  return value === 'BALANCE_SHEET' || value === 'INCOME_STATEMENT' || value === 'CASH_FLOW'
+}
+
 export function ReportFormulaSettingsTab() {
   const { ledgerId = '' } = useParams()
   const { session } = useAuth()
   const client = useQueryClient()
   const { modal } = AntApp.useApp()
   const [search] = useWorkspaceSearchParams()
-  const [code, setCode] = useState<FormulaCode>('BALANCE_SHEET')
+  const requestedFormula = search.get('formula')
+  const [code, setCode] = useState<FormulaCode>(() => isFormulaCode(requestedFormula) ? requestedFormula : 'BALANCE_SHEET')
   const [edited, setEdited] = useState<FormulaDefinition>()
   const [dirty, setDirty] = useState(false)
   const [preview, setPreview] = useState<components['schemas']['ReportFormulaPreviewResult']>()
@@ -45,10 +50,9 @@ export function ReportFormulaSettingsTab() {
   const [messageApi, contextHolder] = message.useMessage()
 
   // Preselect the formula from ?formula=CASH_FLOW (e.g. the cash-flow page's 调整公式).
-  const requestedFormula = search.get('formula')
   useEffect(() => {
-    if (requestedFormula === 'BALANCE_SHEET' || requestedFormula === 'INCOME_STATEMENT' || requestedFormula === 'CASH_FLOW') {
-      setCode(requestedFormula as FormulaCode)
+    if (isFormulaCode(requestedFormula)) {
+      setCode(requestedFormula)
     }
   }, [requestedFormula])
 

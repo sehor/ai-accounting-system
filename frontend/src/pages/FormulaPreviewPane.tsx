@@ -1,4 +1,5 @@
 import { Alert, Card, Checkbox, Empty, Space, Spin, Table, Typography } from 'antd'
+import { Fragment } from 'react'
 import type { components } from '../api/generated'
 import { formatReportAmount } from './ReportsPage'
 import { CashFlowChecksAlert, CashFlowQualityAlert } from '../components/CashFlowStatement'
@@ -81,8 +82,8 @@ function PreviewStatutory({ statement, continuous = false }: {
       <table className="statutory-statement-table cash-flow-statement-table">
         <thead><tr><th>项目</th><th className="statutory-line-no">行次</th><th className="statutory-amount">{statement.primaryColumn}</th><th className="statutory-amount">{statement.comparativeColumn}</th></tr></thead>
         <tbody>
-          {statement.groups?.map((group) => <>
-            <tr key={`${group.key}-title`} className="statutory-row statutory-row-section">
+          {statement.groups?.map((group) => <Fragment key={group.key}>
+            <tr className="statutory-row statutory-row-section">
               <td className="statutory-name">{group.title}</td>
               <td className="statutory-line-no" />
               <td className="statutory-amount" />
@@ -94,7 +95,7 @@ function PreviewStatutory({ statement, continuous = false }: {
               <td className="statutory-amount">{formatReportAmount(line.primaryAmount)}</td>
               <td className="statutory-amount">{formatReportAmount(line.comparativeAmount)}</td>
             </tr>)}
-          </>)}
+          </Fragment>)}
         </tbody>
       </table>
     </div>

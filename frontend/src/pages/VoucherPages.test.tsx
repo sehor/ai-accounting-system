@@ -6,7 +6,7 @@ import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { apiFetch, apiFetchWithHeaders, openApiClient, ApiError } from '../api/client'
 import { WorkspaceTabsProvider } from '../components/workspaceTabs'
-import { buildVoucherRequestBody, dateBelongsToPeriod, openPeriodForDate, validateCashFlowLines, voucherAmountPattern, VoucherEditorPage, VoucherListPage } from './VoucherPages'
+import { buildVoucherRequestBody, dateBelongsToPeriod, openPeriodForDate, resolveCashFlowAccountIds, validateCashFlowLines, voucherAmountPattern, VoucherEditorPage, VoucherListPage } from './VoucherPages'
 
 vi.mock('../api/client', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../api/client')>()
@@ -786,15 +786,24 @@ describe('cash-flow voucher classification', () => {
       { id: 'line-2', lineNo: 2, accountId: 'account-expense', side: 'CREDIT', currency: 'CNY', originalAmount: '100', exchangeRate: '1', baseAmount: '100.00', summary: null, cashFlowItemId: null, quantity: null, unitPrice: null, dimensions: [] },
     ],
   }
+  const submittedStaleVoucher = {
+    ...staleVoucher,
+    id: 'voucher-submitted-stale',
+    status: 'SUBMITTED',
+    approvalRequired: true,
+  }
 
-  const installCashFlowBackend = (options: { formulaError?: boolean; postError?: unknown } = {}) => {
+  const installCashFlowBackend = (options: { formulaError?: boolean; itemsError?: boolean; postError?: unknown } = {}) => {
     const postedBodies: Record<string, unknown>[] = []
     vi.mocked(apiFetch).mockImplementation((path, _session, init) => {
       if (path.endsWith('/periods')) return Promise.resolve([{
         id: 'period-open', ledgerId: 'ledger-1', periodCode: '2026-08', startDate: '2026-08-01', endDate: '2026-08-31', status: 'OPEN', hasVouchers: true,
       }])
       if (path.endsWith('/accounts')) return Promise.resolve([cashAccount, bankAccount, expenseAccount])
-      if (path.endsWith('/cash-flow-items')) return Promise.resolve(items)
+      if (path.endsWith('/cash-flow-items')) {
+        if (options.itemsError) return Promise.reject(new ApiError(500, { code: 'CASH_FLOW_ITEMS_UNAVAILABLE', title: '现金流项目不可用', detail: '项目目录读取失败' }))
+        return Promise.resolve(items)
+      }
       if (path.endsWith('/report-formulas/CASH_FLOW')) {
         if (options.formulaError) return Promise.reject(new ApiError(500, { code: 'STATUTORY_FORMULA_NOT_FOUND', title: '法定报表公式缺失', detail: '缺少公式' }))
         return Promise.resolve(formulaWorkspace)
@@ -804,6 +813,9 @@ describe('cash-flow voucher classification', () => {
       }
       if (path.endsWith('/vouchers/voucher-stale')) {
         return Promise.resolve(staleVoucher)
+      }
+      if (path.endsWith('/vouchers/voucher-submitted-stale')) {
+        return Promise.resolve(submittedStaleVoucher)
       }
       if (path.includes('/vouchers') && init?.method === 'POST') {
         if (options.postError) return Promise.reject(options.postError)
@@ -896,6 +908,17 @@ describe('cash-flow voucher classification', () => {
         cashFlowLine('account-expense', 'CREDIT', '100'),
       ], isCashAccount, reportable)).toEqual([])
     })
+
+    it('expands concrete parent account references to leaf descendants', () => {
+      const parent = { ...cashAccount, id: 'account-cash-parent', code: '1002', isLeaf: false }
+      const child = { ...cashAccount, id: 'account-cash-child', code: '100201', parentId: parent.id, standardAccountKey: null }
+      const unrelated = { ...expenseAccount, id: 'account-unrelated' }
+
+      expect(resolveCashFlowAccountIds(
+        [{ type: 'ACCOUNT_ID', value: parent.id }],
+        [parent, child, unrelated],
+      )).toEqual(new Set([child.id]))
+    })
   })
 
   it('blocks saving an external cash receipt without a cash-flow item', async () => {
@@ -973,6 +996,37 @@ describe('cash-flow voucher classification', () => {
     fireEvent.click(screen.getByRole('button', { name: /^校\s*验$/ }))
     expect((await screen.findAllByText('现金流项目不符合要求')).length).toBeGreaterThan(0)
     expect(screen.getByText(/第 1 行使用的现金流项目不在当前报表公式中：SME_CF_01_SALES_RECEIPTS/)).toBeInTheDocument()
+  })
+
+  it('defers client validation when the cash-flow item catalogue fails to load', async () => {
+    installCashFlowBackend({ itemsError: true })
+    renderEditor('/ledgers/ledger-1/vouchers/voucher-1')
+
+    expect(await screen.findByText('现金流分类规则读取失败')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /^校\s*验$/ }))
+
+    await waitFor(() => expect(apiFetch).toHaveBeenCalledWith(
+      '/ledgers/ledger-1/vouchers/voucher-1:validate',
+      { localUserId: 'user-1', localUserName: 'admin' },
+      expect.objectContaining({ method: 'POST' }),
+    ))
+    expect(screen.queryByText('现金流项目未分类')).not.toBeInTheDocument()
+  })
+
+  it('allows a stale submitted voucher to be returned for correction', async () => {
+    installCashFlowBackend()
+    renderEditor('/ledgers/ledger-1/vouchers/voucher-submitted-stale')
+
+    fireEvent.click(await screen.findByRole('button', { name: /^退\s*回$/ }))
+    fireEvent.change(screen.getByPlaceholderText('原因不能为空'), { target: { value: '现金流分类需要修正' } })
+    fireEvent.click(screen.getByRole('button', { name: /^确\s*认$/ }))
+
+    await waitFor(() => expect(apiFetch).toHaveBeenCalledWith(
+      '/ledgers/ledger-1/vouchers/voucher-submitted-stale:reject',
+      { localUserId: 'user-1', localUserName: 'admin' },
+      expect.objectContaining({ method: 'POST', body: JSON.stringify({ comment: '现金流分类需要修正' }) }),
+    ))
+    expect(screen.queryByText('现金流项目未分类')).not.toBeInTheDocument()
   })
 
   it('shows a stale persisted item clearly marked instead of a raw id', async () => {
