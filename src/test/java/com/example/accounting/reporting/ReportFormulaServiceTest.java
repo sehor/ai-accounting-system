@@ -293,6 +293,95 @@ class ReportFormulaServiceTest {
         return node;
     }
 
+    @Test
+    void cashFlowFormulaRunsTheFullVersionLifecycle() {
+        UUID userId = UUID.randomUUID();
+        UUID ledgerId = createLedger(userId, "SME", "v1");
+        postVoucher(userId, ledgerId, "2026-01", "1", List.of(
+                line(ledgerId, "1001", "DEBIT", "100"), line(ledgerId, "3001", "CREDIT", "100")));
+        applyProjection(ledgerId);
+
+        ReportFormulaResponses.Workspace workspace = service.workspace(userId, ledgerId, "CASH_FLOW");
+        assertThat(workspace.publishedVersion()).isEqualTo(1);
+        assertThat(workspace.kind()).isEqualTo("FIXED_LINES");
+        assertThat(workspace.reportType()).isEqualTo("CASH_FLOW");
+
+        service.createDraft(userId, ledgerId, "CASH_FLOW");
+        ReportFormulaResponses.Draft draft = service.updateDraft(userId, ledgerId, "CASH_FLOW",
+                new ReportFormulaRequests.DraftUpdate(1L,
+                        List.of(new ReportFormulaRequests.LineEdit(
+                                "cf-1", "销售收到现金（改）",
+                                cashFlowExpression("INFLOW", List.of("SME_CF_01_SALES_RECEIPTS")))),
+                        null));
+        assertThat(draft.version()).isEqualTo(2);
+
+        ReportFormulaResponses.PreviewResult preview = service.preview(userId, ledgerId, "CASH_FLOW",
+                new ReportFormulaRequests.PreviewRequest(2L, "2026-01", null, null));
+        assertThat(preview.blockingIssues()).isEmpty();
+        assertThat(preview.previewedDraftVersion()).isEqualTo(2);
+        StatutoryReportResponses.Statement previewStatement = mapper.convertValue(
+                preview.statement(), StatutoryReportResponses.Statement.class);
+        assertThat(previewStatement.dataQuality().status()).isEqualTo("COMPLETE");
+        assertThat(line(previewStatement, "cf-1").name()).isEqualTo("销售收到现金（改）");
+        assertThat(line(previewStatement, "cf-1").primaryAmount()).isEqualByComparingTo("100.00");
+
+        ReportFormulaResponses.PublishResult publish = service.publish(userId, ledgerId, "CASH_FLOW",
+                new ReportFormulaRequests.PublishRequest(1, 2L, false));
+        assertThat(publish.publishedVersion()).isEqualTo(2);
+
+        StatutoryReportResponses.Statement report = reporting.statutoryStatement(
+                userId, ledgerId, "cash-flow", "2026-01");
+        assertThat(report.formulaCode()).isEqualTo("CASH_FLOW");
+        assertThat(report.formulaVersion()).isEqualTo(2);
+        assertThat(line(report, "cf-1").name()).isEqualTo("销售收到现金（改）");
+        assertThat(report.dataQuality().status()).isEqualTo("COMPLETE");
+        assertThat(report.checks()).allMatch(StatutoryReportResponses.Check::passed);
+
+        ReportFormulaResponses.RollbackResult rollback = service.rollback(userId, ledgerId, "CASH_FLOW", 1,
+                new ReportFormulaRequests.RollbackRequest(2));
+        assertThat(rollback.publishedVersion()).isEqualTo(3);
+        assertThat(line(reporting.statutoryStatement(userId, ledgerId, "cash-flow", "2026-01"), "cf-1").name())
+                .isEqualTo("销售产成品、商品、提供劳务收到的现金");
+    }
+
+    @Test
+    void invalidFormulaEnumsReturnTheFormulaValidationProblem() {
+        UUID userId = UUID.randomUUID();
+        UUID ledgerId = createLedger(userId, "SME", "v1");
+        service.createDraft(userId, ledgerId, "CASH_FLOW");
+
+        assertThatThrownBy(() -> service.updateDraft(userId, ledgerId, "CASH_FLOW",
+                new ReportFormulaRequests.DraftUpdate(1L,
+                        List.of(new ReportFormulaRequests.LineEdit(
+                                "cf-1", "非法方向",
+                                cashFlowExpression("SIDEWAYS",
+                                        List.of("SME_CF_01_SALES_RECEIPTS")))),
+                        null)))
+                .isInstanceOfSatisfying(ApiProblemException.class, error -> {
+                    assertThat(error.status()).isEqualTo(422);
+                    assertThat(error.code()).isEqualTo("REPORT_FORMULA_INVALID");
+                });
+    }
+
+    private StatutoryReportResponses.Line line(StatutoryReportResponses.Statement statement, String key) {
+        return statement.groups().stream()
+                .flatMap(group -> group.lines().stream())
+                .filter(row -> key.equals(row.key())).findFirst().orElseThrow();
+    }
+
+    private ObjectNode cashFlowExpression(String direction, List<String> itemCodes) {
+        ObjectNode node = mapper.createObjectNode();
+        node.put("type", "CASH_FLOW_ITEM_AMOUNT");
+        node.put("direction", direction);
+        ArrayNode codes = node.putArray("itemCodes");
+        itemCodes.forEach(codes::add);
+        ArrayNode accounts = node.putArray("cashAccounts");
+        accounts.add(json("STANDARD_ACCOUNT_KEY", "ASSET.CASH"));
+        accounts.add(json("STANDARD_ACCOUNT_KEY", "ASSET.BANK_DEPOSIT"));
+        accounts.add(json("STANDARD_ACCOUNT_KEY", "ASSET.OTHER_MONETARY_FUNDS"));
+        return node;
+    }
+
     private ObjectNode json(String type, String value) {
         ObjectNode node = mapper.createObjectNode();
         node.put("type", type);
@@ -314,8 +403,12 @@ class ReportFormulaServiceTest {
         UUID accountId = jdbc.queryForObject(
                 "select id from ledger_account where ledger_id = ? and code = ?",
                 UUID.class, ledgerId, code);
+        List<UUID> items = jdbc.queryForList(
+                "select id from cash_flow_item where ledger_id = ? and code = 'SME_CF_01_SALES_RECEIPTS'",
+                UUID.class, ledgerId);
+        UUID cashItem = items.isEmpty() ? null : items.getFirst();
         return new com.example.accounting.voucher.VoucherRequests.Line(accountId, side, "CNY",
-                new BigDecimal(amount), BigDecimal.ONE, "test");
+                new BigDecimal(amount), BigDecimal.ONE, "test", cashItem, null, null, null);
     }
 
     private UUID createLedger(UUID userId, String standardCode, String standardVersion) {

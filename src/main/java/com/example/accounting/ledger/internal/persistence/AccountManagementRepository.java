@@ -7,6 +7,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -417,6 +418,40 @@ public class AccountManagementRepository {
                 insert into cash_flow_item (id, ledger_id, code, name, is_template)
                 values (?, ?, ?, ?, ?)
                 """, id, ledgerId, code, name, template);
+    }
+
+    /**
+     * Idempotent template seeding keyed on the (ledger_id, code) unique
+     * constraint: repeated provisioner runs (including concurrent instances)
+     * insert nothing new.
+     */
+    public void insertTemplateCashFlowItemIfAbsent(UUID ledgerId, String code, String name) {
+        jdbc.update("""
+                insert into cash_flow_item (id, ledger_id, code, name, is_template)
+                values (?, ?, ?, ?, true)
+                on conflict (ledger_id, code) do nothing
+                """, UUID.randomUUID(), ledgerId, code, name);
+    }
+
+    /** True when a non-template (custom) item already occupies the code. */
+    public boolean nonTemplateCashFlowItemExists(UUID ledgerId, String code) {
+        return Boolean.TRUE.equals(jdbc.queryForObject("""
+                select exists (
+                    select 1 from cash_flow_item
+                    where ledger_id = ? and code = ? and is_template = false)
+                """, Boolean.class, ledgerId, code));
+    }
+
+    /** Deactivates template items with the given codes without deleting rows. */
+    public void deactivateTemplateCashFlowItems(UUID ledgerId, Collection<String> codes) {
+        if (codes.isEmpty()) {
+            return;
+        }
+        jdbc.update("""
+                update cash_flow_item
+                set status = 'INACTIVE'
+                where ledger_id = ? and is_template = true and code = any(?)
+                """, ledgerId, codes.toArray(String[]::new));
     }
 
     public List<LedgerResponses.CashFlowItem> cashFlowItems(UUID ledgerId) {

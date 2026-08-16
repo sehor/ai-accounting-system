@@ -39,6 +39,59 @@ public class StandardFormulaConverter {
             new FormulaCheck("OPENING_EQUATION", "年初资产总计=负债和所有者权益总计",
                     "bs-30", "bs-53", ReportFormulaDefinition.CheckColumn.COMPARATIVE));
 
+    /** 会小企 03 表勾稽关系，主列与第二列各 5 项，共 10 项。 */
+    private static final List<FormulaCheck> CASH_FLOW_CHECKS = List.of(
+            cashFlowCheck("CF_OPERATING_NET", "经营活动净额=收入-支出", "cf-7",
+                    ReportFormulaDefinition.CheckColumn.PRIMARY,
+                    List.of(new LineComponent("cf-1", 1), new LineComponent("cf-2", 1),
+                            new LineComponent("cf-3", -1), new LineComponent("cf-4", -1),
+                            new LineComponent("cf-5", -1), new LineComponent("cf-6", -1))),
+            cashFlowCheck("CF_INVESTING_NET", "投资活动净额=收入-支出", "cf-13",
+                    ReportFormulaDefinition.CheckColumn.PRIMARY,
+                    List.of(new LineComponent("cf-8", 1), new LineComponent("cf-9", 1),
+                            new LineComponent("cf-10", 1), new LineComponent("cf-11", -1),
+                            new LineComponent("cf-12", -1))),
+            cashFlowCheck("CF_FINANCING_NET", "筹资活动净额=收入-支出", "cf-19",
+                    ReportFormulaDefinition.CheckColumn.PRIMARY,
+                    List.of(new LineComponent("cf-14", 1), new LineComponent("cf-15", 1),
+                            new LineComponent("cf-16", -1), new LineComponent("cf-17", -1),
+                            new LineComponent("cf-18", -1))),
+            cashFlowCheck("CF_NET_INCREASE", "现金净增加额=三类净额之和", "cf-20",
+                    ReportFormulaDefinition.CheckColumn.PRIMARY,
+                    List.of(new LineComponent("cf-7", 1), new LineComponent("cf-13", 1),
+                            new LineComponent("cf-19", 1))),
+            cashFlowCheck("CF_CLOSING_BALANCE", "期末现金余额=净增加额+期初余额", "cf-22",
+                    ReportFormulaDefinition.CheckColumn.PRIMARY,
+                    List.of(new LineComponent("cf-20", 1), new LineComponent("cf-21", 1))),
+            cashFlowCheck("CF_OPERATING_NET", "经营活动净额=收入-支出", "cf-7",
+                    ReportFormulaDefinition.CheckColumn.COMPARATIVE,
+                    List.of(new LineComponent("cf-1", 1), new LineComponent("cf-2", 1),
+                            new LineComponent("cf-3", -1), new LineComponent("cf-4", -1),
+                            new LineComponent("cf-5", -1), new LineComponent("cf-6", -1))),
+            cashFlowCheck("CF_INVESTING_NET", "投资活动净额=收入-支出", "cf-13",
+                    ReportFormulaDefinition.CheckColumn.COMPARATIVE,
+                    List.of(new LineComponent("cf-8", 1), new LineComponent("cf-9", 1),
+                            new LineComponent("cf-10", 1), new LineComponent("cf-11", -1),
+                            new LineComponent("cf-12", -1))),
+            cashFlowCheck("CF_FINANCING_NET", "筹资活动净额=收入-支出", "cf-19",
+                    ReportFormulaDefinition.CheckColumn.COMPARATIVE,
+                    List.of(new LineComponent("cf-14", 1), new LineComponent("cf-15", 1),
+                            new LineComponent("cf-16", -1), new LineComponent("cf-17", -1),
+                            new LineComponent("cf-18", -1))),
+            cashFlowCheck("CF_NET_INCREASE", "现金净增加额=三类净额之和", "cf-20",
+                    ReportFormulaDefinition.CheckColumn.COMPARATIVE,
+                    List.of(new LineComponent("cf-7", 1), new LineComponent("cf-13", 1),
+                            new LineComponent("cf-19", 1))),
+            cashFlowCheck("CF_CLOSING_BALANCE", "期末现金余额=净增加额+期初余额", "cf-22",
+                    ReportFormulaDefinition.CheckColumn.COMPARATIVE,
+                    List.of(new LineComponent("cf-20", 1), new LineComponent("cf-21", 1))));
+
+    private static FormulaCheck cashFlowCheck(String code, String name, String leftLineKey,
+                                              ReportFormulaDefinition.CheckColumn column,
+                                              List<LineComponent> rightComponents) {
+        return new FormulaCheck(code, name, leftLineKey, null, column, rightComponents);
+    }
+
     private final FormulaParser parser;
 
     public StandardFormulaConverter() {
@@ -135,7 +188,8 @@ public class StandardFormulaConverter {
         String reportType = formula.code();
         boolean balanceSheet = ReportFormulaDefinition.REPORT_BALANCE_SHEET.equals(reportType);
         boolean income = ReportFormulaDefinition.REPORT_INCOME_STATEMENT.equals(reportType);
-        if (!balanceSheet && !income) {
+        boolean cashFlow = ReportFormulaDefinition.REPORT_CASH_FLOW.equals(reportType);
+        if (!balanceSheet && !income && !cashFlow) {
             throw new IllegalArgumentException("Unsupported SME formula code: " + formula.code());
         }
         ColumnPolicy policy = switch (statutory.path("periodMode").asText("")) {
@@ -166,7 +220,7 @@ public class StandardFormulaConverter {
                 ReportFormulaDefinition.CURRENT_SCHEMA_VERSION,
                 ReportFormulaDefinition.KIND_FIXED_LINES,
                 reportType, template, policy, List.copyOf(groups), List.of(),
-                balanceSheet ? BALANCE_CHECKS : List.of());
+                balanceSheet ? BALANCE_CHECKS : cashFlow ? CASH_FLOW_CHECKS : List.of());
     }
 
     private ReportFormulaDefinition.LineExpression expression(JsonNode operation) {
@@ -179,9 +233,12 @@ public class StandardFormulaConverter {
                             ReportFormulaDefinition.REF_STANDARD_ACCOUNT_KEY,
                             requiredText(account, "key")));
                 }
+                String basis = operation.path("basis").asText("");
                 yield new AccountAmountExpression(kind,
                         operation.path("side").asText(ReportFormulaDefinition.SIDE_DEBIT),
-                        List.copyOf(accounts));
+                        List.copyOf(accounts),
+                        basis.isBlank() ? null
+                                : ReportFormulaDefinition.AmountBasis.valueOf(basis));
             }
             case "LINEAR_COMBINATION" -> {
                 List<LineComponent> components = new ArrayList<>();
@@ -190,6 +247,30 @@ public class StandardFormulaConverter {
                             requiredText(component, "key"), component.path("factor").asInt(1)));
                 }
                 yield new LinearCombinationExpression(List.copyOf(components));
+            }
+            case "CASH_FLOW_ITEM_AMOUNT" -> {
+                String direction = requiredText(operation, "direction");
+                List<String> itemCodes = new ArrayList<>();
+                for (JsonNode itemCode : operation.path("itemCodes")) {
+                    itemCodes.add(itemCode.asText());
+                }
+                if (itemCodes.isEmpty()) {
+                    throw new IllegalArgumentException(
+                            "A statutory cash flow operation needs itemCodes");
+                }
+                List<AccountReference> cashAccounts = new ArrayList<>();
+                for (JsonNode account : operation.path("cashAccounts")) {
+                    cashAccounts.add(new AccountReference(
+                            ReportFormulaDefinition.REF_STANDARD_ACCOUNT_KEY,
+                            requiredText(account, "key")));
+                }
+                if (cashAccounts.isEmpty()) {
+                    throw new IllegalArgumentException(
+                            "A statutory cash flow operation needs cashAccounts");
+                }
+                yield new ReportFormulaDefinition.CashFlowItemAmountExpression(
+                        ReportFormulaDefinition.CashFlowDirection.valueOf(direction),
+                        List.copyOf(itemCodes), List.copyOf(cashAccounts));
             }
             default -> throw new IllegalArgumentException(
                     "Unsupported statutory formula operation: " + kind);

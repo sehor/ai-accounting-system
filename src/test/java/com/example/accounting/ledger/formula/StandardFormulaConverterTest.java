@@ -62,6 +62,57 @@ class StandardFormulaConverterTest {
     }
 
     @Test
+    void convertsSmeCashFlowToFixedLinesWithTwentyTwoRowsAndTenChecks() {
+        ReportFormulaDefinition definition = smeFormula("CASH_FLOW");
+
+        assertThat(definition.kind()).isEqualTo("FIXED_LINES");
+        assertThat(definition.reportType()).isEqualTo("CASH_FLOW");
+        assertThat(definition.templateCode()).isEqualTo("SME-2011-17");
+        assertThat(definition.columnPolicy())
+                .isEqualTo(new ColumnPolicy(AmountBasis.ACTIVITY, AmountBasis.ACTIVITY));
+        assertThat(definition.rules()).isEmpty();
+        assertThat(definition.groups()).extracting(ReportFormulaDefinition.FormulaGroup::key)
+                .containsExactly("OPERATING", "INVESTING", "FINANCING", "BALANCES");
+        long numberedLines = definition.groups().stream()
+                .flatMap(group -> group.lines().stream())
+                .filter(line -> line.lineNo() > 0)
+                .count();
+        assertThat(numberedLines).isEqualTo(22);
+        assertThat(definition.checks()).hasSize(10);
+        assertThat(definition.checks()).extracting(ReportFormulaDefinition.FormulaCheck::code)
+                .containsExactly("CF_OPERATING_NET", "CF_INVESTING_NET", "CF_FINANCING_NET",
+                        "CF_NET_INCREASE", "CF_CLOSING_BALANCE",
+                        "CF_OPERATING_NET", "CF_INVESTING_NET", "CF_FINANCING_NET",
+                        "CF_NET_INCREASE", "CF_CLOSING_BALANCE");
+        List<ReportFormulaDefinition.FormulaLine> lines = definition.groups().stream()
+                .flatMap(group -> group.lines().stream())
+                .toList();
+        ReportFormulaDefinition.FormulaLine sales = lines.stream()
+                .filter(line -> "cf-1".equals(line.key())).findFirst().orElseThrow();
+        assertThat(sales.expression())
+                .isInstanceOf(ReportFormulaDefinition.CashFlowItemAmountExpression.class);
+        ReportFormulaDefinition.CashFlowItemAmountExpression salesFlow =
+                (ReportFormulaDefinition.CashFlowItemAmountExpression) sales.expression();
+        assertThat(salesFlow.direction()).isEqualTo(ReportFormulaDefinition.CashFlowDirection.INFLOW);
+        assertThat(salesFlow.itemCodes()).containsExactly("SME_CF_01_SALES_RECEIPTS");
+        assertThat(salesFlow.cashAccounts()).extracting(ReportFormulaDefinition.AccountReference::value)
+                .containsExactly("ASSET.CASH", "ASSET.BANK_DEPOSIT", "ASSET.OTHER_MONETARY_FUNDS");
+        ReportFormulaDefinition.FormulaLine disposal = lines.stream()
+                .filter(line -> "cf-10".equals(line.key())).findFirst().orElseThrow();
+        assertThat(((ReportFormulaDefinition.CashFlowItemAmountExpression) disposal.expression())
+                .direction()).isEqualTo(ReportFormulaDefinition.CashFlowDirection.NET);
+        ReportFormulaDefinition.FormulaLine opening = lines.stream()
+                .filter(line -> "cf-21".equals(line.key())).findFirst().orElseThrow();
+        ReportFormulaDefinition.AccountAmountExpression openingAmount =
+                (ReportFormulaDefinition.AccountAmountExpression) opening.expression();
+        assertThat(openingAmount.basis()).isEqualTo(AmountBasis.OPENING);
+        ReportFormulaDefinition.FormulaLine closing = lines.stream()
+                .filter(line -> "cf-22".equals(line.key())).findFirst().orElseThrow();
+        assertThat(((ReportFormulaDefinition.AccountAmountExpression) closing.expression()).basis())
+                .isEqualTo(AmountBasis.CLOSING);
+    }
+
+    @Test
     void convertsCasBalanceSheetToAccountDetailRules() {
         ReportFormulaDefinition definition = casFormula("BALANCE_SHEET");
 

@@ -34,6 +34,9 @@ class Stage3VoucherTest {
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
+    /** Detailed cash flow item attached to test lines so external cash vouchers stay classified. */
+    private UUID defaultCashItem;
+
     @Test
     void savesABalancedVoucherAsPosted() {
         UUID userId = UUID.randomUUID();
@@ -150,7 +153,7 @@ class Stage3VoucherTest {
         UUID periodId = periodId(ledgerId, "2026-01");
         List<VoucherRequests.Line> lines = List.of(
                 new VoucherRequests.Line(accountId(ledgerId, "1001"), "DEBIT", "CNY", new BigDecimal("1"),
-                        BigDecimal.ONE, "研发工资"),
+                        BigDecimal.ONE, "研发工资", defaultCashItem, null, null, null),
                 new VoucherRequests.Line(accountId(ledgerId, "3001"), "CREDIT", "CNY", new BigDecimal("1"),
                         BigDecimal.ONE, "研发工资"));
         voucherService.create(userId, ledgerId, new VoucherRequests.Create(
@@ -640,10 +643,14 @@ class Stage3VoucherTest {
     }
 
     private VoucherRequests.Line line(UUID accountId, String side, String amount) {
-        return new VoucherRequests.Line(accountId, side, "CNY", new BigDecimal(amount), BigDecimal.ONE, "line");
+        return new VoucherRequests.Line(accountId, side, "CNY", new BigDecimal(amount), BigDecimal.ONE,
+                "line", defaultCashItem, null, null, null);
     }
 
     private UUID accountId(UUID ledgerId, String code) {
+        defaultCashItem = jdbcTemplate.queryForObject(
+                "select id from cash_flow_item where ledger_id = ? and code = 'SME_CF_01_SALES_RECEIPTS'",
+                UUID.class, ledgerId);
         return jdbcTemplate.queryForObject("select id from ledger_account where ledger_id = ? and code = ?",
                 UUID.class, ledgerId, code);
     }

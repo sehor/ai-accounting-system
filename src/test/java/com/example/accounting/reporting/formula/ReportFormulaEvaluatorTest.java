@@ -154,6 +154,127 @@ class ReportFormulaEvaluatorTest {
     }
 
     @Test
+    void evaluatesCashFlowDirectionsNetAndOpeningClosingBasis() {
+        ReportFormulaEvaluator evaluator = new ReportFormulaEvaluator(resolver);
+        resolver.byKey.put("ASSET.CASH", Set.of(cashLeaf));
+        resolver.byKey.put("ASSET.BANK_DEPOSIT", Set.of(bankLeaf));
+        List<AccountReference> cashAccounts = List.of(
+                new AccountReference("STANDARD_ACCOUNT_KEY", "ASSET.CASH"),
+                new AccountReference("STANDARD_ACCOUNT_KEY", "ASSET.BANK_DEPOSIT"));
+        ReportFormulaDefinition definition = new ReportFormulaDefinition(
+                1, "FIXED_LINES", "CASH_FLOW", "SME-2011-17",
+                new ColumnPolicy(AmountBasis.ACTIVITY, AmountBasis.ACTIVITY),
+                List.of(new FormulaGroup("OPERATING", "经营活动", List.of(
+                        new FormulaLine("cf-1", 1, 0, "DETAIL", "销售收到的现金",
+                                new ReportFormulaDefinition.CashFlowItemAmountExpression(
+                                        ReportFormulaDefinition.CashFlowDirection.INFLOW,
+                                        List.of("SME_CF_01_SALES_RECEIPTS"), cashAccounts)),
+                        new FormulaLine("cf-3", 3, 0, "DETAIL", "购买支付的现金",
+                                new ReportFormulaDefinition.CashFlowItemAmountExpression(
+                                        ReportFormulaDefinition.CashFlowDirection.OUTFLOW,
+                                        List.of("SME_CF_03_PURCHASE_PAYMENTS"), cashAccounts)),
+                        new FormulaLine("cf-7", 7, 0, "TOTAL", "经营净额",
+                                new LinearCombinationExpression(List.of(
+                                        new LineComponent("cf-1", 1), new LineComponent("cf-3", -1)))))),
+                        new FormulaGroup("BALANCES", "余额", List.of(
+                                new FormulaLine("cf-20", 20, 0, "TOTAL", "现金净增加额",
+                                        new LinearCombinationExpression(List.of(
+                                                new LineComponent("cf-7", 1)))),
+                                new FormulaLine("cf-21", 21, 0, "DETAIL", "期初现金余额",
+                                        new AccountAmountExpression("ACCOUNT_BALANCE", "DEBIT",
+                                                cashAccounts, AmountBasis.OPENING)),
+                                new FormulaLine("cf-22", 22, 0, "TOTAL", "期末现金余额",
+                                        new AccountAmountExpression("ACCOUNT_BALANCE", "DEBIT",
+                                                cashAccounts, AmountBasis.CLOSING))))),
+                List.of(),
+                List.of(
+                        new FormulaCheck("CF_NET_INCREASE", "净增加额", "cf-20", null,
+                                CheckColumn.PRIMARY, List.of(new LineComponent("cf-7", 1))),
+                        new FormulaCheck("CF_CLOSING_BALANCE", "期末余额", "cf-22", null,
+                                CheckColumn.COMPARATIVE, List.of(
+                                        new LineComponent("cf-20", 1), new LineComponent("cf-21", 1)))));
+
+        CashFlowSource primaryFlows = CashFlowSource.of(
+                Map.of("SME_CF_01_SALES_RECEIPTS", decimal("100.00")),
+                Map.of("SME_CF_03_PURCHASE_PAYMENTS", decimal("60.00")));
+        CashFlowSource comparativeFlows = CashFlowSource.of(
+                Map.of("SME_CF_01_SALES_RECEIPTS", decimal("40.00")),
+                Map.of("SME_CF_03_PURCHASE_PAYMENTS", decimal("10.00")));
+        List<FormulaAccountAmount> primaryBalances = List.of(
+                amount(cashLeaf, "1001", "库存现金", "ASSET.CASH", "CURRENT_ASSET",
+                        "200.00", "40.00", "240.00"),
+                amount(bankLeaf, "1002", "银行存款", "ASSET.BANK_DEPOSIT", "CURRENT_ASSET",
+                        "0.00", "0.00", "0.00"));
+        List<FormulaAccountAmount> comparativeBalances = List.of(
+                amount(cashLeaf, "1001", "库存现金", "ASSET.CASH", "CURRENT_ASSET",
+                        "210.00", "30.00", "240.00"),
+                amount(bankLeaf, "1002", "银行存款", "ASSET.BANK_DEPOSIT", "CURRENT_ASSET",
+                        "0.00", "0.00", "0.00"));
+
+        StatutoryReportResponses.Statement statement = evaluator.evaluateFixedLines(
+                UUID.randomUUID(), definition, primaryBalances, comparativeBalances,
+                primaryFlows, comparativeFlows,
+                new ReportFormulaEvaluator.FixedLinesMetadata(
+                        "cash-flow", "SME", "2011-17", "2026-02", "本年累计金额", "本月金额"));
+
+        List<StatutoryReportResponses.Line> operating = statement.groups().get(0).lines();
+        assertThat(operating.get(0).primaryAmount()).isEqualByComparingTo("100.00");
+        assertThat(operating.get(0).comparativeAmount()).isEqualByComparingTo("40.00");
+        assertThat(operating.get(1).primaryAmount()).isEqualByComparingTo("60.00");
+        assertThat(operating.get(1).comparativeAmount()).isEqualByComparingTo("10.00");
+        assertThat(operating.get(2).primaryAmount()).isEqualByComparingTo("40.00");
+        assertThat(operating.get(2).comparativeAmount()).isEqualByComparingTo("30.00");
+        List<StatutoryReportResponses.Line> balances = statement.groups().get(1).lines();
+        assertThat(balances.get(0).primaryAmount()).isEqualByComparingTo("40.00");
+        // 期初现金余额 reads each column's own opening.
+        assertThat(balances.get(1).primaryAmount()).isEqualByComparingTo("200.00");
+        assertThat(balances.get(1).comparativeAmount()).isEqualByComparingTo("210.00");
+        // 期末现金余额 reads each column's own closing.
+        assertThat(balances.get(2).primaryAmount()).isEqualByComparingTo("240.00");
+        assertThat(balances.get(2).comparativeAmount()).isEqualByComparingTo("240.00");
+        assertThat(statement.checks()).hasSize(2);
+        assertThat(statement.checks()).allMatch(StatutoryReportResponses.Check::passed);
+    }
+
+    @Test
+    void cashFlowNetKeepsSignAndRedAmountsOffsetOutflow() {
+        ReportFormulaEvaluator evaluator = new ReportFormulaEvaluator(resolver);
+        resolver.byKey.put("ASSET.CASH", Set.of(cashLeaf));
+        List<AccountReference> cashAccounts = List.of(
+                new AccountReference("STANDARD_ACCOUNT_KEY", "ASSET.CASH"));
+        ReportFormulaDefinition definition = new ReportFormulaDefinition(
+                1, "FIXED_LINES", "CASH_FLOW", "SME-2011-17",
+                new ColumnPolicy(AmountBasis.ACTIVITY, AmountBasis.ACTIVITY),
+                List.of(new FormulaGroup("INVESTING", "投资活动", List.of(
+                        new FormulaLine("cf-10", 10, 0, "DETAIL", "处置资产净额",
+                                new ReportFormulaDefinition.CashFlowItemAmountExpression(
+                                        ReportFormulaDefinition.CashFlowDirection.NET,
+                                        List.of("SME_CF_10_ASSET_DISPOSAL"), cashAccounts)),
+                        new FormulaLine("cf-3", 3, 0, "DETAIL", "采购支出",
+                                new ReportFormulaDefinition.CashFlowItemAmountExpression(
+                                        ReportFormulaDefinition.CashFlowDirection.OUTFLOW,
+                                        List.of("SME_CF_03_PURCHASE_PAYMENTS"), cashAccounts))))),
+                List.of(), List.of());
+
+        // NET keeps debit minus credit (can be negative); OUTFLOW returns a
+        // positive expense and red (negative debit) entries offset it.
+        CashFlowSource flows = CashFlowSource.of(
+                Map.of("SME_CF_10_ASSET_DISPOSAL", decimal("-5.00"),
+                        "SME_CF_03_PURCHASE_PAYMENTS", decimal("-3.00")),
+                Map.of("SME_CF_10_ASSET_DISPOSAL", decimal("8.00"),
+                        "SME_CF_03_PURCHASE_PAYMENTS", decimal("60.00")));
+
+        StatutoryReportResponses.Statement statement = evaluator.evaluateFixedLines(
+                UUID.randomUUID(), definition, List.of(), List.of(), flows, CashFlowSource.empty(),
+                new ReportFormulaEvaluator.FixedLinesMetadata(
+                        "cash-flow", "SME", "2011-17", "2026-02", "本年累计金额", "本月金额"));
+
+        List<StatutoryReportResponses.Line> rows = statement.groups().get(0).lines();
+        assertThat(rows.get(0).primaryAmount()).isEqualByComparingTo("-13.00");
+        assertThat(rows.get(1).primaryAmount()).isEqualByComparingTo("63.00");
+    }
+
+    @Test
     void evaluatorContainsNoFixedTemplateLineKeys() throws Exception {
         String evaluatorSource = java.nio.file.Files.readString(
                 java.nio.file.Path.of("src/main/java/com/example/accounting/reporting/formula/"

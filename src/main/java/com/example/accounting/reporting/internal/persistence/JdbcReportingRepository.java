@@ -205,6 +205,141 @@ public class JdbcReportingRepository implements ReportingRepository {
                 """, UUID.class, ledgerId, categories.toArray(String[]::new)));
     }
 
+    /**
+     * Shared cash-line scope: posted voucher lines of a period range whose
+     * account is one of the given cash leaf ids, restricted to vouchers that
+     * contain at least one non-cash line (internal cash-to-cash transfers drop
+     * out of {@code external_cash_lines}).  Parameters, in order: ledgerId,
+     * periodFrom, periodTo, cashAccountIds (cash lines), ledgerId (other
+     * lines), cashAccountIds (other lines).
+     */
+    private static final String CASH_LINES_CTE = """
+            with cash_lines as (
+                select v.id as voucher_id, v.voucher_number, p.period_code, v.voucher_date,
+                       l.id as line_id, l.line_no, l.side, l.base_amount,
+                       i.code as item_code, i.status as item_status
+                from voucher v
+                join accounting_period p on p.id = v.period_id and p.ledger_id = v.ledger_id
+                join voucher_line l on l.voucher_id = v.id and l.ledger_id = v.ledger_id
+                left join cash_flow_item i on i.id = l.cash_flow_item_id and i.ledger_id = l.ledger_id
+                where v.ledger_id = ?
+                  and v.status = 'POSTED'
+                  and v.deleted_at is null
+                  and p.period_code between ? and ?
+                  and l.account_id = any(?)
+            ),
+            external_cash_lines as (
+                select cash.*
+                from cash_lines cash
+                where exists (
+                    select 1
+                    from voucher_line other
+                    where other.ledger_id = ?
+                      and other.voucher_id = cash.voucher_id
+                      and not (other.account_id = any(?))
+                )
+            )
+            """;
+
+    private static final String LEGACY_COARSE_ITEM_CODES = "('OPERATING','INVESTING','FINANCING')";
+
+    /**
+     * Unclassified-line predicate shared verbatim by the quality count and
+     * sample queries so the two can never diverge.  The single parameter is the
+     * reportable item code set of the current published formula.
+     */
+    private static final String UNCLASSIFIED_PREDICATE = "item_code is null"
+            + " or item_code in " + LEGACY_COARSE_ITEM_CODES
+            + " or item_status = 'INACTIVE'"
+            + " or (item_code is not null and item_status = 'ACTIVE'"
+            + " and not (item_code = any(?)))";
+
+    @Override
+    public com.example.accounting.reporting.formula.CashFlowSource cashFlowAmounts(
+            UUID ledgerId, PeriodRange range, Set<UUID> cashAccountIds, Set<String> itemCodes) {
+        if (cashAccountIds.isEmpty() || itemCodes.isEmpty()) {
+            return com.example.accounting.reporting.formula.CashFlowSource.empty();
+        }
+        List<Map<String, Object>> rows = jdbc.queryForList(
+                CASH_LINES_CTE + """
+                        select item_code,
+                               sum(case when side = 'DEBIT' then base_amount else 0 end) as debit_amount,
+                               sum(case when side = 'CREDIT' then base_amount else 0 end) as credit_amount
+                        from external_cash_lines
+                        where item_code = any(?)
+                          and item_status = 'ACTIVE'
+                        group by item_code
+                        """,
+                ledgerId, range.periodFrom(), range.periodTo(),
+                cashAccountIds.toArray(UUID[]::new),
+                ledgerId, cashAccountIds.toArray(UUID[]::new),
+                itemCodes.toArray(String[]::new));
+        Map<String, BigDecimal> debit = new LinkedHashMap<>();
+        Map<String, BigDecimal> credit = new LinkedHashMap<>();
+        for (Map<String, Object> row : rows) {
+            String itemCode = (String) row.get("item_code");
+            debit.put(itemCode, amount(row.get("debit_amount")));
+            credit.put(itemCode, amount(row.get("credit_amount")));
+        }
+        return com.example.accounting.reporting.formula.CashFlowSource.of(debit, credit);
+    }
+
+    @Override
+    public ReportingRepository.CashFlowQuality cashFlowQuality(
+            UUID ledgerId, PeriodRange range, Set<UUID> cashAccountIds,
+            Set<String> reportableItemCodes, int maxSamples) {
+        if (cashAccountIds.isEmpty()) {
+            return new ReportingRepository.CashFlowQuality(0, 0, List.of());
+        }
+        Map<String, Object> counts = jdbc.queryForMap(
+                CASH_LINES_CTE + "\n"
+                        + "select count(distinct voucher_id) as unclassified_voucher_count,\n"
+                        + "       count(*) as unclassified_line_count\n"
+                        + "from external_cash_lines\n"
+                        + "where " + UNCLASSIFIED_PREDICATE,
+                ledgerId, range.periodFrom(), range.periodTo(),
+                cashAccountIds.toArray(UUID[]::new),
+                ledgerId, cashAccountIds.toArray(UUID[]::new),
+                reportableItemCodes.toArray(String[]::new));
+        List<ReportingRepository.CashFlowSample> samples = jdbc.query(
+                CASH_LINES_CTE + "\n"
+                        + "select voucher_id, voucher_number, period_code, voucher_date,\n"
+                        + "       line_no, side, base_amount,\n"
+                        + "       case\n"
+                        + "           when item_code is null then 'ITEM_MISSING'\n"
+                        + "           when item_code in " + LEGACY_COARSE_ITEM_CODES
+                        + " then 'LEGACY_COARSE_ITEM'\n"
+                        + "           when item_status = 'INACTIVE' then 'ITEM_INACTIVE'\n"
+                        + "           else 'ITEM_NOT_IN_FORMULA'\n"
+                        + "       end as reason\n"
+                        + "from external_cash_lines\n"
+                        + "where " + UNCLASSIFIED_PREDICATE + "\n"
+                        + "order by period_code, voucher_date, voucher_number, line_no\n"
+                        + "limit ?",
+                (rs, ignored) -> new ReportingRepository.CashFlowSample(
+                        rs.getObject("voucher_id", UUID.class),
+                        rs.getString("voucher_number"),
+                        rs.getString("period_code"),
+                        rs.getObject("voucher_date", LocalDate.class),
+                        rs.getInt("line_no"),
+                        rs.getString("side"),
+                        rs.getBigDecimal("base_amount"),
+                        rs.getString("reason")),
+                ledgerId, range.periodFrom(), range.periodTo(),
+                cashAccountIds.toArray(UUID[]::new),
+                ledgerId, cashAccountIds.toArray(UUID[]::new),
+                reportableItemCodes.toArray(String[]::new),
+                maxSamples);
+        return new ReportingRepository.CashFlowQuality(
+                ((Number) counts.get("unclassified_voucher_count")).intValue(),
+                ((Number) counts.get("unclassified_line_count")).intValue(),
+                samples);
+    }
+
+    private static BigDecimal amount(Object value) {
+        return value == null ? BigDecimal.ZERO : ((BigDecimal) value);
+    }
+
     @Override
     public Map<UUID, Set<UUID>> leafDescendants(UUID ledgerId, Collection<UUID> accountIds) {
         if (accountIds.isEmpty()) {
@@ -292,6 +427,15 @@ public class JdbcReportingRepository implements ReportingRepository {
         return Boolean.TRUE.equals(jdbc.queryForObject("""
                 select exists (select 1 from ledger_account where ledger_id = ? and id = ?)
                 """, Boolean.class, ledgerId, accountId));
+    }
+
+    @Override
+    public Set<String> activeCashFlowItemCodes(UUID ledgerId) {
+        return Set.copyOf(jdbc.queryForList("""
+                select code
+                from cash_flow_item
+                where ledger_id = ? and status = 'ACTIVE'
+                """, String.class, ledgerId));
     }
 
     @Override

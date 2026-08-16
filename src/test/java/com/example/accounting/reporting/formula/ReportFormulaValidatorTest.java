@@ -10,6 +10,8 @@ import com.example.accounting.ledger.formula.FormulaParser;
 import com.example.accounting.ledger.formula.ReportFormulaDefinition;
 import com.example.accounting.ledger.formula.ReportFormulaDefinition.AccountAmountExpression;
 import com.example.accounting.ledger.formula.ReportFormulaDefinition.AccountReference;
+import com.example.accounting.ledger.formula.ReportFormulaDefinition.CashFlowDirection;
+import com.example.accounting.ledger.formula.ReportFormulaDefinition.CashFlowItemAmountExpression;
 import com.example.accounting.ledger.formula.ReportFormulaDefinition.DetailRule;
 import com.example.accounting.ledger.formula.ReportFormulaDefinition.FormulaGroup;
 import com.example.accounting.ledger.formula.ReportFormulaDefinition.FormulaLine;
@@ -203,6 +205,32 @@ class ReportFormulaValidatorTest {
         assertThat(validator.validate(edited, base, ledgerId))
                 .extracting(ReportFormulaValidator.FormulaIssue::code)
                 .contains("STRUCTURE_LOCKED");
+    }
+
+    @Test
+    void restrictsCashFlowExpressionsAndCodesToReportableLedgerItems() {
+        UUID ledgerId = createLedger("SME", "2011-17");
+        List<AccountReference> cashAccounts = List.of(
+                new AccountReference("STANDARD_ACCOUNT_KEY", "ASSET.CASH"),
+                new AccountReference("STANDARD_ACCOUNT_KEY", "ASSET.BANK_DEPOSIT"));
+
+        ReportFormulaDefinition balanceSheet = replaceLine(
+                smeDefinition(ledgerId, "BALANCE_SHEET"), "bs-1",
+                new FormulaLine("bs-1", 1, 0, "DETAIL", "非法现金流表达式",
+                        new CashFlowItemAmountExpression(CashFlowDirection.INFLOW,
+                                List.of("SME_CF_01_SALES_RECEIPTS"), cashAccounts)));
+        assertThat(validator.validate(balanceSheet, ledgerId))
+                .extracting(ReportFormulaValidator.FormulaIssue::code)
+                .contains("EXPRESSION_TYPE_INVALID");
+
+        ReportFormulaDefinition cashFlow = replaceLine(
+                smeDefinition(ledgerId, "CASH_FLOW"), "cf-1",
+                new FormulaLine("cf-1", 1, 0, "DETAIL", "不存在项目",
+                        new CashFlowItemAmountExpression(CashFlowDirection.INFLOW,
+                                List.of("SME_CF_NOT_FOUND"), cashAccounts)));
+        assertThat(validator.validate(cashFlow, ledgerId))
+                .extracting(ReportFormulaValidator.FormulaIssue::code)
+                .contains("ITEM_CODE_NOT_REPORTABLE");
     }
 
     private ReportFormulaDefinition smeDefinition(UUID ledgerId, String code) {

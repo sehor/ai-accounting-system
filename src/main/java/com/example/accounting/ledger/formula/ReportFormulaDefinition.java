@@ -28,12 +28,16 @@ public record ReportFormulaDefinition(
 
     public static final String REPORT_BALANCE_SHEET = "BALANCE_SHEET";
     public static final String REPORT_INCOME_STATEMENT = "INCOME_STATEMENT";
+    public static final String REPORT_CASH_FLOW = "CASH_FLOW";
 
     public static final String REF_STANDARD_ACCOUNT_KEY = "STANDARD_ACCOUNT_KEY";
     public static final String REF_ACCOUNT_ID = "ACCOUNT_ID";
 
     public static final String OP_ACCOUNT_BALANCE = "ACCOUNT_BALANCE";
     public static final String OP_ACCOUNT_ACTIVITY = "ACCOUNT_ACTIVITY";
+
+    /** Fixed line count of the statutory SME cash flow statement (会小企 03 表). */
+    public static final int CASH_FLOW_LINE_COUNT = 22;
 
     public static final String SIDE_DEBIT = "DEBIT";
     public static final String SIDE_CREDIT = "CREDIT";
@@ -55,19 +59,28 @@ public record ReportFormulaDefinition(
             LineExpression expression) {
     }
 
-    /** Discriminated expression: {@code ACCOUNT_AMOUNT} or {@code LINEAR_COMBINATION}. */
+    /** Discriminated expression: {@code ACCOUNT_AMOUNT}, {@code LINEAR_COMBINATION} or
+     * {@code CASH_FLOW_ITEM_AMOUNT}. */
     @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.PROPERTY, property = "type")
     @JsonSubTypes({
             @JsonSubTypes.Type(value = AccountAmountExpression.class, name = "ACCOUNT_AMOUNT"),
-            @JsonSubTypes.Type(value = LinearCombinationExpression.class, name = "LINEAR_COMBINATION")
+            @JsonSubTypes.Type(value = LinearCombinationExpression.class, name = "LINEAR_COMBINATION"),
+            @JsonSubTypes.Type(value = CashFlowItemAmountExpression.class, name = "CASH_FLOW_ITEM_AMOUNT")
     })
-    public sealed interface LineExpression permits AccountAmountExpression, LinearCombinationExpression {
+    public sealed interface LineExpression
+            permits AccountAmountExpression, LinearCombinationExpression, CashFlowItemAmountExpression {
     }
 
     public record AccountAmountExpression(
-            String operation, String side, List<AccountReference> accounts) implements LineExpression {
+            String operation, String side, List<AccountReference> accounts,
+            AmountBasis basis) implements LineExpression {
         public AccountAmountExpression {
             accounts = accounts == null ? List.of() : List.copyOf(accounts);
+        }
+
+        /** Compatibility constructor for schema-1 JSON and callers without a line-level basis. */
+        public AccountAmountExpression(String operation, String side, List<AccountReference> accounts) {
+            this(operation, side, accounts, null);
         }
     }
 
@@ -75,6 +88,29 @@ public record ReportFormulaDefinition(
         public LinearCombinationExpression {
             components = components == null ? List.of() : List.copyOf(components);
         }
+    }
+
+    /**
+     * Cash flow line expression: sums posted voucher lines on the ledger's cash
+     * leaf accounts that reference any of {@code itemCodes}, converts the
+     * resulting debit/credit totals according to {@code direction}, and reports
+     * zero for codes missing from the data.  {@code cashAccounts} declares which
+     * standard or concrete accounts are treated as cash; the service expands
+     * them to leaf ids and evaluates them with the same SQL source.
+     */
+    public record CashFlowItemAmountExpression(
+            CashFlowDirection direction, List<String> itemCodes,
+            List<AccountReference> cashAccounts) implements LineExpression {
+        public CashFlowItemAmountExpression {
+            itemCodes = itemCodes == null ? List.of() : List.copyOf(itemCodes);
+            cashAccounts = cashAccounts == null ? List.of() : List.copyOf(cashAccounts);
+        }
+    }
+
+    public enum CashFlowDirection {
+        INFLOW,
+        OUTFLOW,
+        NET
     }
 
     /** Factor is restricted to +1 / -1. */
@@ -95,17 +131,33 @@ public record ReportFormulaDefinition(
     }
 
     public record FormulaCheck(
-            String code, String name, String leftLineKey, String rightLineKey, CheckColumn column) {
+            String code, String name, String leftLineKey, String rightLineKey, CheckColumn column,
+            List<LineComponent> rightComponents) {
 
         public FormulaCheck {
             if (column == null) {
                 column = "OPENING_EQUATION".equals(code) ? CheckColumn.COMPARATIVE : CheckColumn.PRIMARY;
             }
+            rightComponents = rightComponents == null ? List.of() : List.copyOf(rightComponents);
         }
 
         /** Compatibility constructor for schema-1 JSON and callers created before check columns were explicit. */
         public FormulaCheck(String code, String name, String leftLineKey, String rightLineKey) {
-            this(code, name, leftLineKey, rightLineKey, null);
+            this(code, name, leftLineKey, rightLineKey, null, List.of());
+        }
+
+        /** Constructor used by single-line checks with an explicit column. */
+        public FormulaCheck(String code, String name, String leftLineKey, String rightLineKey,
+                            CheckColumn column) {
+            this(code, name, leftLineKey, rightLineKey, column, List.of());
+        }
+
+        /**
+         * True when the right side is a linear combination of earlier lines
+         * (e.g. statutory cash-flow checks) rather than a single line.
+         */
+        public boolean hasRightComponents() {
+            return !rightComponents.isEmpty();
         }
     }
 

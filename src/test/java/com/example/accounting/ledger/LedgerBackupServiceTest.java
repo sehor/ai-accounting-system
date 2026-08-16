@@ -70,6 +70,12 @@ class LedgerBackupServiceTest {
     @Autowired
     private JdbcTemplate jdbc;
 
+    @Autowired
+    private com.example.accounting.ledger.internal.port.ReportFormulaRepository formulas;
+
+    @Autowired
+    private com.example.accounting.ledger.internal.application.CashFlowTemplateProvisioner cashFlowProvisioner;
+
     @Test
     void backsUpAndRestoresBusinessDataAndAttachmentsIntoANewLedger() {
         CurrentUserResolver.ResolvedUser owner = user(UUID.randomUUID());
@@ -87,7 +93,8 @@ class LedgerBackupServiceTest {
                 ledgers.periodId(sourceId, "2026-01"), LocalDate.of(2026, 1, 15),
                 "GENERAL", "1", "backup test", List.of(
                 new VoucherRequests.Line(ledgers.accountId(sourceId, "1001"), "DEBIT", "CNY",
-                        new BigDecimal("100"), BigDecimal.ONE, "debit"),
+                        new BigDecimal("100"), BigDecimal.ONE, "debit",
+                        cashItem(sourceId), null, null, null),
                 new VoucherRequests.Line(ledgers.accountId(sourceId, "3001"), "CREDIT", "CNY",
                         new BigDecimal("100"), BigDecimal.ONE, "credit"))));
         jdbc.update("""
@@ -184,7 +191,8 @@ class LedgerBackupServiceTest {
                 ledgers.periodId(sourceId, "2026-01"), LocalDate.of(2026, 1, 15),
                 "GENERAL", "V2", "legacy dimensions", List.of(
                 new VoucherRequests.Line(ledgers.accountId(sourceId, "1001"), "DEBIT", "CNY",
-                        new BigDecimal("10"), BigDecimal.ONE, "debit"),
+                        new BigDecimal("10"), BigDecimal.ONE, "debit",
+                        cashItem(sourceId), null, null, null),
                 new VoucherRequests.Line(ledgers.accountId(sourceId, "3001"), "CREDIT", "CNY",
                         new BigDecimal("10"), BigDecimal.ONE, "credit"))));
         byte[] versionTwo = downgrade(backups.backup(owner.id(), sourceId), 2);
@@ -243,7 +251,7 @@ class LedgerBackupServiceTest {
         assertThat(jdbc.queryForObject("""
                 select count(*) from report_formula_snapshot
                 where ledger_id = ? and schema_version = 1 and formula_kind <> 'LEGACY'
-                """, Integer.class, restored.id())).isEqualTo(2);
+                """, Integer.class, restored.id())).isEqualTo(3);
         assertThat(count("report_formula_revision", restored.id())).isEqualTo(2);
 
         LedgerResponses.DimensionType restoredType = ledgers.listDimensionTypes(owner.id(), restored.id()).stream()
@@ -316,6 +324,49 @@ class LedgerBackupServiceTest {
                 actor, null, archive.length, new ByteArrayInputStream(archive)))
                 .isInstanceOfSatisfying(ApiProblemException.class,
                         exception -> assertThat(exception.code()).isEqualTo("LEDGER_BACKUP_INVALID"));
+    }
+
+    @Test
+    void legacyBackupRestoreProvisionsDetailedCashFlowTemplate() throws Exception {
+        CurrentUserResolver.ResolvedUser owner = user(UUID.randomUUID());
+        UUID sourceId = ledgers.create(owner, createRequest("pre-cash-flow")).id();
+        // 把源账套回退成功能上线前的形态：三个粗分类项目、无 CASH_FLOW 公式。
+        jdbc.update("""
+                delete from report_formula_revision
+                where formula_id in (
+                    select id from report_formula_snapshot where ledger_id = ? and code = 'CASH_FLOW')
+                """, sourceId);
+        jdbc.update("delete from report_formula_snapshot where ledger_id = ? and code = 'CASH_FLOW'", sourceId);
+        jdbc.update("delete from cash_flow_item where ledger_id = ?", sourceId);
+        jdbc.update("""
+                insert into cash_flow_item (id, ledger_id, code, name, is_template)
+                values (?, ?, 'OPERATING', '经营活动产生的现金流量', true),
+                       (?, ?, 'INVESTING', '投资活动产生的现金流量', true),
+                       (?, ?, 'FINANCING', '筹资活动产生的现金流量', true)
+                """, UUID.randomUUID(), sourceId, UUID.randomUUID(), sourceId, UUID.randomUUID(), sourceId);
+
+        byte[] archive = downgrade(backups.backup(owner.id(), sourceId), 4);
+        LedgerResponses.Ledger restored = backups.restore(
+                owner, null, archive.length, new ByteArrayInputStream(archive));
+
+        assertThat(jdbc.queryForObject("""
+                select count(*) from cash_flow_item
+                where ledger_id = ? and status = 'ACTIVE'
+                """, Integer.class, restored.id())).isEqualTo(16);
+        assertThat(jdbc.queryForObject("""
+                select count(*) from cash_flow_item
+                where ledger_id = ? and status = 'INACTIVE' and code in ('OPERATING','INVESTING','FINANCING')
+                """, Integer.class, restored.id())).isEqualTo(3);
+        assertThat(jdbc.queryForObject("""
+                select count(*) from report_formula_snapshot
+                where ledger_id = ? and code = 'CASH_FLOW' and schema_version = 1 and published_version = 1
+                """, Integer.class, restored.id())).isEqualTo(1);
+        assertThat(formulas.findPublishedVersion(restored.id(), "CASH_FLOW", 1)).isPresent();
+        // 幂等：再次补齐不产生额外行或版本。
+        cashFlowProvisioner.provision(restored.id());
+        assertThat(jdbc.queryForObject("""
+                select count(*) from cash_flow_item where ledger_id = ? and status = 'ACTIVE'
+                """, Integer.class, restored.id())).isEqualTo(16);
     }
 
     private int count(String table, UUID ledgerId) {
@@ -409,5 +460,11 @@ class LedgerBackupServiceTest {
 
     private CurrentUserResolver.ResolvedUser user(UUID id) {
         return new CurrentUserResolver.ResolvedUser(id, "test", id.toString());
+    }
+
+    private UUID cashItem(UUID ledgerId) {
+        return jdbc.queryForObject(
+                "select id from cash_flow_item where ledger_id = ? and code = 'SME_CF_01_SALES_RECEIPTS'",
+                UUID.class, ledgerId);
     }
 }

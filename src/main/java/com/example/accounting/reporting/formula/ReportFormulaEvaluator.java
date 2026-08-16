@@ -3,6 +3,8 @@ package com.example.accounting.reporting.formula;
 import com.example.accounting.ledger.formula.ReportFormulaDefinition;
 import com.example.accounting.ledger.formula.ReportFormulaDefinition.AccountAmountExpression;
 import com.example.accounting.ledger.formula.ReportFormulaDefinition.AmountBasis;
+import com.example.accounting.ledger.formula.ReportFormulaDefinition.CashFlowDirection;
+import com.example.accounting.ledger.formula.ReportFormulaDefinition.CashFlowItemAmountExpression;
 import com.example.accounting.ledger.formula.ReportFormulaDefinition.DetailRule;
 import com.example.accounting.ledger.formula.ReportFormulaDefinition.FormulaCheck;
 import com.example.accounting.ledger.formula.ReportFormulaDefinition.FormulaGroup;
@@ -50,6 +52,15 @@ public class ReportFormulaEvaluator {
             UUID ledgerId, ReportFormulaDefinition definition,
             List<FormulaAccountAmount> primarySource, List<FormulaAccountAmount> comparativeSource,
             FixedLinesMetadata metadata) {
+        return evaluateFixedLines(ledgerId, definition, primarySource, comparativeSource,
+                CashFlowSource.empty(), CashFlowSource.empty(), metadata);
+    }
+
+    public StatutoryReportResponses.Statement evaluateFixedLines(
+            UUID ledgerId, ReportFormulaDefinition definition,
+            List<FormulaAccountAmount> primarySource, List<FormulaAccountAmount> comparativeSource,
+            CashFlowSource primaryFlows, CashFlowSource comparativeFlows,
+            FixedLinesMetadata metadata) {
         Map<UUID, FormulaAccountAmount> primary = byAccountId(primarySource);
         Map<UUID, FormulaAccountAmount> comparative = byAccountId(comparativeSource);
         Map<String, BigDecimal[]> calculated = new LinkedHashMap<>();
@@ -57,10 +68,10 @@ public class ReportFormulaEvaluator {
         for (FormulaGroup group : definition.groups()) {
             List<StatutoryReportResponses.Line> rows = new ArrayList<>();
             for (FormulaLine line : group.lines()) {
-                BigDecimal primaryAmount = evaluate(line.expression(), ledgerId, primary, calculated,
-                        definition.columnPolicy().primary(), 0);
-                BigDecimal comparativeAmount = evaluate(line.expression(), ledgerId, comparative, calculated,
-                        definition.columnPolicy().comparative(), 1);
+                BigDecimal primaryAmount = evaluate(line.expression(), ledgerId, primary,
+                        primaryFlows, calculated, definition.columnPolicy().primary(), 0);
+                BigDecimal comparativeAmount = evaluate(line.expression(), ledgerId, comparative,
+                        comparativeFlows, calculated, definition.columnPolicy().comparative(), 1);
                 calculated.put(line.key(), new BigDecimal[]{primaryAmount, comparativeAmount});
                 rows.add(new StatutoryReportResponses.Line(
                         line.key(), line.lineNo(), line.name(), line.indent(), line.rowType(),
@@ -109,19 +120,31 @@ public class ReportFormulaEvaluator {
     }
 
     private BigDecimal evaluate(ReportFormulaDefinition.LineExpression expression, UUID ledgerId,
-                                Map<UUID, FormulaAccountAmount> source,
+                                Map<UUID, FormulaAccountAmount> source, CashFlowSource flows,
                                 Map<String, BigDecimal[]> calculated, AmountBasis basis, int column) {
+        if (expression instanceof CashFlowItemAmountExpression cashFlow) {
+            BigDecimal debit = sumAmount(cashFlow.itemCodes(), flows.debit());
+            BigDecimal credit = sumAmount(cashFlow.itemCodes(), flows.credit());
+            BigDecimal value = switch (cashFlow.direction()) {
+                case INFLOW -> debit.subtract(credit);
+                case OUTFLOW -> credit.subtract(debit);
+                case NET -> debit.subtract(credit);
+            };
+            return money(value);
+        }
         if (expression instanceof AccountAmountExpression accountAmount) {
+            AmountBasis effectiveBasis = accountAmount.basis() != null
+                    ? accountAmount.basis() : basis;
             Set<UUID> expanded = resolver.expandToLeafIds(ledgerId, accountAmount.accounts());
             BigDecimal value = ZERO;
             for (FormulaAccountAmount amount : source.values()) {
                 if (!expanded.contains(amount.accountId())) {
                     continue;
                 }
-                BigDecimal debit = basis == AmountBasis.CLOSING ? amount.closingDebit()
-                        : basis == AmountBasis.ACTIVITY ? amount.periodDebit() : amount.openingDebit();
-                BigDecimal credit = basis == AmountBasis.CLOSING ? amount.closingCredit()
-                        : basis == AmountBasis.ACTIVITY ? amount.periodCredit() : amount.openingCredit();
+                BigDecimal debit = effectiveBasis == AmountBasis.CLOSING ? amount.closingDebit()
+                        : effectiveBasis == AmountBasis.ACTIVITY ? amount.periodDebit() : amount.openingDebit();
+                BigDecimal credit = effectiveBasis == AmountBasis.CLOSING ? amount.closingCredit()
+                        : effectiveBasis == AmountBasis.ACTIVITY ? amount.periodCredit() : amount.openingCredit();
                 BigDecimal signed = ReportFormulaDefinition.SIDE_CREDIT.equals(accountAmount.side())
                         ? credit.subtract(debit) : debit.subtract(credit);
                 value = value.add(signed);
@@ -141,17 +164,41 @@ public class ReportFormulaEvaluator {
         throw new IllegalArgumentException("Unsupported formula expression " + expression);
     }
 
+    private static BigDecimal sumAmount(List<String> itemCodes, Map<String, BigDecimal> totals) {
+        BigDecimal value = ZERO;
+        for (String itemCode : itemCodes) {
+            BigDecimal amount = totals.get(itemCode);
+            if (amount != null) {
+                value = value.add(amount);
+            }
+        }
+        return value;
+    }
+
     private List<StatutoryReportResponses.Check> evaluateChecks(
             List<FormulaCheck> checks, Map<String, BigDecimal[]> calculated) {
         List<StatutoryReportResponses.Check> result = new ArrayList<>();
         for (FormulaCheck check : checks) {
             int column = check.column() == ReportFormulaDefinition.CheckColumn.COMPARATIVE ? 1 : 0;
             BigDecimal difference = value(calculated, check.leftLineKey(), column)
-                    .subtract(value(calculated, check.rightLineKey(), column));
+                    .subtract(rightValue(check, calculated, column));
             result.add(new StatutoryReportResponses.Check(
                     check.code(), check.name(), difference.compareTo(BigDecimal.ZERO) == 0, difference));
         }
         return result;
+    }
+
+    private static BigDecimal rightValue(
+            FormulaCheck check, Map<String, BigDecimal[]> calculated, int column) {
+        if (check.hasRightComponents()) {
+            BigDecimal total = ZERO;
+            for (LineComponent component : check.rightComponents()) {
+                total = total.add(value(calculated, component.lineKey(), column)
+                        .multiply(BigDecimal.valueOf(component.factor())));
+            }
+            return total;
+        }
+        return value(calculated, check.rightLineKey(), column);
     }
 
     private BigDecimal signed(FormulaAccountAmount amount, String side, AmountBasis basis) {

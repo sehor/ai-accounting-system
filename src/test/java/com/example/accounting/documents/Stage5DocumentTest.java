@@ -58,7 +58,11 @@ class Stage5DocumentTest {
         assertThat(jobService.complete(job.id()).status()).isEqualTo("SUCCEEDED");
         assertThat(extractionService.extract(userId, ledgerId, first.id()).provider()).isEqualTo("test");
         assertThat(extractionService.list(userId, ledgerId, first.id())).hasSize(1);
-        assertThat(extractionService.createVoucherDraft(userId, ledgerId, first.id()).status()).isEqualTo("POSTED");
+        // 提取生成的占位凭证含外部现金行，过账前必须完成详细现金流分类。
+        assertThatThrownBy(() -> extractionService.createVoucherDraft(userId, ledgerId, first.id()))
+                .isInstanceOfSatisfying(ApiProblemException.class,
+                        exception -> assertThat(exception.code())
+                                .isEqualTo("CASH_FLOW_CLASSIFICATION_REQUIRED"));
         assertThat(documentService.find(userId, ledgerId, first.id()).status()).isEqualTo("EXTRACTED");
     }
 

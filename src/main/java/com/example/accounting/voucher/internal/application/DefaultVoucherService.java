@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.example.accounting.ledger.LedgerAccessService;
 import com.example.accounting.ledger.LedgerRole;
+import com.example.accounting.reporting.CashFlowClassificationReader;
 import com.example.accounting.shared.balance.BalanceProjectionService;
 import com.example.accounting.shared.accounting.DimensionCombinationKey;
 import com.example.accounting.shared.accounting.DimensionCombinationStore;
@@ -47,15 +48,18 @@ public class DefaultVoucherService implements VoucherService, GeneratedVoucherCo
     private final LedgerAccessService ledgerAccess;
     private final BalanceProjectionService balanceProjection;
     private final DimensionCombinationStore dimensionCombinations;
+    private final CashFlowClassificationReader cashFlowPolicy;
     private final ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
 
     public DefaultVoucherService(VoucherRepository vouchers, LedgerAccessService ledgerAccess,
                                  BalanceProjectionService balanceProjection,
-                                 DimensionCombinationStore dimensionCombinations) {
+                                 DimensionCombinationStore dimensionCombinations,
+                                 CashFlowClassificationReader cashFlowPolicy) {
         this.vouchers = vouchers;
         this.ledgerAccess = ledgerAccess;
         this.balanceProjection = balanceProjection;
         this.dimensionCombinations = dimensionCombinations;
+        this.cashFlowPolicy = cashFlowPolicy;
     }
 
     @Transactional
@@ -488,6 +492,7 @@ public class DefaultVoucherService implements VoucherService, GeneratedVoucherCo
                     "Only draft vouchers can be validated");
         }
         ensureControlsComplete(ledgerId, voucherId);
+        requireCashFlowClassification(ledgerId, voucherId);
         ensureBalancedVoucher(ledgerId, voucherId);
         VoucherSnapshot before = snapshot(ledgerId, voucherId);
         changeStatus(ledgerId, voucherId, "DRAFT", "VALIDATED", actorId);
@@ -525,6 +530,7 @@ public class DefaultVoucherService implements VoucherService, GeneratedVoucherCo
                     "Only validated vouchers with approval enabled can be submitted");
         }
         ensureControlsComplete(ledgerId, voucherId);
+        requireCashFlowClassification(ledgerId, voucherId);
         VoucherSnapshot before = snapshot(ledgerId, voucherId);
         changeStatus(ledgerId, voucherId, "VALIDATED", "SUBMITTED", actorId);
         approval(ledgerId, voucherId, "SUBMIT", null, actorId);
@@ -587,6 +593,7 @@ public class DefaultVoucherService implements VoucherService, GeneratedVoucherCo
                     "The voucher must be " + requiredStatus + " before posting");
         }
         ensureControlsComplete(ledgerId, voucherId);
+        requireCashFlowClassification(ledgerId, voucherId);
         VoucherSnapshot before = snapshot(ledgerId, voucherId);
         balanceProjection.requireOpenPeriod(ledgerId, before.periodId());
         vouchers.reclassifyAccountingRole(ledgerId, voucherId);
@@ -903,6 +910,51 @@ public class DefaultVoucherService implements VoucherService, GeneratedVoucherCo
         if (!vouchers.controlsComplete(ledgerId, voucherId)) {
             throw problem(422, "VOUCHER_CONTROL_INCOMPLETE", "Voucher controls are incomplete",
                     "Complete required cash flow, quantity, and account dimensions before validation");
+        }
+    }
+
+    /**
+     * 法定现金流量表分类约束：SME 账套中，含外部现金收支的凭证在离开 DRAFT 前，
+     * 每条现金行必须引用当前已发布 CASH_FLOW 公式所接收的详细现金流项目。纯现金
+     * 账户之间的内部划转（整张凭证只有现金行）豁免；复合凭证中所有现金行按外部
+     * 现金行处理。
+     */
+    private void requireCashFlowClassification(UUID ledgerId, UUID voucherId) {
+        CashFlowClassificationReader.Contract contract = cashFlowPolicy.contract(ledgerId);
+        if (!contract.required() || contract.cashAccountLeafIds().isEmpty()) {
+            return;
+        }
+        List<VoucherResponses.Line> lines = vouchers.lines(ledgerId, voucherId);
+        List<VoucherResponses.Line> cashLines = lines.stream()
+                .filter(line -> contract.cashAccountLeafIds().contains(line.accountId()))
+                .toList();
+        if (cashLines.isEmpty()) {
+            return;
+        }
+        boolean hasNonCashLine = lines.stream()
+                .anyMatch(line -> !contract.cashAccountLeafIds().contains(line.accountId()));
+        if (!hasNonCashLine) {
+            // 库存现金、银行存款、其他货币资金之间的内部划转。
+            return;
+        }
+        Set<String> reportableCodes = contract.reportableItemCodes();
+        for (VoucherResponses.Line line : cashLines) {
+            if (line.cashFlowItemId() == null) {
+                throw problem(422, "CASH_FLOW_CLASSIFICATION_REQUIRED", "现金流项目未分类",
+                        "第 " + line.lineNo() + " 行的现金收支必须选择详细的现金流项目");
+            }
+            CashFlowClassificationReader.CashFlowItemState item =
+                    contract.itemsById().get(line.cashFlowItemId());
+            if (item == null || !item.active()) {
+                throw problem(422, "CASH_FLOW_ITEM_NOT_REPORTABLE", "现金流项目不可用",
+                        "第 " + line.lineNo() + " 行使用的现金流项目已停用");
+            }
+            String code = item.code();
+            if (code == null || !reportableCodes.contains(code)) {
+                throw problem(422, "CASH_FLOW_ITEM_NOT_REPORTABLE", "现金流项目不可用",
+                        "第 " + line.lineNo() + " 行使用的现金流项目不在当前报表公式中"
+                                + (code == null ? "" : "：" + code));
+            }
         }
     }
 

@@ -2,6 +2,7 @@ package com.example.accounting.ledger;
 
 import com.example.accounting.identity.CurrentUserResolver;
 import com.example.accounting.identity.IdentityService;
+import com.example.accounting.ledger.internal.application.CashFlowTemplateProvisioner;
 import com.example.accounting.ledger.internal.application.ReportFormulaMigrationService;
 import com.example.accounting.ledger.internal.port.LedgerBackupRepository;
 import com.example.accounting.shared.web.ApiProblemException;
@@ -47,7 +48,7 @@ public class LedgerBackupService {
     static final long MAX_ARCHIVE_BYTES = 100L * 1024 * 1024;
     static final long MAX_ATTACHMENT_BYTES = 20L * 1024 * 1024;
     private static final String FORMAT = "AI-ACCOUNTING-LEDGER-BACKUP";
-    private static final int FORMAT_VERSION = 4;
+    private static final int FORMAT_VERSION = 5;
     private static final List<TableDef> V1_TABLES = List.of(
             new TableDef("cash_flow_item"),
             new TableDef("dimension_type"),
@@ -79,6 +80,7 @@ public class LedgerBackupService {
     private final Path storageRoot;
     private final AccountingStandardCatalog standards;
     private final ReportFormulaMigrationService formulaMigration;
+    private final CashFlowTemplateProvisioner cashFlowProvisioner;
 
     @Autowired
     public LedgerBackupService(
@@ -87,7 +89,8 @@ public class LedgerBackupService {
             LedgerBackupRepository repository,
             @Value("${storage.local.root:./data/files}") String storageRoot,
             AccountingStandardCatalog standards,
-            ReportFormulaMigrationService formulaMigration) {
+            ReportFormulaMigrationService formulaMigration,
+            CashFlowTemplateProvisioner cashFlowProvisioner) {
         this.access = access;
         this.identities = identities;
         this.repository = repository;
@@ -95,6 +98,7 @@ public class LedgerBackupService {
         this.storageRoot = Path.of(storageRoot);
         this.standards = standards;
         this.formulaMigration = formulaMigration;
+        this.cashFlowProvisioner = cashFlowProvisioner;
     }
 
     public LedgerBackupService(
@@ -102,7 +106,8 @@ public class LedgerBackupService {
             IdentityService identities,
             LedgerBackupRepository repository,
             String storageRoot) {
-        this(access, identities, repository, storageRoot, new AccountingStandardCatalog(), null);
+        this(access, identities, repository, storageRoot, new AccountingStandardCatalog(),
+                null, null);
     }
 
     @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
@@ -260,6 +265,10 @@ public class LedgerBackupService {
                     throw new IllegalStateException("Report formula migration is not configured");
                 }
                 formulaMigration.migrateLedger(ledgerId);
+                // 旧备份缺少现金流模板：幂等补齐 16 个详细项目与 CASH_FLOW 公式。
+                if (cashFlowProvisioner != null) {
+                    cashFlowProvisioner.provision(ledgerId);
+                }
             }
             return new LedgerResponses.Ledger(
                     ledgerId, name, source.path("description").asText(""),
@@ -607,7 +616,7 @@ public class LedgerBackupService {
                                            Map<String, byte[]> entries) {
         int version = manifest.path("version").asInt(-1);
         if (!FORMAT.equals(manifest.path("format").asText())
-                || (version != 1 && version != 2 && version != 3 && version != FORMAT_VERSION)
+                || version < 1 || version > FORMAT_VERSION
                 || !sha256(dataBytes).equals(requiredText(manifest, "dataSha256"))) {
             throw invalid("The backup format, version or data checksum is invalid");
         }
@@ -629,7 +638,9 @@ public class LedgerBackupService {
             tables = V2_TABLES;
         } else if (version == 3 && presentTables.equals(versionThreeTables)) {
             tables = V3_TABLES;
-        } else if (version == FORMAT_VERSION && presentTables.equals(tableNames(TABLES))) {
+        } else if ((version == FORMAT_VERSION || version == FORMAT_VERSION - 1)
+                && presentTables.equals(tableNames(TABLES))) {
+            // v4 与 v5 使用相同表集合；v5 起备份自然包含详细现金流项目与 CASH_FLOW 公式。
             tables = TABLES;
         } else {
             throw invalid("The backup table set is incomplete or unsupported");

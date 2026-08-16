@@ -27,11 +27,14 @@ public class StandardFormulaValidator {
     private static final Set<String> KINDS = Set.of(
             ReportFormulaDefinition.KIND_FIXED_LINES, ReportFormulaDefinition.KIND_ACCOUNT_DETAIL);
     private static final Set<String> REPORT_TYPES = Set.of(
-            ReportFormulaDefinition.REPORT_BALANCE_SHEET, ReportFormulaDefinition.REPORT_INCOME_STATEMENT);
+            ReportFormulaDefinition.REPORT_BALANCE_SHEET, ReportFormulaDefinition.REPORT_INCOME_STATEMENT,
+            ReportFormulaDefinition.REPORT_CASH_FLOW);
     private static final Set<String> OPERATIONS = Set.of(
             ReportFormulaDefinition.OP_ACCOUNT_BALANCE, ReportFormulaDefinition.OP_ACCOUNT_ACTIVITY);
     private static final Set<String> SIDES = Set.of(
             ReportFormulaDefinition.SIDE_DEBIT, ReportFormulaDefinition.SIDE_CREDIT);
+    private static final Set<ReportFormulaDefinition.CashFlowDirection> DIRECTIONS = Set.of(
+            ReportFormulaDefinition.CashFlowDirection.values());
 
     public void validateAll(AccountingStandard.Package standard) {
         for (ReportFormulaDefinition definition : new StandardFormulaConverter().convertAll(standard)) {
@@ -78,6 +81,18 @@ public class StandardFormulaValidator {
         if (!fixedLines && definition.rules().isEmpty()) {
             throw new IllegalArgumentException("An ACCOUNT_DETAIL formula must contain detail rules");
         }
+        if (ReportFormulaDefinition.REPORT_CASH_FLOW.equals(definition.reportType())
+                && !ReportFormulaDefinition.KIND_FIXED_LINES.equals(definition.kind())) {
+            throw new IllegalArgumentException("A CASH_FLOW formula must use the FIXED_LINES kind");
+        }
+        if (ReportFormulaDefinition.REPORT_CASH_FLOW.equals(definition.reportType())) {
+            int lines = definition.groups().stream()
+                    .mapToInt(group -> group.lines().size()).sum();
+            if (lines != ReportFormulaDefinition.CASH_FLOW_LINE_COUNT) {
+                throw new IllegalArgumentException("A CASH_FLOW formula must keep exactly "
+                        + ReportFormulaDefinition.CASH_FLOW_LINE_COUNT + " lines, found " + lines);
+            }
+        }
     }
 
     private void validateColumnPolicy(ReportFormulaDefinition definition) {
@@ -111,7 +126,7 @@ public class StandardFormulaValidator {
                 if (line.expression() == null) {
                     throw new IllegalArgumentException("Report formula line " + line.key() + " has no expression");
                 }
-                validateExpression(line, standard, lineKeys);
+                validateExpression(line, definition.reportType(), standard, lineKeys);
             }
         }
         if (!duplicates.isEmpty()) {
@@ -120,7 +135,8 @@ public class StandardFormulaValidator {
     }
 
     private void validateExpression(
-            FormulaLine line, AccountingStandard.Package standard, Set<String> lineKeys) {
+            FormulaLine line, String reportType, AccountingStandard.Package standard,
+            Set<String> lineKeys) {
         if (line.expression() instanceof AccountAmountExpression accountAmount) {
             if (!OPERATIONS.contains(accountAmount.operation())) {
                 throw new IllegalArgumentException("Unsupported account amount operation "
@@ -129,6 +145,16 @@ public class StandardFormulaValidator {
             if (!SIDES.contains(accountAmount.side())) {
                 throw new IllegalArgumentException("Unsupported account amount side "
                         + accountAmount.side() + " on line " + line.key());
+            }
+            if (accountAmount.basis() != null
+                    && !ReportFormulaDefinition.OP_ACCOUNT_BALANCE.equals(accountAmount.operation())) {
+                throw new IllegalArgumentException("Line " + line.key()
+                        + " may use a basis only with ACCOUNT_BALANCE");
+            }
+            if (accountAmount.basis() != null && accountAmount.basis() != AmountBasis.OPENING
+                    && accountAmount.basis() != AmountBasis.CLOSING) {
+                throw new IllegalArgumentException("Line " + line.key()
+                        + " has an invalid basis " + accountAmount.basis());
             }
             for (AccountReference reference : accountAmount.accounts()) {
                 validateStandardReference(line.key(), reference, standard);
@@ -143,6 +169,26 @@ public class StandardFormulaValidator {
                     throw new IllegalArgumentException("Line " + line.key() + " references unknown line "
                             + component.lineKey());
                 }
+            }
+        } else if (line.expression() instanceof ReportFormulaDefinition.CashFlowItemAmountExpression cashFlow) {
+            if (!ReportFormulaDefinition.REPORT_CASH_FLOW.equals(reportType)) {
+                throw new IllegalArgumentException(
+                        "CASH_FLOW_ITEM_AMOUNT is only allowed in CASH_FLOW formulas");
+            }
+            if (cashFlow.direction() == null || !DIRECTIONS.contains(cashFlow.direction())) {
+                throw new IllegalArgumentException("Line " + line.key()
+                        + " has an invalid cash flow direction " + cashFlow.direction());
+            }
+            if (cashFlow.itemCodes() == null || cashFlow.itemCodes().isEmpty()) {
+                throw new IllegalArgumentException("Line " + line.key()
+                        + " must reference at least one cash flow item code");
+            }
+            if (cashFlow.cashAccounts() == null || cashFlow.cashAccounts().isEmpty()) {
+                throw new IllegalArgumentException("Line " + line.key()
+                        + " must declare at least one cash account reference");
+            }
+            for (AccountReference reference : cashFlow.cashAccounts()) {
+                validateStandardReference(line.key(), reference, standard);
             }
         }
     }
@@ -196,7 +242,22 @@ public class StandardFormulaValidator {
                     || check.name() == null || check.name().isBlank()) {
                 throw new IllegalArgumentException("A formula check has no code or name");
             }
-            if (!lineKeys.contains(check.leftLineKey()) || !lineKeys.contains(check.rightLineKey())) {
+            if (!lineKeys.contains(check.leftLineKey())) {
+                throw new IllegalArgumentException("Check " + check.code()
+                        + " references an unknown line");
+            }
+            if (check.hasRightComponents()) {
+                for (LineComponent component : check.rightComponents()) {
+                    if (component.factor() != 1 && component.factor() != -1) {
+                        throw new IllegalArgumentException("Check " + check.code()
+                                + " has an invalid factor " + component.factor());
+                    }
+                    if (!lineKeys.contains(component.lineKey())) {
+                        throw new IllegalArgumentException("Check " + check.code()
+                                + " references an unknown line " + component.lineKey());
+                    }
+                }
+            } else if (!lineKeys.contains(check.rightLineKey())) {
                 throw new IllegalArgumentException("Check " + check.code()
                         + " references an unknown line");
             }

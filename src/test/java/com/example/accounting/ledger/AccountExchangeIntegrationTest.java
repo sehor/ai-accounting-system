@@ -361,7 +361,7 @@ class AccountExchangeIntegrationTest {
         LedgerResponses.DimensionType region = ledgers.createDimensionType(owner, source,
                 new LedgerRequests.DimensionTypeCreate("REGION", "区域", false));
         UUID operating = ledgers.listCashFlowItems(owner, source).stream()
-                .filter(item -> item.code().equals("OPERATING")).findFirst().orElseThrow().id();
+                .filter(item -> item.code().equals("SME_CF_01_SALES_RECEIPTS")).findFirst().orElseThrow().id();
         ledgers.createAccount(owner, source, new LedgerRequests.AccountCreate(
                 "100101", "区域现金", "CURRENT_ASSET", "DEBIT", null, true, operating,
                 false, null, List.of(new LedgerRequests.DimensionRequirement(region.id(), true))));
@@ -384,7 +384,7 @@ class AccountExchangeIntegrationTest {
         assertThat(imported.cashFlowRequired()).isTrue();
         assertThat(ledgers.listCashFlowItems(owner, target)).filteredOn(item ->
                         item.id().equals(imported.defaultCashFlowItemId()))
-                .extracting(LedgerResponses.CashFlowItem::code).containsExactly("OPERATING");
+                .extracting(LedgerResponses.CashFlowItem::code).containsExactly("SME_CF_01_SALES_RECEIPTS");
         assertThat(imported.dimensionRequirements()).singleElement().satisfies(binding -> {
             assertThat(binding.code()).isEqualTo("REGION");
             assertThat(binding.required()).isTrue();

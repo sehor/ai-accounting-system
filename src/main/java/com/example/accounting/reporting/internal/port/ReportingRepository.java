@@ -3,7 +3,9 @@ package com.example.accounting.reporting.internal.port;
 import com.example.accounting.reporting.ReportResponses;
 import com.example.accounting.reporting.PeriodRange;
 import com.example.accounting.reporting.DimensionLedgerRequests;
+import com.example.accounting.reporting.formula.CashFlowSource;
 import com.example.accounting.reporting.formula.FormulaAccountAmount;
+import java.time.LocalDate;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
@@ -43,6 +45,40 @@ public interface ReportingRepository {
     Set<UUID> leafAccountsByCategories(UUID ledgerId, Collection<String> categories);
 
     /**
+     * Cash flow item totals of posted external cash movements: vouchers whose
+     * lines touch any {@code cashAccountIds} and that contain at least one
+     * non-cash line (pure internal cash-to-cash transfers are excluded).  Only
+     * active items whose code is in {@code itemCodes} are aggregated; the
+     * returned source contains zero amounts for missing codes.
+     */
+    CashFlowSource cashFlowAmounts(
+            UUID ledgerId, PeriodRange range, Set<UUID> cashAccountIds, Set<String> itemCodes);
+
+    /**
+     * Classification quality of the same external cash line scope: counts of
+     * vouchers and lines that miss a cash flow item, use a legacy coarse item,
+     * reference an inactive item, or reference an item code outside the
+     * reportable set, plus up to {@code maxSamples} located samples.  Counts and
+     * samples share the exact same predicate.
+     */
+    CashFlowQuality cashFlowQuality(
+            UUID ledgerId, PeriodRange range, Set<UUID> cashAccountIds,
+            Set<String> reportableItemCodes, int maxSamples);
+
+    record CashFlowQuality(
+            int unclassifiedVoucherCount, int unclassifiedLineCount,
+            List<CashFlowSample> samples) {
+        public CashFlowQuality {
+            samples = samples == null ? List.of() : List.copyOf(samples);
+        }
+    }
+
+    record CashFlowSample(
+            UUID voucherId, String voucherNumber, String periodCode, LocalDate voucherDate,
+            int lineNo, String side, BigDecimal baseAmount, String reason) {
+    }
+
+    /**
      * For each requested account id, all of its leaf descendants (the account
      * itself when it is already a leaf). One parameterized recursive query.
      */
@@ -55,6 +91,9 @@ public interface ReportingRepository {
     boolean periodsExist(UUID ledgerId, PeriodRange range);
 
     boolean accountExists(UUID ledgerId, UUID accountId);
+
+    /** Active cash-flow item codes that can be selected and published for this ledger. */
+    Set<String> activeCashFlowItemCodes(UUID ledgerId);
 
     boolean leafAccount(UUID ledgerId, UUID accountId);
 

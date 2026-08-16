@@ -23,7 +23,7 @@ GET    /v1/ledgers/{ledgerId}/report-formulas/{code}/versions/{version}
 POST   /v1/ledgers/{ledgerId}/report-formulas/{code}/versions/{version}:rollback
 ```
 
-code 只允许 `BALANCE_SHEET`、`INCOME_STATEMENT`。版本 pageSize 最大 100。
+code 只允许 `BALANCE_SHEET`、`INCOME_STATEMENT`、`CASH_FLOW`。版本 pageSize 最大 100。
 
 ## 编辑请求边界
 

@@ -6,18 +6,22 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import com.example.accounting.identity.CurrentUserResolver;
 import com.example.accounting.ledger.formula.FormulaParser;
 import com.example.accounting.ledger.formula.ReportFormulaDefinition;
+import com.example.accounting.ledger.internal.application.CashFlowTemplateProvisioner;
 import com.example.accounting.ledger.internal.application.ReportFormulaMigrationService;
 import com.example.accounting.ledger.internal.port.ReportFormulaRepository;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.annotation.Propagation;
 
 @SpringBootTest
 @Transactional
@@ -28,6 +32,9 @@ class ReportFormulaMigrationTest {
 
     @Autowired
     private ReportFormulaMigrationService migration;
+
+    @Autowired
+    private CashFlowTemplateProvisioner cashFlowProvisioner;
 
     @Autowired
     private ReportFormulaRepository formulas;
@@ -148,6 +155,130 @@ class ReportFormulaMigrationTest {
         ReportFormulaDefinition parsed = parser.parse(balanceSheet.formulaJson());
         assertThat(parsed.kind()).isEqualTo("FIXED_LINES");
         assertThat(parsed.schemaVersion()).isEqualTo(1);
+    }
+
+    @Test
+    void cashFlowTemplateProvisionedIdempotentlyForExistingSmeLedgers() {
+        UUID ledgerId = createLedger(UUID.randomUUID(), "SME", "2011-17");
+        // Simulate a legacy ledger: no CASH_FLOW formula, only the three coarse items.
+        jdbc.update("""
+                delete from report_formula_revision
+                where formula_id in (
+                    select id from report_formula_snapshot where ledger_id = ? and code = 'CASH_FLOW')
+                """, ledgerId);
+        jdbc.update("delete from report_formula_snapshot where ledger_id = ? and code = 'CASH_FLOW'", ledgerId);
+        jdbc.update("delete from cash_flow_item where ledger_id = ?", ledgerId);
+        insertTemplateItem(ledgerId, "OPERATING", "经营活动产生的现金流量");
+        insertTemplateItem(ledgerId, "INVESTING", "投资活动产生的现金流量");
+        insertTemplateItem(ledgerId, "FINANCING", "筹资活动产生的现金流量");
+
+        cashFlowProvisioner.provision(ledgerId);
+
+        ReportFormulaRepository.Snapshot cashFlow =
+                formulas.findSnapshot(ledgerId, "CASH_FLOW").orElseThrow();
+        assertThat(cashFlow.schemaVersion()).isEqualTo(1);
+        assertThat(cashFlow.formulaKind()).isEqualTo("FIXED_LINES");
+        assertThat(cashFlow.publishedVersion()).isEqualTo(1);
+        ReportFormulaDefinition definition = parser.parse(cashFlow.formulaJson());
+        assertThat(definition.reportType()).isEqualTo("CASH_FLOW");
+        long lineCount = definition.groups().stream().mapToLong(group -> group.lines().size()).sum();
+        assertThat(lineCount).isEqualTo(22);
+        assertThat(countItems(ledgerId, "ACTIVE")).isEqualTo(16);
+        assertThat(countItems(ledgerId, "INACTIVE")).isEqualTo(3);
+        assertThat(countItemsByCode(ledgerId, "OPERATING")).isEqualTo(1);
+
+        // Second run produces no extra rows or versions.
+        cashFlowProvisioner.provision(ledgerId);
+        assertThat(countItems(ledgerId, "ACTIVE")).isEqualTo(16);
+        assertThat(formulas.countPublishedVersions(ledgerId, "CASH_FLOW")).isEqualTo(1);
+    }
+
+    @Test
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    void concurrentFormulaCreationKeepsOneSnapshotAndPublishedRevision() throws Exception {
+        UUID ledgerId = createLedger(UUID.randomUUID(), "SME", "2011-17");
+        ReportFormulaRepository.Snapshot source =
+                formulas.findSnapshot(ledgerId, "CASH_FLOW").orElseThrow();
+        jdbc.update("delete from report_formula_revision where formula_id = ?", source.id());
+        jdbc.update("delete from report_formula_snapshot where id = ?", source.id());
+
+        CountDownLatch ready = new CountDownLatch(2);
+        CountDownLatch start = new CountDownLatch(1);
+        try (var executor = Executors.newFixedThreadPool(2)) {
+            var task = (java.util.concurrent.Callable<Void>) () -> {
+                ready.countDown();
+                start.await();
+                formulas.createSnapshotWithPublishedVersion(
+                        ledgerId, "CASH_FLOW", source.name(), source.formulaKind(),
+                        source.formulaJson(), null);
+                return null;
+            };
+            var first = executor.submit(task);
+            var second = executor.submit(task);
+            ready.await();
+            start.countDown();
+            first.get();
+            second.get();
+        }
+
+        assertThat(jdbc.queryForObject("""
+                select count(*) from report_formula_snapshot
+                where ledger_id = ? and code = 'CASH_FLOW'
+                """, Long.class, ledgerId)).isEqualTo(1L);
+        assertThat(formulas.countPublishedVersions(ledgerId, "CASH_FLOW")).isEqualTo(1);
+    }
+
+    @Test
+    void customItemConflictingWithReservedCashFlowCodeBlocksProvisioning() {
+        UUID ledgerId = createLedger(UUID.randomUUID(), "SME", "2011-17");
+        jdbc.update("delete from cash_flow_item where ledger_id = ? and code = 'SME_CF_01_SALES_RECEIPTS'",
+                ledgerId);
+        insertCustomItem(ledgerId, "SME_CF_01_SALES_RECEIPTS", "自定义销售");
+
+        assertThatThrownBy(() -> cashFlowProvisioner.provision(ledgerId))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("SME_CF_01_SALES_RECEIPTS")
+                .hasMessageContaining(ledgerId.toString());
+    }
+
+    @Test
+    void casLedgersAreNotProvisioned() {
+        UUID ledgerId = createLedger(UUID.randomUUID(), "CAS", "2006-18");
+        long itemsBefore = jdbc.queryForObject(
+                "select count(*) from cash_flow_item where ledger_id = ?", Long.class, ledgerId);
+
+        cashFlowProvisioner.provision(ledgerId);
+
+        assertThat(formulas.findSnapshot(ledgerId, "CASH_FLOW")).isEmpty();
+        assertThat(jdbc.queryForObject(
+                "select count(*) from cash_flow_item where ledger_id = ?", Long.class, ledgerId))
+                .isEqualTo(itemsBefore);
+    }
+
+    private void insertTemplateItem(UUID ledgerId, String code, String name) {
+        jdbc.update("""
+                insert into cash_flow_item (id, ledger_id, code, name, is_template)
+                values (?, ?, ?, ?, true)
+                """, UUID.randomUUID(), ledgerId, code, name);
+    }
+
+    private void insertCustomItem(UUID ledgerId, String code, String name) {
+        jdbc.update("""
+                insert into cash_flow_item (id, ledger_id, code, name, is_template)
+                values (?, ?, ?, ?, false)
+                """, UUID.randomUUID(), ledgerId, code, name);
+    }
+
+    private long countItems(UUID ledgerId, String status) {
+        return jdbc.queryForObject(
+                "select count(*) from cash_flow_item where ledger_id = ? and status = ?",
+                Long.class, ledgerId, status);
+    }
+
+    private long countItemsByCode(UUID ledgerId, String code) {
+        return jdbc.queryForObject(
+                "select count(*) from cash_flow_item where ledger_id = ? and code = ?",
+                Long.class, ledgerId, code);
     }
 
     private void assertMigrated(UUID ledgerId, String kind, String source) {

@@ -38,6 +38,8 @@ public class ReportFormulaValidator {
             ReportFormulaDefinition.OP_ACCOUNT_BALANCE, ReportFormulaDefinition.OP_ACCOUNT_ACTIVITY);
     private static final Set<String> SIDES = Set.of(
             ReportFormulaDefinition.SIDE_DEBIT, ReportFormulaDefinition.SIDE_CREDIT);
+    private static final Set<ReportFormulaDefinition.CashFlowDirection> DIRECTIONS = Set.of(
+            ReportFormulaDefinition.CashFlowDirection.values());
     private static final Set<String> REFERENCE_TYPES = Set.of(
             ReportFormulaDefinition.REF_STANDARD_ACCOUNT_KEY, ReportFormulaDefinition.REF_ACCOUNT_ID);
 
@@ -74,6 +76,7 @@ public class ReportFormulaValidator {
         validateLockedStructure(definition, base, issues);
         validateNamesAndLimits(definition, issues);
         validateLineKeysAndBackwardReferences(definition, issues);
+        validateCashFlowItemCodes(definition, ledgerId, issues);
         validateAccountOwnership(definition, ledgerId, issues);
         expandReferencesAndRejectOverlap(definition, ledgerId, issues);
         validateCasSideConflicts(definition, ledgerId, issues);
@@ -115,7 +118,8 @@ public class ReportFormulaValidator {
             return;
         }
         if (!ReportFormulaDefinition.REPORT_BALANCE_SHEET.equals(definition.reportType())
-                && !ReportFormulaDefinition.REPORT_INCOME_STATEMENT.equals(definition.reportType())) {
+                && !ReportFormulaDefinition.REPORT_INCOME_STATEMENT.equals(definition.reportType())
+                && !ReportFormulaDefinition.REPORT_CASH_FLOW.equals(definition.reportType())) {
             issues.add(new FormulaIssue("REPORT_TYPE_INVALID", "reportType",
                     "Unknown report type " + definition.reportType()));
         }
@@ -135,6 +139,20 @@ public class ReportFormulaValidator {
             issues.add(new FormulaIssue("GROUPS_FORBIDDEN", "groups",
                     "An ACCOUNT_DETAIL formula must not contain line groups"));
         }
+        if (ReportFormulaDefinition.REPORT_CASH_FLOW.equals(definition.reportType())
+                && !fixedLines) {
+            issues.add(new FormulaIssue("KIND_INVALID", "kind",
+                    "A CASH_FLOW formula must use the FIXED_LINES kind"));
+        }
+        if (ReportFormulaDefinition.REPORT_CASH_FLOW.equals(definition.reportType())) {
+            int lines = definition.groups().stream()
+                    .mapToInt(group -> group.lines().size()).sum();
+            if (lines != ReportFormulaDefinition.CASH_FLOW_LINE_COUNT) {
+                issues.add(new FormulaIssue("STRUCTURE_LOCKED", "groups",
+                        "A CASH_FLOW formula must keep exactly "
+                                + ReportFormulaDefinition.CASH_FLOW_LINE_COUNT + " lines, found " + lines));
+            }
+        }
     }
 
     private void validateOperationWhitelist(ReportFormulaDefinition definition, List<FormulaIssue> issues) {
@@ -149,6 +167,16 @@ public class ReportFormulaValidator {
                         issues.add(new FormulaIssue("SIDE_INVALID", path(line.key(), "side"),
                                 "Unsupported side " + accountAmount.side()));
                     }
+                    if (accountAmount.basis() != null
+                            && !ReportFormulaDefinition.OP_ACCOUNT_BALANCE.equals(accountAmount.operation())) {
+                        issues.add(new FormulaIssue("BASIS_INVALID", path(line.key(), "basis"),
+                                "A basis is only allowed on ACCOUNT_BALANCE expressions"));
+                    }
+                    if (accountAmount.basis() != null && accountAmount.basis() != AmountBasis.OPENING
+                            && accountAmount.basis() != AmountBasis.CLOSING) {
+                        issues.add(new FormulaIssue("BASIS_INVALID", path(line.key(), "basis"),
+                                "A line-level basis must be OPENING or CLOSING"));
+                    }
                 } else if (line.expression() instanceof LinearCombinationExpression combination) {
                     for (LineComponent component : combination.components()) {
                         if (component.factor() != 1 && component.factor() != -1) {
@@ -156,6 +184,24 @@ public class ReportFormulaValidator {
                                     path(line.key(), "components." + component.lineKey()),
                                     "Factor must be +1 or -1"));
                         }
+                    }
+                } else if (line.expression()
+                        instanceof ReportFormulaDefinition.CashFlowItemAmountExpression cashFlow) {
+                    if (!ReportFormulaDefinition.REPORT_CASH_FLOW.equals(definition.reportType())) {
+                        issues.add(new FormulaIssue("EXPRESSION_TYPE_INVALID", path(line.key(), "type"),
+                                "CASH_FLOW_ITEM_AMOUNT is only allowed in CASH_FLOW formulas"));
+                    }
+                    if (cashFlow.direction() == null || !DIRECTIONS.contains(cashFlow.direction())) {
+                        issues.add(new FormulaIssue("DIRECTION_INVALID", path(line.key(), "direction"),
+                                "Unsupported cash flow direction " + cashFlow.direction()));
+                    }
+                    if (cashFlow.itemCodes() == null || cashFlow.itemCodes().isEmpty()) {
+                        issues.add(new FormulaIssue("ITEM_CODES_REQUIRED", path(line.key(), "itemCodes"),
+                                "A cash flow expression must reference at least one item code"));
+                    }
+                    if (cashFlow.cashAccounts() == null || cashFlow.cashAccounts().isEmpty()) {
+                        issues.add(new FormulaIssue("CASH_ACCOUNTS_REQUIRED", path(line.key(), "cashAccounts"),
+                                "A cash flow expression must declare at least one cash account"));
                     }
                 }
             }
@@ -233,6 +279,47 @@ public class ReportFormulaValidator {
         }
     }
 
+    /**
+     * A cash flow item code may be referenced by at most one detail line of the
+     * definition: two lines claiming the same code would double count its cash.
+     */
+    private void validateCashFlowItemCodes(
+            ReportFormulaDefinition definition, UUID ledgerId, List<FormulaIssue> issues) {
+        Map<String, String> codeToLine = new HashMap<>();
+        Set<String> activeCodes = null;
+        for (FormulaGroup group : definition.groups()) {
+            for (FormulaLine line : group.lines()) {
+                if (!(line.expression()
+                        instanceof ReportFormulaDefinition.CashFlowItemAmountExpression cashFlow)) {
+                    continue;
+                }
+                for (String itemCode : cashFlow.itemCodes()) {
+                    if (itemCode == null || itemCode.isBlank()) {
+                        issues.add(new FormulaIssue("ITEM_CODE_INVALID", path(line.key(), "itemCodes"),
+                                "Cash flow item codes must be non-blank"));
+                    } else {
+                        if (activeCodes == null) {
+                            activeCodes = reports.activeCashFlowItemCodes(ledgerId);
+                        }
+                        if (!activeCodes.contains(itemCode)) {
+                            issues.add(new FormulaIssue("ITEM_CODE_NOT_REPORTABLE",
+                                    path(line.key(), "itemCodes"),
+                                    "Cash flow item " + itemCode
+                                            + " is not active in this ledger"));
+                        }
+                        String owner = codeToLine.putIfAbsent(itemCode, line.key());
+                        if (owner != null) {
+                            issues.add(new FormulaIssue("ITEM_CODE_DUPLICATE",
+                                    path(line.key(), "itemCodes"),
+                                    "Cash flow item " + itemCode + " is referenced by both "
+                                            + owner + " and " + line.key()));
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     private void validateNamesAndLimits(ReportFormulaDefinition definition, List<FormulaIssue> issues) {
         int nodes = 1;
         for (FormulaGroup group : definition.groups()) {
@@ -254,6 +341,13 @@ public class ReportFormulaValidator {
                     if (combination.components().size() > MAX_REFERENCES_PER_LINE) {
                         issues.add(new FormulaIssue("LIMIT_EXCEEDED", path(line.key(), "components"),
                                 "A line may combine at most " + MAX_REFERENCES_PER_LINE + " lines"));
+                    }
+                } else if (line.expression()
+                        instanceof ReportFormulaDefinition.CashFlowItemAmountExpression cashFlow) {
+                    nodes += 1 + cashFlow.itemCodes().size() + cashFlow.cashAccounts().size();
+                    if (cashFlow.cashAccounts().size() > MAX_REFERENCES_PER_LINE) {
+                        issues.add(new FormulaIssue("LIMIT_EXCEEDED", path(line.key(), "cashAccounts"),
+                                "A line may declare at most " + MAX_REFERENCES_PER_LINE + " cash accounts"));
                     }
                 }
             }
@@ -314,6 +408,12 @@ public class ReportFormulaValidator {
                         validateReferenceOwnership(ledgerId, reference,
                                 path(line.key(), "accounts"), issues);
                     }
+                } else if (line.expression()
+                        instanceof ReportFormulaDefinition.CashFlowItemAmountExpression cashFlow) {
+                    for (AccountReference reference : cashFlow.cashAccounts()) {
+                        validateReferenceOwnership(ledgerId, reference,
+                                path(line.key(), "cashAccounts"), issues);
+                    }
                 }
             }
         }
@@ -360,6 +460,9 @@ public class ReportFormulaValidator {
             for (FormulaLine line : group.lines()) {
                 if (line.expression() instanceof AccountAmountExpression accountAmount) {
                     rejectOverlappingReferences(ledgerId, line.key(), accountAmount.accounts(), issues);
+                } else if (line.expression()
+                        instanceof ReportFormulaDefinition.CashFlowItemAmountExpression cashFlow) {
+                    rejectOverlappingReferences(ledgerId, line.key(), cashFlow.cashAccounts(), issues);
                 }
             }
         }

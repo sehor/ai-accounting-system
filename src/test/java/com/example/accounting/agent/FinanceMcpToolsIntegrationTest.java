@@ -246,10 +246,13 @@ class FinanceMcpToolsIntegrationTest {
     }
 
     private VoucherRequests.Create request(UUID ledgerId) {
+        UUID cashItem = jdbc.queryForObject(
+                "select id from cash_flow_item where ledger_id = ? and code = 'SME_CF_01_SALES_RECEIPTS'",
+                UUID.class, ledgerId);
         return new VoucherRequests.Create(ledgerService.periodId(ledgerId, "2026-01"),
                 LocalDate.of(2026, 1, 15), "GENERAL", "AGENT-1", "Agent draft", List.of(
                 new VoucherRequests.Line(ledgerService.accountId(ledgerId, "1001"), "DEBIT", "CNY",
-                        BigDecimal.ONE, BigDecimal.ONE, "Debit"),
+                        BigDecimal.ONE, BigDecimal.ONE, "Debit", cashItem, null, null, null),
                 new VoucherRequests.Line(ledgerService.accountId(ledgerId, "3001"), "CREDIT", "CNY",
                         BigDecimal.ONE, BigDecimal.ONE, "Credit")));
     }

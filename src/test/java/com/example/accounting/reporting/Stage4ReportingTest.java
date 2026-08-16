@@ -39,6 +39,9 @@ class Stage4ReportingTest {
     @Autowired
     private BalanceProjectionRepository projection;
 
+    /** Detailed cash flow item attached to test lines so external cash vouchers stay classified. */
+    private UUID defaultCashItem;
+
     @Test
     void reportsOnlyPostedVoucherAmounts() {
         UUID userId = UUID.randomUUID();
@@ -436,7 +439,8 @@ class Stage4ReportingTest {
     }
 
     private VoucherRequests.Line line(UUID accountId, String side, String amount) {
-        return new VoucherRequests.Line(accountId, side, "CNY", new BigDecimal(amount), BigDecimal.ONE, "report");
+        return new VoucherRequests.Line(accountId, side, "CNY", new BigDecimal(amount), BigDecimal.ONE, "report",
+                defaultCashItem, null, null, null);
     }
 
     private VoucherRequests.Line dimensionLine(UUID accountId, String side, String currency, String amount, String rate,
@@ -446,6 +450,9 @@ class Stage4ReportingTest {
     }
 
     private UUID id(String sql, UUID ledgerId) {
+        defaultCashItem = jdbcTemplate.queryForObject(
+                "select id from cash_flow_item where ledger_id = ? and code = 'SME_CF_01_SALES_RECEIPTS'",
+                UUID.class, ledgerId);
         return jdbcTemplate.queryForObject(sql, UUID.class, ledgerId);
     }
 }

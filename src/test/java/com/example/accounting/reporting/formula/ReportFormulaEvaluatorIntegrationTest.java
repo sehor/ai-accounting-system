@@ -62,6 +62,9 @@ class ReportFormulaEvaluatorIntegrationTest {
 
     private final FormulaParser parser = new FormulaParser();
 
+    /** Detailed cash flow item attached to test lines so external cash vouchers stay classified. */
+    private UUID defaultCashItem;
+
     @Test
     void smeFixedLinesMatchTheLegacyStatutoryCalculator() {
         UUID userId = UUID.randomUUID();
@@ -184,11 +187,16 @@ class ReportFormulaEvaluatorIntegrationTest {
     }
 
     private UUID accountId(UUID ledgerId, String code) {
+        List<UUID> items = jdbc.queryForList(
+                "select id from cash_flow_item where ledger_id = ? and code = 'SME_CF_01_SALES_RECEIPTS'",
+                UUID.class, ledgerId);
+        defaultCashItem = items.isEmpty() ? null : items.getFirst();
         return jdbc.queryForObject("select id from ledger_account where ledger_id = ? and code = ?",
                 UUID.class, ledgerId, code);
     }
 
     private VoucherRequests.Line line(UUID accountId, String side, String amount) {
-        return new VoucherRequests.Line(accountId, side, "CNY", new BigDecimal(amount), BigDecimal.ONE, "equivalence");
+        return new VoucherRequests.Line(accountId, side, "CNY", new BigDecimal(amount), BigDecimal.ONE,
+                "equivalence", defaultCashItem, null, null, null);
     }
 }

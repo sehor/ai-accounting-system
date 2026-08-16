@@ -1648,20 +1648,636 @@
           ]
         }
       }
+    },
+  {
+    "code": "CASH_FLOW",
+    "name": "现金流量表",
+    "definition": {
+      "type": "cash-flow",
+      "statutory": {
+        "template": "SME-2011-17",
+        "lineCount": 22,
+        "periodMode": "YEAR_TO_DATE_AND_MONTH",
+        "allowedOperations": [
+          "ACCOUNT_BALANCE",
+          "LINEAR_COMBINATION",
+          "CASH_FLOW_ITEM_AMOUNT"
+        ],
+        "groups": [
+          {
+            "key": "OPERATING",
+            "title": "一、经营活动产生的现金流量",
+            "lines": [
+              {
+                "key": "cf-1",
+                "lineNo": 1,
+                "name": "销售产成品、商品、提供劳务收到的现金",
+                "operation": {
+                  "kind": "CASH_FLOW_ITEM_AMOUNT",
+                  "direction": "INFLOW",
+                  "itemCodes": [
+                    "SME_CF_01_SALES_RECEIPTS"
+                  ],
+                  "cashAccounts": [
+                    {
+                      "key": "ASSET.CASH"
+                    },
+                    {
+                      "key": "ASSET.BANK_DEPOSIT"
+                    },
+                    {
+                      "key": "ASSET.OTHER_MONETARY_FUNDS"
+                    }
+                  ]
+                }
+              },
+              {
+                "key": "cf-2",
+                "lineNo": 2,
+                "name": "收到其他与经营活动有关的现金",
+                "operation": {
+                  "kind": "CASH_FLOW_ITEM_AMOUNT",
+                  "direction": "INFLOW",
+                  "itemCodes": [
+                    "SME_CF_02_OTHER_OPERATING_RECEIPTS"
+                  ],
+                  "cashAccounts": [
+                    {
+                      "key": "ASSET.CASH"
+                    },
+                    {
+                      "key": "ASSET.BANK_DEPOSIT"
+                    },
+                    {
+                      "key": "ASSET.OTHER_MONETARY_FUNDS"
+                    }
+                  ]
+                }
+              },
+              {
+                "key": "cf-3",
+                "lineNo": 3,
+                "name": "购买原材料、商品、接受劳务支付的现金",
+                "operation": {
+                  "kind": "CASH_FLOW_ITEM_AMOUNT",
+                  "direction": "OUTFLOW",
+                  "itemCodes": [
+                    "SME_CF_03_PURCHASE_PAYMENTS"
+                  ],
+                  "cashAccounts": [
+                    {
+                      "key": "ASSET.CASH"
+                    },
+                    {
+                      "key": "ASSET.BANK_DEPOSIT"
+                    },
+                    {
+                      "key": "ASSET.OTHER_MONETARY_FUNDS"
+                    }
+                  ]
+                }
+              },
+              {
+                "key": "cf-4",
+                "lineNo": 4,
+                "name": "支付的职工薪酬",
+                "operation": {
+                  "kind": "CASH_FLOW_ITEM_AMOUNT",
+                  "direction": "OUTFLOW",
+                  "itemCodes": [
+                    "SME_CF_04_EMPLOYEE_PAYMENTS"
+                  ],
+                  "cashAccounts": [
+                    {
+                      "key": "ASSET.CASH"
+                    },
+                    {
+                      "key": "ASSET.BANK_DEPOSIT"
+                    },
+                    {
+                      "key": "ASSET.OTHER_MONETARY_FUNDS"
+                    }
+                  ]
+                }
+              },
+              {
+                "key": "cf-5",
+                "lineNo": 5,
+                "name": "支付的税费",
+                "operation": {
+                  "kind": "CASH_FLOW_ITEM_AMOUNT",
+                  "direction": "OUTFLOW",
+                  "itemCodes": [
+                    "SME_CF_05_TAX_PAYMENTS"
+                  ],
+                  "cashAccounts": [
+                    {
+                      "key": "ASSET.CASH"
+                    },
+                    {
+                      "key": "ASSET.BANK_DEPOSIT"
+                    },
+                    {
+                      "key": "ASSET.OTHER_MONETARY_FUNDS"
+                    }
+                  ]
+                }
+              },
+              {
+                "key": "cf-6",
+                "lineNo": 6,
+                "name": "支付其他与经营活动有关的现金",
+                "operation": {
+                  "kind": "CASH_FLOW_ITEM_AMOUNT",
+                  "direction": "OUTFLOW",
+                  "itemCodes": [
+                    "SME_CF_06_OTHER_OPERATING_PAYMENTS"
+                  ],
+                  "cashAccounts": [
+                    {
+                      "key": "ASSET.CASH"
+                    },
+                    {
+                      "key": "ASSET.BANK_DEPOSIT"
+                    },
+                    {
+                      "key": "ASSET.OTHER_MONETARY_FUNDS"
+                    }
+                  ]
+                }
+              },
+              {
+                "key": "cf-7",
+                "lineNo": 7,
+                "name": "经营活动产生的现金流量净额",
+                "rowType": "TOTAL",
+                "operation": {
+                  "kind": "LINEAR_COMBINATION",
+                  "components": [
+                    {
+                      "key": "cf-1"
+                    },
+                    {
+                      "key": "cf-2"
+                    },
+                    {
+                      "key": "cf-3",
+                      "factor": -1
+                    },
+                    {
+                      "key": "cf-4",
+                      "factor": -1
+                    },
+                    {
+                      "key": "cf-5",
+                      "factor": -1
+                    },
+                    {
+                      "key": "cf-6",
+                      "factor": -1
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "key": "INVESTING",
+            "title": "二、投资活动产生的现金流量",
+            "lines": [
+              {
+                "key": "cf-8",
+                "lineNo": 8,
+                "name": "收回短期投资、长期债券投资和长期股权投资收到的现金",
+                "operation": {
+                  "kind": "CASH_FLOW_ITEM_AMOUNT",
+                  "direction": "INFLOW",
+                  "itemCodes": [
+                    "SME_CF_08_INVESTMENT_RECOVERY"
+                  ],
+                  "cashAccounts": [
+                    {
+                      "key": "ASSET.CASH"
+                    },
+                    {
+                      "key": "ASSET.BANK_DEPOSIT"
+                    },
+                    {
+                      "key": "ASSET.OTHER_MONETARY_FUNDS"
+                    }
+                  ]
+                }
+              },
+              {
+                "key": "cf-9",
+                "lineNo": 9,
+                "name": "取得投资收益收到的现金",
+                "operation": {
+                  "kind": "CASH_FLOW_ITEM_AMOUNT",
+                  "direction": "INFLOW",
+                  "itemCodes": [
+                    "SME_CF_09_INVESTMENT_INCOME"
+                  ],
+                  "cashAccounts": [
+                    {
+                      "key": "ASSET.CASH"
+                    },
+                    {
+                      "key": "ASSET.BANK_DEPOSIT"
+                    },
+                    {
+                      "key": "ASSET.OTHER_MONETARY_FUNDS"
+                    }
+                  ]
+                }
+              },
+              {
+                "key": "cf-10",
+                "lineNo": 10,
+                "name": "处置固定资产、无形资产和其他非流动资产收回的现金净额",
+                "operation": {
+                  "kind": "CASH_FLOW_ITEM_AMOUNT",
+                  "direction": "NET",
+                  "itemCodes": [
+                    "SME_CF_10_ASSET_DISPOSAL"
+                  ],
+                  "cashAccounts": [
+                    {
+                      "key": "ASSET.CASH"
+                    },
+                    {
+                      "key": "ASSET.BANK_DEPOSIT"
+                    },
+                    {
+                      "key": "ASSET.OTHER_MONETARY_FUNDS"
+                    }
+                  ]
+                }
+              },
+              {
+                "key": "cf-11",
+                "lineNo": 11,
+                "name": "短期投资、长期债券投资和长期股权投资支付的现金",
+                "operation": {
+                  "kind": "CASH_FLOW_ITEM_AMOUNT",
+                  "direction": "OUTFLOW",
+                  "itemCodes": [
+                    "SME_CF_11_INVESTMENT_PAYMENTS"
+                  ],
+                  "cashAccounts": [
+                    {
+                      "key": "ASSET.CASH"
+                    },
+                    {
+                      "key": "ASSET.BANK_DEPOSIT"
+                    },
+                    {
+                      "key": "ASSET.OTHER_MONETARY_FUNDS"
+                    }
+                  ]
+                }
+              },
+              {
+                "key": "cf-12",
+                "lineNo": 12,
+                "name": "购建固定资产、无形资产和其他非流动资产支付的现金",
+                "operation": {
+                  "kind": "CASH_FLOW_ITEM_AMOUNT",
+                  "direction": "OUTFLOW",
+                  "itemCodes": [
+                    "SME_CF_12_ASSET_ACQUISITION"
+                  ],
+                  "cashAccounts": [
+                    {
+                      "key": "ASSET.CASH"
+                    },
+                    {
+                      "key": "ASSET.BANK_DEPOSIT"
+                    },
+                    {
+                      "key": "ASSET.OTHER_MONETARY_FUNDS"
+                    }
+                  ]
+                }
+              },
+              {
+                "key": "cf-13",
+                "lineNo": 13,
+                "name": "投资活动产生的现金流量净额",
+                "rowType": "TOTAL",
+                "operation": {
+                  "kind": "LINEAR_COMBINATION",
+                  "components": [
+                    {
+                      "key": "cf-8"
+                    },
+                    {
+                      "key": "cf-9"
+                    },
+                    {
+                      "key": "cf-10"
+                    },
+                    {
+                      "key": "cf-11",
+                      "factor": -1
+                    },
+                    {
+                      "key": "cf-12",
+                      "factor": -1
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "key": "FINANCING",
+            "title": "三、筹资活动产生的现金流量",
+            "lines": [
+              {
+                "key": "cf-14",
+                "lineNo": 14,
+                "name": "取得借款收到的现金",
+                "operation": {
+                  "kind": "CASH_FLOW_ITEM_AMOUNT",
+                  "direction": "INFLOW",
+                  "itemCodes": [
+                    "SME_CF_14_BORROWING_RECEIPTS"
+                  ],
+                  "cashAccounts": [
+                    {
+                      "key": "ASSET.CASH"
+                    },
+                    {
+                      "key": "ASSET.BANK_DEPOSIT"
+                    },
+                    {
+                      "key": "ASSET.OTHER_MONETARY_FUNDS"
+                    }
+                  ]
+                }
+              },
+              {
+                "key": "cf-15",
+                "lineNo": 15,
+                "name": "吸收投资者投资收到的现金",
+                "operation": {
+                  "kind": "CASH_FLOW_ITEM_AMOUNT",
+                  "direction": "INFLOW",
+                  "itemCodes": [
+                    "SME_CF_15_CAPITAL_RECEIPTS"
+                  ],
+                  "cashAccounts": [
+                    {
+                      "key": "ASSET.CASH"
+                    },
+                    {
+                      "key": "ASSET.BANK_DEPOSIT"
+                    },
+                    {
+                      "key": "ASSET.OTHER_MONETARY_FUNDS"
+                    }
+                  ]
+                }
+              },
+              {
+                "key": "cf-16",
+                "lineNo": 16,
+                "name": "偿还借款本金支付的现金",
+                "operation": {
+                  "kind": "CASH_FLOW_ITEM_AMOUNT",
+                  "direction": "OUTFLOW",
+                  "itemCodes": [
+                    "SME_CF_16_PRINCIPAL_REPAYMENTS"
+                  ],
+                  "cashAccounts": [
+                    {
+                      "key": "ASSET.CASH"
+                    },
+                    {
+                      "key": "ASSET.BANK_DEPOSIT"
+                    },
+                    {
+                      "key": "ASSET.OTHER_MONETARY_FUNDS"
+                    }
+                  ]
+                }
+              },
+              {
+                "key": "cf-17",
+                "lineNo": 17,
+                "name": "偿还借款利息支付的现金",
+                "operation": {
+                  "kind": "CASH_FLOW_ITEM_AMOUNT",
+                  "direction": "OUTFLOW",
+                  "itemCodes": [
+                    "SME_CF_17_INTEREST_PAYMENTS"
+                  ],
+                  "cashAccounts": [
+                    {
+                      "key": "ASSET.CASH"
+                    },
+                    {
+                      "key": "ASSET.BANK_DEPOSIT"
+                    },
+                    {
+                      "key": "ASSET.OTHER_MONETARY_FUNDS"
+                    }
+                  ]
+                }
+              },
+              {
+                "key": "cf-18",
+                "lineNo": 18,
+                "name": "分配利润支付的现金",
+                "operation": {
+                  "kind": "CASH_FLOW_ITEM_AMOUNT",
+                  "direction": "OUTFLOW",
+                  "itemCodes": [
+                    "SME_CF_18_PROFIT_DISTRIBUTION"
+                  ],
+                  "cashAccounts": [
+                    {
+                      "key": "ASSET.CASH"
+                    },
+                    {
+                      "key": "ASSET.BANK_DEPOSIT"
+                    },
+                    {
+                      "key": "ASSET.OTHER_MONETARY_FUNDS"
+                    }
+                  ]
+                }
+              },
+              {
+                "key": "cf-19",
+                "lineNo": 19,
+                "name": "筹资活动产生的现金流量净额",
+                "rowType": "TOTAL",
+                "operation": {
+                  "kind": "LINEAR_COMBINATION",
+                  "components": [
+                    {
+                      "key": "cf-14"
+                    },
+                    {
+                      "key": "cf-15"
+                    },
+                    {
+                      "key": "cf-16",
+                      "factor": -1
+                    },
+                    {
+                      "key": "cf-17",
+                      "factor": -1
+                    },
+                    {
+                      "key": "cf-18",
+                      "factor": -1
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "key": "BALANCES",
+            "title": "四、现金净增加额及现金余额",
+            "lines": [
+              {
+                "key": "cf-20",
+                "lineNo": 20,
+                "name": "四、现金净增加额",
+                "rowType": "TOTAL",
+                "operation": {
+                  "kind": "LINEAR_COMBINATION",
+                  "components": [
+                    {
+                      "key": "cf-7"
+                    },
+                    {
+                      "key": "cf-13"
+                    },
+                    {
+                      "key": "cf-19"
+                    }
+                  ]
+                }
+              },
+              {
+                "key": "cf-21",
+                "lineNo": 21,
+                "name": "加：期初现金余额",
+                "operation": {
+                  "kind": "ACCOUNT_BALANCE",
+                  "side": "DEBIT",
+                  "basis": "OPENING",
+                  "accounts": [
+                    {
+                      "key": "ASSET.CASH"
+                    },
+                    {
+                      "key": "ASSET.BANK_DEPOSIT"
+                    },
+                    {
+                      "key": "ASSET.OTHER_MONETARY_FUNDS"
+                    }
+                  ]
+                }
+              },
+              {
+                "key": "cf-22",
+                "lineNo": 22,
+                "name": "五、期末现金余额",
+                "rowType": "TOTAL",
+                "operation": {
+                  "kind": "ACCOUNT_BALANCE",
+                  "side": "DEBIT",
+                  "basis": "CLOSING",
+                  "accounts": [
+                    {
+                      "key": "ASSET.CASH"
+                    },
+                    {
+                      "key": "ASSET.BANK_DEPOSIT"
+                    },
+                    {
+                      "key": "ASSET.OTHER_MONETARY_FUNDS"
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      }
     }
+  }
   ],
   "cashFlowItems": [
     {
-      "code": "OPERATING",
-      "name": "经营活动产生的现金流量"
+      "code": "SME_CF_01_SALES_RECEIPTS",
+      "name": "销售产成品、商品、提供劳务收到的现金"
     },
     {
-      "code": "INVESTING",
-      "name": "投资活动产生的现金流量"
+      "code": "SME_CF_02_OTHER_OPERATING_RECEIPTS",
+      "name": "收到其他与经营活动有关的现金"
     },
     {
-      "code": "FINANCING",
-      "name": "筹资活动产生的现金流量"
+      "code": "SME_CF_03_PURCHASE_PAYMENTS",
+      "name": "购买原材料、商品、接受劳务支付的现金"
+    },
+    {
+      "code": "SME_CF_04_EMPLOYEE_PAYMENTS",
+      "name": "支付的职工薪酬"
+    },
+    {
+      "code": "SME_CF_05_TAX_PAYMENTS",
+      "name": "支付的税费"
+    },
+    {
+      "code": "SME_CF_06_OTHER_OPERATING_PAYMENTS",
+      "name": "支付其他与经营活动有关的现金"
+    },
+    {
+      "code": "SME_CF_08_INVESTMENT_RECOVERY",
+      "name": "收回短期投资、长期债券投资和长期股权投资收到的现金"
+    },
+    {
+      "code": "SME_CF_09_INVESTMENT_INCOME",
+      "name": "取得投资收益收到的现金"
+    },
+    {
+      "code": "SME_CF_10_ASSET_DISPOSAL",
+      "name": "处置固定资产、无形资产和其他非流动资产收回的现金净额"
+    },
+    {
+      "code": "SME_CF_11_INVESTMENT_PAYMENTS",
+      "name": "短期投资、长期债券投资和长期股权投资支付的现金"
+    },
+    {
+      "code": "SME_CF_12_ASSET_ACQUISITION",
+      "name": "购建固定资产、无形资产和其他非流动资产支付的现金"
+    },
+    {
+      "code": "SME_CF_14_BORROWING_RECEIPTS",
+      "name": "取得借款收到的现金"
+    },
+    {
+      "code": "SME_CF_15_CAPITAL_RECEIPTS",
+      "name": "吸收投资者投资收到的现金"
+    },
+    {
+      "code": "SME_CF_16_PRINCIPAL_REPAYMENTS",
+      "name": "偿还借款本金支付的现金"
+    },
+    {
+      "code": "SME_CF_17_INTEREST_PAYMENTS",
+      "name": "偿还借款利息支付的现金"
+    },
+    {
+      "code": "SME_CF_18_PROFIT_DISTRIBUTION",
+      "name": "分配利润支付的现金"
     }
   ],
   "dimensionTypes": [

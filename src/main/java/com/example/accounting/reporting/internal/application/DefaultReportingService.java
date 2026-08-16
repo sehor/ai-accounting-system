@@ -4,6 +4,8 @@ import com.example.accounting.ledger.LedgerAccessService;
 import com.example.accounting.ledger.LedgerRole;
 import com.example.accounting.ledger.formula.FormulaParser;
 import com.example.accounting.ledger.formula.ReportFormulaDefinition;
+import com.example.accounting.ledger.formula.ReportFormulaDefinition.AccountReference;
+import com.example.accounting.ledger.formula.ReportFormulaDefinition.CashFlowItemAmountExpression;
 import com.example.accounting.ledger.internal.port.ReportFormulaRepository;
 import com.example.accounting.reporting.FinanceQueryRequests;
 import com.example.accounting.reporting.DimensionLedgerRequests;
@@ -11,23 +13,27 @@ import com.example.accounting.reporting.ReportResponses;
 import com.example.accounting.reporting.StatutoryReportResponses;
 import com.example.accounting.reporting.ReportingService;
 import com.example.accounting.reporting.PeriodRange;
+import com.example.accounting.reporting.formula.CashFlowSource;
 import com.example.accounting.reporting.formula.FormulaAccountAmount;
+import com.example.accounting.reporting.formula.FormulaAccountResolver;
 import com.example.accounting.reporting.formula.ReportFormulaEvaluator;
 import com.example.accounting.reporting.formula.ReportFormulaValidator;
 import com.example.accounting.reporting.internal.port.ReportingRepository;
 import com.example.accounting.shared.web.ApiProblemException;
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.Map;
-import java.time.YearMonth;
-import java.time.temporal.ChronoUnit;
 import java.util.Set;
 import java.util.UUID;
+import java.time.YearMonth;
+import java.time.temporal.ChronoUnit;
 import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -40,6 +46,7 @@ public class DefaultReportingService implements ReportingService {
             LedgerRole.OWNER, LedgerRole.EDITOR, LedgerRole.REVIEWER, LedgerRole.VIEWER, LedgerRole.AGENT);
     private static final int MAX_DIMENSION_QUERY_ROWS = 10_000;
     private static final int MAX_DIMENSION_LEDGER_PERIODS = 36;
+    private static final int MAX_QUALITY_SAMPLES = 10;
     private static final String UNASSIGNED = "UNASSIGNED";
 
     private final LedgerAccessService ledgerAccess;
@@ -48,17 +55,20 @@ public class DefaultReportingService implements ReportingService {
     private final FormulaParser formulaParser;
     private final ReportFormulaValidator validator;
     private final ReportFormulaEvaluator evaluator;
+    private final FormulaAccountResolver accountResolver;
 
     @Autowired
     public DefaultReportingService(LedgerAccessService ledgerAccess, ReportingRepository reports,
                                    ReportFormulaRepository formulas, FormulaParser formulaParser,
-                                   ReportFormulaValidator validator, ReportFormulaEvaluator evaluator) {
+                                   ReportFormulaValidator validator, ReportFormulaEvaluator evaluator,
+                                   FormulaAccountResolver accountResolver) {
         this.ledgerAccess = ledgerAccess;
         this.reports = reports;
         this.formulas = formulas;
         this.formulaParser = formulaParser;
         this.validator = validator;
         this.evaluator = evaluator;
+        this.accountResolver = accountResolver;
     }
 
     @Override
@@ -157,9 +167,10 @@ public class DefaultReportingService implements ReportingService {
     public StatutoryReportResponses.Statement statutoryStatement(
             UUID actorId, UUID ledgerId, String reportType, String periodCode) {
         requireView(actorId, ledgerId);
-        if (!"balance-sheet".equals(reportType) && !"income-statement".equals(reportType)) {
+        boolean cashFlow = "cash-flow".equals(reportType);
+        if (!"balance-sheet".equals(reportType) && !"income-statement".equals(reportType) && !cashFlow) {
             throw problem(404, "STATUTORY_REPORT_NOT_FOUND", "Statutory report not found",
-                    "Only balance-sheet and income-statement are supported");
+                    "Only balance-sheet, income-statement and cash-flow are supported");
         }
         PeriodRange selected = PeriodRange.single(periodCode);
         validateRange(ledgerId, selected);
@@ -175,7 +186,7 @@ public class DefaultReportingService implements ReportingService {
         String standardVersion = "v1".equals(profile.accountingStandardVersion())
                 ? "2011-17" : profile.accountingStandardVersion();
         boolean income = "income-statement".equals(reportType);
-        String formulaCode = income ? "INCOME_STATEMENT" : "BALANCE_SHEET";
+        String formulaCode = income ? "INCOME_STATEMENT" : cashFlow ? "CASH_FLOW" : "BALANCE_SHEET";
         ReportFormulaRepository.Snapshot snapshot = formulas.findSnapshot(ledgerId, formulaCode)
                 .orElseThrow(() -> problem(500, "STATUTORY_FORMULA_NOT_FOUND", "法定报表公式缺失",
                         "当前账套缺少已发布的报表公式"));
@@ -185,6 +196,10 @@ public class DefaultReportingService implements ReportingService {
         if (firstPeriod == null) {
             throw problem(404, "PERIOD_NOT_FOUND", "Period not found",
                     "No accounting period is available in the selected year");
+        }
+        if (cashFlow) {
+            return cashFlowStatement(ledgerId, definition, snapshot, firstPeriod, selected,
+                    periodCode, standardVersion);
         }
         List<FormulaAccountAmount> primary;
         List<FormulaAccountAmount> comparative;
@@ -207,7 +222,109 @@ public class DefaultReportingService implements ReportingService {
                 primary, comparative, new ReportFormulaEvaluator.FixedLinesMetadata(
                         reportType, "SME", standardVersion, periodCode,
                         income ? "本年累计金额" : "期末余额", income ? "本月金额" : "年初余额"));
-        return addFormulaMetadata(result, formulaCode, snapshot.publishedVersion());
+        return addFormulaMetadata(result, formulaCode, snapshot.publishedVersion(),
+                StatutoryReportResponses.DataQuality.complete());
+    }
+
+    /**
+     * 会小企 03 表：主列“本年累计金额”从年度首个可用期间到 periodCode，第二列
+     * “本月金额”仅单月。行 21/22 由公式行级 OPENING/CLOSING 基准读取各自列范围的
+     * 期初/期末现金余额；行 1—20 读取已过账外部现金收支的现金流项目金额。历史缺失
+     * 分类不阻断报表：金额按零，数据完整性以 {@code dataQuality} 返回。
+     */
+    private StatutoryReportResponses.Statement cashFlowStatement(
+            UUID ledgerId, ReportFormulaDefinition definition,
+            ReportFormulaRepository.Snapshot snapshot, String firstPeriod,
+            PeriodRange selected, String periodCode, String standardVersion) {
+        PeriodRange yearToDate = new PeriodRange(firstPeriod, periodCode);
+        requireStatutoryProjection(ledgerId, yearToDate);
+        requireStatutoryProjection(ledgerId, selected);
+        Set<UUID> cashAccountIds = accountResolver.expandToLeafIds(ledgerId,
+                cashAccountReferences(definition));
+        Set<String> referencedCodes = referencedItemCodes(definition);
+        List<FormulaAccountAmount> primaryBalances =
+                reports.formulaAccountAmounts(ledgerId, yearToDate, false);
+        List<FormulaAccountAmount> monthlyBalances =
+                reports.formulaAccountAmounts(ledgerId, selected, false);
+        CashFlowSource primaryFlows = reports.cashFlowAmounts(
+                ledgerId, yearToDate, cashAccountIds, referencedCodes);
+        CashFlowSource monthlyFlows = reports.cashFlowAmounts(
+                ledgerId, selected, cashAccountIds, referencedCodes);
+        ReportingRepository.CashFlowQuality primaryQuality = reports.cashFlowQuality(
+                ledgerId, yearToDate, cashAccountIds, referencedCodes, MAX_QUALITY_SAMPLES);
+        ReportingRepository.CashFlowQuality monthlyQuality = reports.cashFlowQuality(
+                ledgerId, selected, cashAccountIds, referencedCodes, MAX_QUALITY_SAMPLES);
+        StatutoryReportResponses.Statement result = evaluator.evaluateFixedLines(
+                ledgerId, definition, primaryBalances, monthlyBalances, primaryFlows, monthlyFlows,
+                new ReportFormulaEvaluator.FixedLinesMetadata(
+                        "cash-flow", "SME", standardVersion, periodCode,
+                        "本年累计金额", "本月金额"));
+        return addFormulaMetadata(result, "CASH_FLOW", snapshot.publishedVersion(),
+                mergeQuality(primaryQuality, monthlyQuality));
+    }
+
+    private List<AccountReference> cashAccountReferences(ReportFormulaDefinition definition) {
+        List<AccountReference> references = new ArrayList<>();
+        for (ReportFormulaDefinition.FormulaGroup group : definition.groups()) {
+            for (ReportFormulaDefinition.FormulaLine line : group.lines()) {
+                if (line.expression() instanceof CashFlowItemAmountExpression cashFlow) {
+                    references.addAll(cashFlow.cashAccounts());
+                } else if (line.expression() instanceof ReportFormulaDefinition.AccountAmountExpression account
+                        && account.accounts() != null) {
+                    references.addAll(account.accounts());
+                }
+            }
+        }
+        return List.copyOf(new LinkedHashSet<>(references));
+    }
+
+    private Set<String> referencedItemCodes(ReportFormulaDefinition definition) {
+        Set<String> codes = new LinkedHashSet<>();
+        for (ReportFormulaDefinition.FormulaGroup group : definition.groups()) {
+            for (ReportFormulaDefinition.FormulaLine line : group.lines()) {
+                if (line.expression() instanceof CashFlowItemAmountExpression cashFlow) {
+                    codes.addAll(cashFlow.itemCodes());
+                }
+            }
+        }
+        return codes;
+    }
+
+    private StatutoryReportResponses.DataQuality mergeQuality(
+            ReportingRepository.CashFlowQuality primary,
+            ReportingRepository.CashFlowQuality comparative) {
+        boolean complete = primary.unclassifiedLineCount() == 0
+                && comparative.unclassifiedLineCount() == 0;
+        List<StatutoryReportResponses.QualitySample> samples = new ArrayList<>();
+        Set<String> seen = new HashSet<>();
+        for (ReportingRepository.CashFlowSample sample : primary.samples()) {
+            if (seen.add(sample.voucherId() + ":" + sample.lineNo())) {
+                samples.add(new StatutoryReportResponses.QualitySample(
+                        sample.voucherId(), sample.voucherNumber(), sample.periodCode(),
+                        sample.voucherDate(), sample.lineNo(), sample.side(),
+                        sample.baseAmount(), sample.reason()));
+            }
+        }
+        for (ReportingRepository.CashFlowSample sample : comparative.samples()) {
+            if (seen.add(sample.voucherId() + ":" + sample.lineNo())) {
+                samples.add(new StatutoryReportResponses.QualitySample(
+                        sample.voucherId(), sample.voucherNumber(), sample.periodCode(),
+                        sample.voucherDate(), sample.lineNo(), sample.side(),
+                        sample.baseAmount(), sample.reason()));
+            }
+        }
+        samples.sort(Comparator.comparing(StatutoryReportResponses.QualitySample::periodCode)
+                .thenComparing(StatutoryReportResponses.QualitySample::voucherDate)
+                .thenComparing(StatutoryReportResponses.QualitySample::voucherNumber)
+                .thenComparingInt(StatutoryReportResponses.QualitySample::lineNo));
+        if (samples.size() > MAX_QUALITY_SAMPLES) {
+            samples = new ArrayList<>(samples.subList(0, MAX_QUALITY_SAMPLES));
+        }
+        return new StatutoryReportResponses.DataQuality(
+                complete ? "COMPLETE" : "INCOMPLETE",
+                primary.unclassifiedVoucherCount(), primary.unclassifiedLineCount(),
+                comparative.unclassifiedVoucherCount(), comparative.unclassifiedLineCount(),
+                samples);
     }
 
     private void requireStatutoryProjection(UUID ledgerId, PeriodRange range) {
@@ -253,12 +370,13 @@ public class DefaultReportingService implements ReportingService {
     }
 
     private StatutoryReportResponses.Statement addFormulaMetadata(
-            StatutoryReportResponses.Statement statement, String formulaCode, int formulaVersion) {
+            StatutoryReportResponses.Statement statement, String formulaCode, int formulaVersion,
+            StatutoryReportResponses.DataQuality dataQuality) {
         return new StatutoryReportResponses.Statement(
                 statement.reportType(), statement.templateCode(), statement.standardCode(),
                 statement.standardVersion(), statement.periodCode(), statement.primaryColumn(),
                 statement.comparativeColumn(), statement.groups(), statement.checks(),
-                formulaCode, formulaVersion);
+                formulaCode, formulaVersion, dataQuality);
     }
 
     @Override

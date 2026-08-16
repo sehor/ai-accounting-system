@@ -130,8 +130,11 @@ class DefaultReportingServiceTest {
         UUID accountId = jdbc.queryForObject(
                 "select id from ledger_account where ledger_id = ? and code = ?",
                 UUID.class, ledgerId, code);
+        UUID cashItem = jdbc.queryForObject(
+                "select id from cash_flow_item where ledger_id = ? and code = 'SME_CF_01_SALES_RECEIPTS'",
+                UUID.class, ledgerId);
         return new VoucherRequests.Line(accountId, side, "CNY",
-                new BigDecimal(amount), BigDecimal.ONE, "test");
+                new BigDecimal(amount), BigDecimal.ONE, "test", cashItem, null, null, null);
     }
 
     private UUID createLedger(UUID userId, String standardCode, String standardVersion, String name) {

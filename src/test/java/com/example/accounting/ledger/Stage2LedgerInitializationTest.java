@@ -53,6 +53,6 @@ class Stage2LedgerInitializationTest {
                 String.class, ledger.id())).isEqualTo("2018-01");
         assertThat(jdbcTemplate.queryForObject(
                 "select count(*) from report_formula_snapshot where ledger_id = ?", Integer.class, ledger.id()))
-                .isEqualTo(2);
+                .isEqualTo(3);
     }
 }

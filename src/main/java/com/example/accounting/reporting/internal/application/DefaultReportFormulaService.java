@@ -6,6 +6,7 @@ import com.example.accounting.ledger.formula.FormulaParser;
 import com.example.accounting.ledger.formula.ReportFormulaDefinition;
 import com.example.accounting.ledger.formula.ReportFormulaDefinition.AccountAmountExpression;
 import com.example.accounting.ledger.formula.ReportFormulaDefinition.AccountReference;
+import com.example.accounting.ledger.formula.ReportFormulaDefinition.CashFlowItemAmountExpression;
 import com.example.accounting.ledger.formula.ReportFormulaDefinition.DetailRule;
 import com.example.accounting.ledger.formula.ReportFormulaDefinition.FormulaGroup;
 import com.example.accounting.ledger.formula.ReportFormulaDefinition.FormulaLine;
@@ -17,7 +18,9 @@ import com.example.accounting.reporting.ReportFormulaResponses;
 import com.example.accounting.reporting.ReportFormulaService;
 import com.example.accounting.reporting.ReportResponses;
 import com.example.accounting.reporting.StatutoryReportResponses;
+import com.example.accounting.reporting.formula.CashFlowSource;
 import com.example.accounting.reporting.formula.FormulaAccountAmount;
+import com.example.accounting.reporting.formula.FormulaAccountResolver;
 import com.example.accounting.reporting.formula.ReportFormulaEvaluator;
 import com.example.accounting.reporting.formula.ReportFormulaValidator;
 import com.example.accounting.reporting.internal.port.ReportingRepository;
@@ -26,8 +29,10 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -47,9 +52,11 @@ public class DefaultReportFormulaService implements ReportFormulaService {
             LedgerRole.OWNER, LedgerRole.EDITOR, LedgerRole.REVIEWER, LedgerRole.VIEWER, LedgerRole.AGENT);
     private static final Set<LedgerRole> WRITE_ROLES = Set.of(LedgerRole.OWNER, LedgerRole.EDITOR);
     private static final Set<String> CODES = Set.of(
-            ReportFormulaDefinition.REPORT_BALANCE_SHEET, ReportFormulaDefinition.REPORT_INCOME_STATEMENT);
+            ReportFormulaDefinition.REPORT_BALANCE_SHEET, ReportFormulaDefinition.REPORT_INCOME_STATEMENT,
+            ReportFormulaDefinition.REPORT_CASH_FLOW);
     private static final List<String> LEGACY_CATEGORY_FIELDS = List.of(
             "debitCategories", "creditCategories", "revenueCategories", "expenseCategories");
+    private static final int MAX_QUALITY_SAMPLES = 10;
 
     private final LedgerAccessService ledgerAccess;
     private final ReportFormulaRepository formulas;
@@ -57,17 +64,20 @@ public class DefaultReportFormulaService implements ReportFormulaService {
     private final FormulaParser parser;
     private final ReportFormulaValidator validator;
     private final ReportFormulaEvaluator evaluator;
+    private final FormulaAccountResolver accountResolver;
     private final ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
 
     public DefaultReportFormulaService(LedgerAccessService ledgerAccess, ReportFormulaRepository formulas,
                                        ReportingRepository reports, FormulaParser parser,
-                                       ReportFormulaValidator validator, ReportFormulaEvaluator evaluator) {
+                                       ReportFormulaValidator validator, ReportFormulaEvaluator evaluator,
+                                       FormulaAccountResolver accountResolver) {
         this.ledgerAccess = ledgerAccess;
         this.formulas = formulas;
         this.reports = reports;
         this.parser = parser;
         this.validator = validator;
         this.evaluator = evaluator;
+        this.accountResolver = accountResolver;
     }
 
     @Override
@@ -205,28 +215,38 @@ public class DefaultReportFormulaService implements ReportFormulaService {
             statement = objectMapper.convertValue(result, Object.class);
         } else {
             boolean income = ReportFormulaDefinition.REPORT_INCOME_STATEMENT.equals(code);
+            boolean cashFlow = ReportFormulaDefinition.REPORT_CASH_FLOW.equals(code);
             String firstPeriod = reports.firstPeriodOfYear(ledgerId, range.periodTo());
             if (firstPeriod == null) {
                 throw problem(422, "REPORT_FORMULA_PERIOD_INVALID", "Period is invalid",
                         "The selected period has no year opening period");
             }
-            List<FormulaAccountAmount> primary;
-            List<FormulaAccountAmount> comparative;
-            if (income) {
-                PeriodRange yearToDate = new PeriodRange(firstPeriod, range.periodTo());
-                requireFormulaProjection(ledgerId, yearToDate);
-                requireFormulaProjection(ledgerId, range);
-                primary = reports.formulaAccountAmounts(ledgerId, yearToDate, true);
-                comparative = reports.formulaAccountAmounts(ledgerId, range, true);
+            StatutoryReportResponses.Statement result;
+            if (cashFlow) {
+                if (!range.periodFrom().equals(range.periodTo())) {
+                    throw problem(422, "REPORT_FORMULA_PERIOD_INVALID", "Period is invalid",
+                            "Cash flow previews accept a single month periodCode only");
+                }
+                result = cashFlowPreview(ledgerId, definition, firstPeriod, range);
             } else {
-                primary = reports.formulaAccountAmounts(ledgerId, range, false);
-                comparative = reports.formulaAccountAmounts(ledgerId, PeriodRange.single(firstPeriod), false);
+                List<FormulaAccountAmount> primary;
+                List<FormulaAccountAmount> comparative;
+                if (income) {
+                    PeriodRange yearToDate = new PeriodRange(firstPeriod, range.periodTo());
+                    requireFormulaProjection(ledgerId, yearToDate);
+                    requireFormulaProjection(ledgerId, range);
+                    primary = reports.formulaAccountAmounts(ledgerId, yearToDate, true);
+                    comparative = reports.formulaAccountAmounts(ledgerId, range, true);
+                } else {
+                    primary = reports.formulaAccountAmounts(ledgerId, range, false);
+                    comparative = reports.formulaAccountAmounts(ledgerId, PeriodRange.single(firstPeriod), false);
+                }
+                result = evaluator.evaluateFixedLines(ledgerId, definition,
+                        primary, comparative, new ReportFormulaEvaluator.FixedLinesMetadata(
+                                income ? "income-statement" : "balance-sheet", "SME", "2011-17",
+                                range.periodTo(), income ? "本年累计金额" : "期末余额",
+                                income ? "本月金额" : "年初余额"));
             }
-            StatutoryReportResponses.Statement result = evaluator.evaluateFixedLines(ledgerId, definition,
-                    primary, comparative, new ReportFormulaEvaluator.FixedLinesMetadata(
-                            income ? "income-statement" : "balance-sheet", "SME", "2011-17",
-                            range.periodTo(), income ? "本年累计金额" : "期末余额",
-                            income ? "本月金额" : "年初余额"));
             result.checks().stream().filter(check -> !check.passed()).forEach(check ->
                     warnings.add(new ReportFormulaResponses.Warning(
                             check.key(), check.name(), check.difference())));
@@ -413,8 +433,11 @@ public class DefaultReportFormulaService implements ReportFormulaService {
                 node.path("accounts").forEach(account -> accounts.add(
                         new AccountReference(account.path("type").asText(),
                                 account.path("value").asText())));
+                String basis = node.path("basis").asText("");
                 yield new AccountAmountExpression(node.path("operation").asText(),
-                        node.path("side").asText(), accounts);
+                        node.path("side").asText(), accounts,
+                        basis.isBlank() ? null : enumValue(
+                                ReportFormulaDefinition.AmountBasis.class, basis, "basis"));
             }
             case "LINEAR_COMBINATION" -> {
                 List<com.example.accounting.ledger.formula.ReportFormulaDefinition.LineComponent> components =
@@ -425,9 +448,128 @@ public class DefaultReportFormulaService implements ReportFormulaService {
                 yield new com.example.accounting.ledger.formula.ReportFormulaDefinition
                         .LinearCombinationExpression(components);
             }
+            case "CASH_FLOW_ITEM_AMOUNT" -> {
+                List<String> itemCodes = new ArrayList<>();
+                node.path("itemCodes").forEach(itemCode -> itemCodes.add(itemCode.asText()));
+                List<AccountReference> cashAccounts = new ArrayList<>();
+                node.path("cashAccounts").forEach(account -> cashAccounts.add(
+                        new AccountReference(account.path("type").asText(),
+                                account.path("value").asText())));
+                yield new CashFlowItemAmountExpression(
+                        enumValue(ReportFormulaDefinition.CashFlowDirection.class,
+                                node.path("direction").asText(), "direction"),
+                        itemCodes, cashAccounts);
+            }
             default -> throw problem(422, "REPORT_FORMULA_INVALID", "Report formula is invalid",
                     "Unsupported expression type " + type);
         };
+    }
+
+    private <E extends Enum<E>> E enumValue(Class<E> type, String value, String field) {
+        try {
+            return Enum.valueOf(type, value);
+        } catch (IllegalArgumentException exception) {
+            throw problem(422, "REPORT_FORMULA_INVALID", "Report formula is invalid",
+                    field + " has an unsupported value: " + value);
+        }
+    }
+
+    /**
+     * Cash flow preview with the same calculation scope as the statutory
+     * statement: year-to-date primary column, single-month comparative column,
+     * and structured data completeness warnings carried inside the statement.
+     */
+    private StatutoryReportResponses.Statement cashFlowPreview(
+            UUID ledgerId, ReportFormulaDefinition definition, String firstPeriod, PeriodRange selected) {
+        PeriodRange yearToDate = new PeriodRange(firstPeriod, selected.periodTo());
+        requireFormulaProjection(ledgerId, yearToDate);
+        requireFormulaProjection(ledgerId, selected);
+        Set<UUID> cashAccountIds = accountResolver.expandToLeafIds(ledgerId,
+                cashAccountReferences(definition));
+        Set<String> itemCodes = referencedItemCodes(definition);
+        List<FormulaAccountAmount> primaryBalances =
+                reports.formulaAccountAmounts(ledgerId, yearToDate, false);
+        List<FormulaAccountAmount> monthlyBalances =
+                reports.formulaAccountAmounts(ledgerId, selected, false);
+        CashFlowSource primaryFlows = reports.cashFlowAmounts(
+                ledgerId, yearToDate, cashAccountIds, itemCodes);
+        CashFlowSource monthlyFlows = reports.cashFlowAmounts(
+                ledgerId, selected, cashAccountIds, itemCodes);
+        ReportingRepository.CashFlowQuality primaryQuality = reports.cashFlowQuality(
+                ledgerId, yearToDate, cashAccountIds, itemCodes, MAX_QUALITY_SAMPLES);
+        ReportingRepository.CashFlowQuality monthlyQuality = reports.cashFlowQuality(
+                ledgerId, selected, cashAccountIds, itemCodes, MAX_QUALITY_SAMPLES);
+        StatutoryReportResponses.Statement result = evaluator.evaluateFixedLines(
+                ledgerId, definition, primaryBalances, monthlyBalances, primaryFlows, monthlyFlows,
+                new ReportFormulaEvaluator.FixedLinesMetadata(
+                        "cash-flow", "SME", "2011-17", selected.periodTo(),
+                        "本年累计金额", "本月金额"));
+        return withQuality(result, primaryQuality, monthlyQuality);
+    }
+
+    private StatutoryReportResponses.Statement withQuality(
+            StatutoryReportResponses.Statement statement,
+            ReportingRepository.CashFlowQuality primary,
+            ReportingRepository.CashFlowQuality comparative) {
+        boolean complete = primary.unclassifiedLineCount() == 0
+                && comparative.unclassifiedLineCount() == 0;
+        List<StatutoryReportResponses.QualitySample> samples = new ArrayList<>();
+        Set<String> seen = new HashSet<>();
+        List<ReportingRepository.CashFlowQuality> sources = List.of(primary, comparative);
+        for (ReportingRepository.CashFlowQuality quality : sources) {
+            for (ReportingRepository.CashFlowSample sample : quality.samples()) {
+                if (seen.add(sample.voucherId() + ":" + sample.lineNo())) {
+                    samples.add(new StatutoryReportResponses.QualitySample(
+                            sample.voucherId(), sample.voucherNumber(), sample.periodCode(),
+                            sample.voucherDate(), sample.lineNo(), sample.side(),
+                            sample.baseAmount(), sample.reason()));
+                }
+            }
+        }
+        samples.sort(Comparator.comparing(StatutoryReportResponses.QualitySample::periodCode)
+                .thenComparing(StatutoryReportResponses.QualitySample::voucherDate)
+                .thenComparing(StatutoryReportResponses.QualitySample::voucherNumber)
+                .thenComparingInt(StatutoryReportResponses.QualitySample::lineNo));
+        if (samples.size() > MAX_QUALITY_SAMPLES) {
+            samples = new ArrayList<>(samples.subList(0, MAX_QUALITY_SAMPLES));
+        }
+        return new StatutoryReportResponses.Statement(
+                statement.reportType(), statement.templateCode(), statement.standardCode(),
+                statement.standardVersion(), statement.periodCode(), statement.primaryColumn(),
+                statement.comparativeColumn(), statement.groups(), statement.checks(),
+                statement.formulaCode(), statement.formulaVersion(),
+                new StatutoryReportResponses.DataQuality(
+                        complete ? "COMPLETE" : "INCOMPLETE",
+                        primary.unclassifiedVoucherCount(), primary.unclassifiedLineCount(),
+                        comparative.unclassifiedVoucherCount(), comparative.unclassifiedLineCount(),
+                        samples));
+    }
+
+    private List<AccountReference> cashAccountReferences(ReportFormulaDefinition definition) {
+        Set<AccountReference> references = new LinkedHashSet<>();
+        for (FormulaGroup group : definition.groups()) {
+            for (FormulaLine line : group.lines()) {
+                if (line.expression() instanceof CashFlowItemAmountExpression cashFlow) {
+                    references.addAll(cashFlow.cashAccounts());
+                } else if (line.expression() instanceof AccountAmountExpression account
+                        && account.accounts() != null) {
+                    references.addAll(account.accounts());
+                }
+            }
+        }
+        return List.copyOf(references);
+    }
+
+    private Set<String> referencedItemCodes(ReportFormulaDefinition definition) {
+        Set<String> codes = new LinkedHashSet<>();
+        for (FormulaGroup group : definition.groups()) {
+            for (FormulaLine line : group.lines()) {
+                if (line.expression() instanceof CashFlowItemAmountExpression cashFlow) {
+                    codes.addAll(cashFlow.itemCodes());
+                }
+            }
+        }
+        return codes;
     }
 
     private PeriodRange previewRange(UUID ledgerId, String code,
@@ -482,6 +624,8 @@ public class DefaultReportFormulaService implements ReportFormulaService {
             for (FormulaLine line : group.lines()) {
                 if (line.expression() instanceof AccountAmountExpression accountAmount) {
                     accountAmount.accounts().forEach(reference -> addConcrete(result, reference));
+                } else if (line.expression() instanceof CashFlowItemAmountExpression cashFlow) {
+                    cashFlow.cashAccounts().forEach(reference -> addConcrete(result, reference));
                 }
             }
         }
@@ -541,7 +685,7 @@ public class DefaultReportFormulaService implements ReportFormulaService {
     private void requireCode(String code) {
         if (!CODES.contains(code)) {
             throw problem(404, "REPORT_FORMULA_NOT_FOUND", "Report formula not found",
-                    "Only BALANCE_SHEET and INCOME_STATEMENT formulas exist");
+                    "Only BALANCE_SHEET, INCOME_STATEMENT and CASH_FLOW formulas exist");
         }
     }
 

@@ -35,13 +35,18 @@ class PeriodClosingIntegrationTest {
     @Autowired private FixedAssetService fixedAssets;
     @Autowired private JdbcTemplate jdbc;
 
+    @Autowired private com.example.accounting.reporting.internal.port.BalanceProjectionRepository projection;
+
+    /** Detailed cash flow item attached to test lines so external cash vouchers stay classified. */
+    private UUID defaultCashItem;
+
     @Test
     void generatesExpenseAndRevenueTransfersIdempotently() {
         UUID user = UUID.randomUUID();
         UUID ledger = ledgers.create(new CurrentUserResolver.ResolvedUser(user, "test", user.toString()),
                 new LedgerRequests.Create("period-closing", "SME", "v1", "CNY", LocalDate.of(2026, 1, 1), false)).id();
         UUID period = ledgers.periodId(ledger, "2026-01");
-        UUID cash = ledgers.accountId(ledger, "1001");
+        UUID cash = accountId(ledger, "1001");
         UUID expense = account(ledger, "PERIOD_EXPENSE");
         UUID revenue = account(ledger, "OPERATING_REVENUE");
         vouchers.create(user, ledger, new VoucherRequests.Create(period, LocalDate.of(2026, 1, 10), "GENERAL", "1", "expense",
@@ -141,7 +146,7 @@ class PeriodClosingIntegrationTest {
                 new LedgerRequests.Create("concurrent-closing-generate", "SME", "v1", "CNY",
                         LocalDate.of(2026, 1, 1), false)).id();
         UUID period = ledgers.periodId(ledger, "2026-01");
-        UUID cash = ledgers.accountId(ledger, "1001");
+        UUID cash = accountId(ledger, "1001");
         UUID expense = account(ledger, "PERIOD_EXPENSE");
         vouchers.create(user, ledger, new VoucherRequests.Create(period, LocalDate.of(2026, 1, 10),
                 "GENERAL", "CONCURRENT-1", "expense",
@@ -193,7 +198,7 @@ class PeriodClosingIntegrationTest {
                 new LedgerRequests.Create("reset-transfer", "SME", "v1", "CNY",
                         LocalDate.of(2026, 1, 1), false)).id();
         UUID period = ledgers.periodId(ledger, "2026-01");
-        UUID cash = ledgers.accountId(ledger, "1001");
+        UUID cash = accountId(ledger, "1001");
         UUID expense = account(ledger, "PERIOD_EXPENSE");
         vouchers.create(user, ledger, new VoucherRequests.Create(period, LocalDate.of(2026, 1, 10),
                 "GENERAL", "RESET-1", "expense",
@@ -217,7 +222,7 @@ class PeriodClosingIntegrationTest {
                 new LedgerRequests.Create("reset-depreciation", "SME", "v1", "CNY",
                         LocalDate.of(2026, 1, 1), false)).id();
         UUID period = ledgers.periodId(ledger, "2026-01");
-        UUID cash = ledgers.accountId(ledger, "1001");
+        UUID cash = accountId(ledger, "1001");
         UUID category = fixedAssets.createCategory(user, ledger, new FixedAssetRequests.CategoryCreate(
                 "FA-RESET", "reset depreciation", 36, BigDecimal.ZERO,
                 cash, cash, cash, cash, cash, cash, cash)).id();
@@ -310,7 +315,7 @@ class PeriodClosingIntegrationTest {
         UUID ledger = ledgers.create(new CurrentUserResolver.ResolvedUser(user, "test", user.toString()),
                 new LedgerRequests.Create("close-without-transfers", "SME", "v1", "CNY", LocalDate.of(2026, 1, 1), false)).id();
         UUID period = ledgers.periodId(ledger, "2026-01");
-        UUID cash = ledgers.accountId(ledger, "1001");
+        UUID cash = accountId(ledger, "1001");
         UUID expense = account(ledger, "PERIOD_EXPENSE");
         UUID revenue = account(ledger, "OPERATING_REVENUE");
         vouchers.create(user, ledger, new VoucherRequests.Create(period, LocalDate.of(2026, 1, 10), "GENERAL", "1", "expense",
@@ -335,7 +340,7 @@ class PeriodClosingIntegrationTest {
         UUID ledger = ledgers.create(new CurrentUserResolver.ResolvedUser(user, "test", user.toString()),
                 new LedgerRequests.Create("detect-existing-transfer", "SME", "v1", "CNY", LocalDate.of(2026, 1, 1), false)).id();
         UUID period = ledgers.periodId(ledger, "2026-01");
-        UUID cash = ledgers.accountId(ledger, "1001");
+        UUID cash = accountId(ledger, "1001");
         UUID expense = account(ledger, "PERIOD_EXPENSE");
         UUID revenue = account(ledger, "OPERATING_REVENUE");
         vouchers.create(user, ledger, new VoucherRequests.Create(period, LocalDate.of(2026, 1, 10), "GENERAL", "1", "expense",
@@ -362,7 +367,7 @@ class PeriodClosingIntegrationTest {
         UUID ledger = ledgers.create(new CurrentUserResolver.ResolvedUser(user, "test", user.toString()),
                 new LedgerRequests.Create("close-with-pending-depreciation", "SME", "v1", "CNY", LocalDate.of(2026, 1, 1), false)).id();
         UUID period = ledgers.periodId(ledger, "2026-01");
-        UUID cash = ledgers.accountId(ledger, "1001");
+        UUID cash = accountId(ledger, "1001");
         UUID category = fixedAssets.createCategory(user, ledger, new FixedAssetRequests.CategoryCreate(
                 "FA-CLOSE", "close pending depreciation", 36, BigDecimal.ZERO,
                 cash, cash, cash, cash, cash, cash, cash)).id();
@@ -382,17 +387,31 @@ class PeriodClosingIntegrationTest {
     }
 
     private UUID account(UUID ledger, String category) {
+        defaultCashItem = cashItem(ledger);
         return jdbc.queryForObject("select id from ledger_account where ledger_id = ? and category = ? and status = 'ACTIVE' "
                 + "and not exists (select 1 from ledger_account child where child.ledger_id = ledger_account.ledger_id and child.parent_id = ledger_account.id) "
                 + "order by code limit 1", UUID.class, ledger, category);
     }
 
+    private UUID accountId(UUID ledger, String code) {
+        defaultCashItem = cashItem(ledger);
+        return ledgers.accountId(ledger, code);
+    }
+
+    private UUID cashItem(UUID ledger) {
+        List<UUID> items = jdbc.queryForList(
+                "select id from cash_flow_item where ledger_id = ? and code = 'SME_CF_01_SALES_RECEIPTS'",
+                UUID.class, ledger);
+        return items.isEmpty() ? null : items.getFirst();
+    }
+
     private VoucherRequests.Line line(UUID account, String side, String amount) {
-        return new VoucherRequests.Line(account, side, "CNY", new BigDecimal(amount), BigDecimal.ONE, "line");
+        return new VoucherRequests.Line(account, side, "CNY", new BigDecimal(amount), BigDecimal.ONE,
+                "line", defaultCashItem, null, null, null);
     }
 
     private void createDepreciableAsset(UUID user, UUID ledger, String assetCode) {
-        UUID cash = ledgers.accountId(ledger, "1001");
+        UUID cash = accountId(ledger, "1001");
         UUID category = fixedAssets.createCategory(user, ledger, new FixedAssetRequests.CategoryCreate(
                 "FA-GENERATE", "depreciation generation", 36, BigDecimal.ZERO,
                 cash, cash, cash, cash, cash, cash, cash)).id();
@@ -472,7 +491,8 @@ class PeriodClosingIntegrationTest {
 
     private PeriodClosingResponses.Status statusAfterProjectionIsReady(UUID user, UUID ledger, UUID period)
             throws InterruptedException {
-        for (int attempt = 0; attempt < 20; attempt++) {
+        for (int attempt = 0; attempt < 60; attempt++) {
+            projection.applyPendingBatch(200, 5000);
             PeriodClosingResponses.Status status = closing.status(user, ledger, period);
             boolean projectionReady = status.blockers().stream()
                     .noneMatch(blocker -> "BALANCE_PROJECTION_NOT_READY".equals(blocker.code()));

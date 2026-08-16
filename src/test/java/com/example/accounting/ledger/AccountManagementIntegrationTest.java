@@ -31,7 +31,7 @@ class AccountManagementIntegrationTest {
 
         List<LedgerResponses.Account> initial = ledgers.listAccounts(owner, ledgerId);
         assertThat(initial).hasSize(18).allMatch(LedgerResponses.Account::isTemplate);
-        assertThat(ledgers.listCashFlowItems(owner, ledgerId)).hasSize(3);
+        assertThat(ledgers.listCashFlowItems(owner, ledgerId)).hasSize(16);
         assertThat(ledgers.listDimensionTypes(owner, ledgerId)).hasSize(5);
 
         LedgerResponses.Account bank = initial.stream()

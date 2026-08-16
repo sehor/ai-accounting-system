@@ -47,6 +47,9 @@ class RollingBalanceProjectionIntegrationTest {
     @Autowired
     private JdbcTemplate jdbc;
 
+    /** Detailed cash flow item attached to test lines so external cash vouchers stay classified. */
+    private UUID defaultCashItem;
+
     @Test
     void asynchronouslyRollsLeafAndParentBalancesAcrossFuturePeriods() {
         UUID actorId = UUID.randomUUID();
@@ -410,7 +413,8 @@ class RollingBalanceProjectionIntegrationTest {
     }
 
     private VoucherRequests.Line line(UUID accountId, String side, String amount) {
-        return new VoucherRequests.Line(accountId, side, "CNY", new BigDecimal(amount), BigDecimal.ONE, "projection");
+        return new VoucherRequests.Line(accountId, side, "CNY", new BigDecimal(amount), BigDecimal.ONE,
+                "projection", defaultCashItem, null, null, null);
     }
 
     private VoucherRequests.Line dimensionLine(UUID accountId, String side, String currency, String amount,
@@ -446,6 +450,10 @@ class RollingBalanceProjectionIntegrationTest {
     }
 
     private UUID account(UUID ledgerId, String code) {
+        List<UUID> items = jdbc.queryForList(
+                "select id from cash_flow_item where ledger_id = ? and code = 'SME_CF_01_SALES_RECEIPTS'",
+                UUID.class, ledgerId);
+        defaultCashItem = items.isEmpty() ? null : items.getFirst();
         return jdbc.queryForObject("""
                 select id from ledger_account where ledger_id = ? and code = ?
                 """, UUID.class, ledgerId, code);

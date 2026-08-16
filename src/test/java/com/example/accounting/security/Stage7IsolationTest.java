@@ -40,9 +40,12 @@ class Stage7IsolationTest {
         UUID periodId = id("select id from accounting_period where ledger_id = ? and period_code = '2026-01'", firstLedger);
         UUID debit = id("select id from ledger_account where ledger_id = ? and code = '1001'", firstLedger);
         UUID credit = id("select id from ledger_account where ledger_id = ? and code = '3001'", firstLedger);
+        UUID cashItem = id("select id from cash_flow_item where ledger_id = ? and code = 'SME_CF_01_SALES_RECEIPTS'",
+                firstLedger);
         UUID voucherId = voucherService.create(owner, firstLedger, new VoucherRequests.Create(periodId,
                 LocalDate.of(2026, 1, 15), "GENERAL", "1", "isolated", List.of(
-                new VoucherRequests.Line(debit, "DEBIT", "CNY", BigDecimal.ONE, BigDecimal.ONE, "line"),
+                new VoucherRequests.Line(debit, "DEBIT", "CNY", BigDecimal.ONE, BigDecimal.ONE, "line",
+                        cashItem, null, null, null),
                 new VoucherRequests.Line(credit, "CREDIT", "CNY", BigDecimal.ONE, BigDecimal.ONE, "line")))).id();
 
         assertThatThrownBy(() -> ledgerService.listAccounts(other, firstLedger))

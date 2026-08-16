@@ -72,13 +72,16 @@ public class JdbcReportFormulaRepository implements ReportFormulaRepository {
     public void createSnapshotWithPublishedVersion(
             UUID ledgerId, String code, String name, String formulaKind, String canonicalJson, UUID actorId) {
         UUID snapshotId = UUID.randomUUID();
-        jdbc.update("""
+        int inserted = jdbc.update("""
                 insert into report_formula_snapshot (
                     id, ledger_id, code, name, formula_json, formula_kind, schema_version,
                     published_version, created_at, updated_at, updated_by)
                 values (?, ?, ?, ?, ?::jsonb, ?, 1, 1, now(), now(), ?)
+                on conflict (ledger_id, code) do nothing
                 """, snapshotId, ledgerId, code, name, canonicalJson, formulaKind, actorId);
-        insertPublished(snapshotId, canonicalJson, 0, 1, "STANDARD", null, actorId);
+        if (inserted == 1) {
+            insertPublished(snapshotId, canonicalJson, 0, 1, "STANDARD", null, actorId);
+        }
     }
 
     @Override

@@ -58,6 +58,9 @@ class Stage4BackendPerformanceIntegrationTest {
     @Autowired
     private JdbcTemplate jdbc;
 
+    /** Detailed cash flow item attached to test lines so external cash vouchers stay classified. */
+    private UUID defaultCashItem;
+
     @Autowired
     private BalanceProjectionRepository projection;
 
@@ -192,7 +195,7 @@ class Stage4BackendPerformanceIntegrationTest {
                 "GENERAL", "dimension-rollback", "dimension rollback", List.of(
                 new VoucherRequests.Line(receivable, "DEBIT", "CNY", BigDecimal.TEN, BigDecimal.ONE, "dimension",
                         null, null, null, List.of(new VoucherRequests.Dimension(customer.id(), customerA.id()))),
-                new VoucherRequests.Line(capital, "CREDIT", "CNY", BigDecimal.TEN, BigDecimal.ONE, "dimension"))));
+                line(capital, "CREDIT", BigDecimal.TEN, "dimension"))));
         Long enqueued = jdbc.queryForObject("""
                 select last_enqueued_event_id from balance_projection_state
                 where ledger_id = ? and period_id = ?
@@ -260,8 +263,8 @@ class Stage4BackendPerformanceIntegrationTest {
         vouchers.create(actor, ledger, new VoucherRequests.Create(period(ledger, "2026-01"),
                 LocalDate.of(2026, 1, 15), "GENERAL", "deep-page", "deep page",
                 java.util.List.of(
-                        new VoucherRequests.Line(account, "DEBIT", "CNY", BigDecimal.TEN, BigDecimal.ONE, "deep"),
-                        new VoucherRequests.Line(offsetAccount, "CREDIT", "CNY", BigDecimal.TEN, BigDecimal.ONE, "deep"))));
+                        line(account, "DEBIT", BigDecimal.TEN, "deep"),
+                        line(offsetAccount, "CREDIT", BigDecimal.TEN, "deep"))));
         var page = reports.subLedgerBook(actor, ledger, "2026-01", account, 999, 10);
         assertThat(page.data()).isEmpty();
         assertThat(page.pagination().totalItems()).isEqualTo(1);
@@ -273,6 +276,7 @@ class Stage4BackendPerformanceIntegrationTest {
     void subLedgerCheckpointIsInvalidatedByPostedVoucherLines() {
         UUID actor = UUID.randomUUID();
         UUID ledger = createLedger(actor);
+        defaultCashItem = cashItem(ledger);
         UUID target = jdbc.queryForObject("""
                 select account.id from ledger_account account where account.ledger_id = ?
                   and account.normal_balance = 'DEBIT' and not exists (select 1 from ledger_account child
@@ -287,12 +291,12 @@ class Stage4BackendPerformanceIntegrationTest {
                 """, UUID.class, ledger);
         UUID period = period(ledger, "2026-01");
         vouchers.create(actor, ledger, new VoucherRequests.Create(period, LocalDate.of(2026, 1, 10), "GENERAL", "cp-1",
-                "checkpoint", List.of(new VoucherRequests.Line(target, "DEBIT", "CNY", BigDecimal.ONE, BigDecimal.ONE, "cp"),
-                        new VoucherRequests.Line(counterpart, "CREDIT", "CNY", BigDecimal.ONE, BigDecimal.ONE, "cp"))));
+                "checkpoint", List.of(line(target, "DEBIT", BigDecimal.ONE, "cp"),
+                        line(counterpart, "CREDIT", BigDecimal.ONE, "cp"))));
         assertThat(reports.subLedgerBook(actor, ledger, "2026-01", target, 1, 50).pagination().totalItems()).isEqualTo(1);
         vouchers.create(actor, ledger, new VoucherRequests.Create(period, LocalDate.of(2026, 1, 11), "GENERAL", "cp-2",
-                "checkpoint", List.of(new VoucherRequests.Line(target, "DEBIT", "CNY", BigDecimal.ONE, BigDecimal.ONE, "cp"),
-                        new VoucherRequests.Line(counterpart, "CREDIT", "CNY", BigDecimal.ONE, BigDecimal.ONE, "cp"))));
+                "checkpoint", List.of(line(target, "DEBIT", BigDecimal.ONE, "cp"),
+                        line(counterpart, "CREDIT", BigDecimal.ONE, "cp"))));
         var rebuilt = reports.subLedgerBook(actor, ledger, "2026-01", target, 1, 50);
         assertThat(rebuilt.pagination().totalItems()).isEqualTo(2);
         assertThat(rebuilt.periodDebit()).isEqualByComparingTo("2.00");
@@ -312,8 +316,8 @@ class Stage4BackendPerformanceIntegrationTest {
         UUID counterpart = account(ledger, "3001");
         var voucher = vouchers.create(actor, ledger, new VoucherRequests.Create(
                 period, LocalDate.of(2026, 1, 12), "GENERAL", "cp-summary", "before",
-                List.of(new VoucherRequests.Line(target, "DEBIT", "CNY", BigDecimal.ONE, BigDecimal.ONE, null),
-                        new VoucherRequests.Line(counterpart, "CREDIT", "CNY", BigDecimal.ONE, BigDecimal.ONE, null))));
+                List.of(line(target, "DEBIT", BigDecimal.ONE, null),
+                        line(counterpart, "CREDIT", BigDecimal.ONE, null))));
 
         assertThat(reports.subLedgerBook(actor, ledger, "2026-01", target, 1, 50)
                 .data().getFirst().summary()).isEqualTo("before");
@@ -348,8 +352,8 @@ class Stage4BackendPerformanceIntegrationTest {
 
     private void createCheckpointVoucher(UUID actor, UUID ledger, UUID period, UUID debit, UUID credit, String number) {
         vouchers.create(actor, ledger, new VoucherRequests.Create(period, LocalDate.of(2026, 1, 12), "GENERAL", number,
-                "checkpoint", List.of(new VoucherRequests.Line(debit, "DEBIT", "CNY", BigDecimal.ONE, BigDecimal.ONE, "cp"),
-                        new VoucherRequests.Line(credit, "CREDIT", "CNY", BigDecimal.ONE, BigDecimal.ONE, "cp"))));
+                "checkpoint", List.of(line(debit, "DEBIT", BigDecimal.ONE, "cp"),
+                        line(credit, "CREDIT", BigDecimal.ONE, "cp"))));
     }
 
     @Test
@@ -361,8 +365,8 @@ class Stage4BackendPerformanceIntegrationTest {
         UUID credit = account(ledger, "3001");
         List<VoucherRequests.Line> lines = new ArrayList<>(500);
         for (int i = 0; i < 250; i++) {
-            lines.add(new VoucherRequests.Line(debit, "DEBIT", "CNY", BigDecimal.ONE, BigDecimal.ONE, "bulk"));
-            lines.add(new VoucherRequests.Line(credit, "CREDIT", "CNY", BigDecimal.ONE, BigDecimal.ONE, "bulk"));
+            lines.add(line(debit, "DEBIT", BigDecimal.ONE, "bulk"));
+            lines.add(line(credit, "CREDIT", BigDecimal.ONE, "bulk"));
         }
         long before = jdbc.queryForObject("select count(*) from voucher_line where ledger_id = ?", Long.class, ledger);
         var created = vouchers.create(actor, ledger, new VoucherRequests.Create(period,
@@ -373,8 +377,7 @@ class Stage4BackendPerformanceIntegrationTest {
                 .isEqualTo(before + 500);
 
         List<VoucherRequests.Line> invalid = new ArrayList<>(lines);
-        invalid.set(249, new VoucherRequests.Line(UUID.randomUUID(), "DEBIT", "CNY", BigDecimal.ONE,
-                BigDecimal.ONE, "invalid"));
+        invalid.set(249, line(UUID.randomUUID(), "DEBIT", BigDecimal.ONE, "invalid"));
         long vouchersBeforeFailure = jdbc.queryForObject("select count(*) from voucher where ledger_id = ?",
                 Long.class, ledger);
         assertThatThrownBy(() -> vouchers.create(actor, ledger, new VoucherRequests.Create(period,
@@ -397,8 +400,8 @@ class Stage4BackendPerformanceIntegrationTest {
             UUID debit = account(ledger, "1001"), credit = account(ledger, "3001");
             var header = vouchers.create(actor, ledger, new VoucherRequests.Create(period, LocalDate.of(2026, 1, 12),
                     "GENERAL", "legacy-" + run, "benchmark", List.of(
-                    new VoucherRequests.Line(debit, "DEBIT", "CNY", BigDecimal.ONE, BigDecimal.ONE, "seed"),
-                    new VoucherRequests.Line(credit, "CREDIT", "CNY", BigDecimal.ONE, BigDecimal.ONE, "seed"))));
+                    line(debit, "DEBIT", BigDecimal.ONE, "seed"),
+                    line(credit, "CREDIT", BigDecimal.ONE, "seed"))));
             List<VoucherRepository.LineInsert> lines = benchmarkLines(ledger, header.id(), debit, credit);
             counted.reset(); long start = System.nanoTime();
             for (VoucherRepository.LineInsert line : lines) { repository.createLine(line.lineId(), line.ledgerId(),
@@ -407,8 +410,8 @@ class Stage4BackendPerformanceIntegrationTest {
             legacyNanos.add(System.nanoTime() - start); legacyExecutes += counted.executes.get();
             var batchHeader = vouchers.create(actor, ledger, new VoucherRequests.Create(period, LocalDate.of(2026, 1, 13),
                     "GENERAL", "batch-" + run, "benchmark", List.of(
-                    new VoucherRequests.Line(debit, "DEBIT", "CNY", BigDecimal.ONE, BigDecimal.ONE, "seed"),
-                    new VoucherRequests.Line(credit, "CREDIT", "CNY", BigDecimal.ONE, BigDecimal.ONE, "seed"))));
+                    line(debit, "DEBIT", BigDecimal.ONE, "seed"),
+                    line(credit, "CREDIT", BigDecimal.ONE, "seed"))));
             counted.reset(); start = System.nanoTime(); repository.createLines(benchmarkLines(ledger, batchHeader.id(), debit, credit));
             batchNanos.add(System.nanoTime() - start); batchExecutes += counted.executes.get(); batchCalls += counted.batches.get();
         }
@@ -773,8 +776,23 @@ class Stage4BackendPerformanceIntegrationTest {
     }
 
     private UUID account(UUID ledger, String code) {
+        List<UUID> items = jdbc.queryForList(
+                "select id from cash_flow_item where ledger_id = ? and code = 'SME_CF_01_SALES_RECEIPTS'",
+                UUID.class, ledger);
+        defaultCashItem = items.isEmpty() ? null : items.getFirst();
         return jdbc.queryForObject("select id from ledger_account where ledger_id = ? and code = ?", UUID.class,
                 ledger, code);
+    }
+
+    private UUID cashItem(UUID ledger) {
+        return jdbc.queryForObject(
+                "select id from cash_flow_item where ledger_id = ? and code = 'SME_CF_01_SALES_RECEIPTS'",
+                UUID.class, ledger);
+    }
+
+    private VoucherRequests.Line line(UUID account, String side, BigDecimal amount, String summary) {
+        return new VoucherRequests.Line(account, side, "CNY", amount, BigDecimal.ONE, summary,
+                defaultCashItem, null, null, null);
     }
 
     private long percentile(List<Long> values, double percentile) {
