@@ -91,6 +91,12 @@ public class AccountManagementRepository {
         return attachDimensions(ledgerId, accounts);
     }
 
+    public List<String> listChildCodes(UUID ledgerId, UUID parentAccountId) {
+        return jdbc.queryForList(
+                "select code from ledger_account where ledger_id = ? and parent_id = ? order by code",
+                String.class, ledgerId, parentAccountId);
+    }
+
     public List<LedgerResponses.Account> listCreatedBetween(
             UUID ledgerId, OffsetDateTime startInclusive, OffsetDateTime endExclusive) {
         List<LedgerResponses.Account> accounts = jdbc.query(

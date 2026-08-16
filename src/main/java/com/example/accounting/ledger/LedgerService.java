@@ -39,8 +39,12 @@ public interface LedgerService {
 
     void deleteAccount(UUID actorId, UUID ledgerId, UUID accountId, long expectedVersion);
 
+    AccountCodeRule getAccountCodeRule(UUID actorId, UUID ledgerId);
+
     AccountCodeRule updateAccountCodeRule(
             UUID actorId, UUID ledgerId, LedgerRequests.AccountCodeRuleUpdate request);
+
+    String nextChildAccountCode(UUID actorId, UUID ledgerId, UUID parentAccountId);
 
     List<LedgerResponses.CashFlowItem> listCashFlowItems(UUID actorId, UUID ledgerId);
 

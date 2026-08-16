@@ -95,6 +95,10 @@ public final class LedgerResponses {
     public record AccountSummary(UUID id, String code, String name, String status) {
     }
 
+    @Schema(name = "NextAccountCodeResponse", requiredProperties = {"code"})
+    public record NextAccountCodeResponse(String code) {
+    }
+
     @Schema(name = "LedgerAccountSearchResult", requiredProperties = {"account", "parent", "children"})
     public record AccountSearchResult(
             Account account,

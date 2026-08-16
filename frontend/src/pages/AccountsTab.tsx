@@ -7,7 +7,6 @@ import type { components } from '../api/generated'
 
 type Account = components['schemas']['Account']
 type AccountImportPreview = components['schemas']['AccountImportPreview']
-type CashFlowItem = components['schemas']['LedgerCashFlowItem']
 type DimensionType = components['schemas']['DimensionType']
 type Period = Omit<components['schemas']['Period'], 'hasVouchers'> & { hasVouchers?: boolean }
 type AccountImportAction = 'CREATE' | 'UPDATE' | 'MAP' | 'SKIP'
@@ -38,6 +37,7 @@ export const ACCOUNT_CATEGORY_LABELS: Record<AccountCategoryTab, string> = {
 }
 type AccountForm = {
   code: string
+  childCodeSuffix?: string
   name: string
   standardAccountKey?: string
   category: string
@@ -86,11 +86,35 @@ export function AccountsTab({ ledgerId, session, accounts, dimensionTypes, perio
       label: `${key} · ${account.code} ${account.name}`,
     }))
   }, [accounts, selectedCategory])
+  const codeRuleQuery = useQuery({
+    queryKey: ['account-code-rule', ledgerId],
+    queryFn: () => apiData(openApiClient.GET('/v1/ledgers/{ledgerId}/account-code-rule', { params: { path: { ledgerId } }, headers: apiHeaders(session) })),
+    enabled: Boolean(session && ledgerId),
+  })
+  const formParent = useMemo(() => parent || (editing?.parentId
+    ? accounts.find((account) => account.id === editing.parentId) || null
+    : null), [accounts, editing?.parentId, parent])
+  const childCodeWidth = formParent && codeRuleQuery.data
+    ? formParent.level === 1 ? codeRuleQuery.data.level2Width
+      : formParent.level === 2 ? codeRuleQuery.data.level3Width
+        : formParent.level === 3 ? codeRuleQuery.data.level4Width
+          : undefined
+    : undefined
+  const nextChildCodeQuery = useQuery({
+    queryKey: ['next-child-account-code', ledgerId, parent?.id],
+    queryFn: () => apiData(openApiClient.GET('/v1/ledgers/{ledgerId}/accounts/{accountId}/next-child-code', {
+      params: { path: { ledgerId, accountId: parent!.id } },
+      headers: apiHeaders(session),
+    })),
+    enabled: Boolean(formOpen && parent && !editing),
+  })
+  const nextChildCodeFailed = nextChildCodeQuery.isError || nextChildCodeQuery.isRefetchError
   useEffect(() => {
     if (!formOpen) return
     if (editing) {
       form.setFieldsValue({
         ...editing,
+        childCodeSuffix: formParent ? editing.code.slice(formParent.code.length) : undefined,
         standardAccountKey: editing.standardAccountKey || undefined,
         defaultCashFlowItemId: editing.defaultCashFlowItemId || undefined,
         unitName: editing.unitName || undefined,
@@ -101,11 +125,25 @@ export function AccountsTab({ ledgerId, session, accounts, dimensionTypes, perio
       return
     }
     form.resetFields()
-    form.setFieldsValue(parent ? {
-      category: parent.category,
-      normalBalance: parent.normalBalance,
-    } : { category, cashFlowRequired: false, quantityEnabled: false })
-  }, [category, editing, form, formOpen, parent])
+    if (parent) {
+      form.setFieldsValue({
+        childCodeSuffix: undefined,
+        category: parent.category,
+        normalBalance: parent.normalBalance,
+        cashFlowRequired: false,
+        quantityEnabled: false,
+      })
+      return
+    }
+    form.setFieldsValue({ category, cashFlowRequired: false, quantityEnabled: false })
+  }, [category, editing, form, formOpen, formParent, parent])
+  useEffect(() => {
+    const suggestedCode = nextChildCodeQuery.data?.code
+    if (!formOpen || !parent || editing || nextChildCodeQuery.isFetching || nextChildCodeFailed || !suggestedCode ||
+        !suggestedCode.startsWith(parent.code) || form.isFieldTouched('childCodeSuffix')) return
+    form.setFieldValue('childCodeSuffix', suggestedCode.slice(parent.code.length))
+  }, [editing, form, formOpen, nextChildCodeFailed, nextChildCodeQuery.data?.code,
+    nextChildCodeQuery.isFetching, parent])
   const cashFlowItems = useQuery({
     queryKey: ['cash-flow-items', ledgerId],
     queryFn: () => apiData(openApiClient.GET('/v1/ledgers/{ledgerId}/cash-flow-items', { params: { path: { ledgerId } }, headers: apiHeaders(session) })),
@@ -122,14 +160,15 @@ export function AccountsTab({ ledgerId, session, accounts, dimensionTypes, perio
 
   const save = useMutation({
     mutationFn: (value: AccountForm) => {
-      const dimensionRequirements = (value.dimensionTypeIds || []).map((dimensionTypeId) => ({
+      const { dimensionTypeIds, requiredDimensionTypeIds, standardAccountKey,
+        childCodeSuffix, code: enteredCode, ...fields } = value
+      const dimensionRequirements = (dimensionTypeIds || []).map((dimensionTypeId) => ({
         dimensionTypeId,
-        required: (value.requiredDimensionTypeIds || []).includes(dimensionTypeId),
+        required: (requiredDimensionTypeIds || []).includes(dimensionTypeId),
       }))
-      const { dimensionTypeIds: _dimensionTypeIds, requiredDimensionTypeIds: _requiredDimensionTypeIds,
-        standardAccountKey, ...fields } = value
       const body = {
         ...fields,
+        code: formParent ? `${formParent.code}${childCodeSuffix || ''}` : enteredCode,
         parentId: editing?.parentId || parent?.id || undefined,
         dimensionRequirements,
       }
@@ -317,9 +356,29 @@ export function AccountsTab({ ledgerId, session, accounts, dimensionTypes, perio
       confirmLoading={save.isPending} destroyOnHidden>
       <Form form={form} layout="vertical" onFinish={(value) => save.mutate(value)}>
         {editing?.coreLocked && <Alert type="info" showIcon message="已有已记账凭证或已确认期初余额，仅名称和状态可修改。" />}
-        <Form.Item name="code" label="科目编码" rules={[{ required: true }, { max: 32 }]}>
+        {parent && nextChildCodeFailed && <Alert type="warning" showIcon
+          message="未能生成推荐编码，请手动填写子级编码段"
+          description={errorText(nextChildCodeQuery.error)} />}
+        {formParent ? <Form.Item label="科目编码"
+          extra={`父科目编码 ${formParent.code} 已固定，只能修改子级编码段`}>
+          <Space.Compact block>
+            <Input aria-label="父科目编码" value={formParent.code} readOnly tabIndex={-1}
+              style={{ flex: '0 0 auto', width: `${formParent.code.length + 3}ch` }} />
+            <Form.Item name="childCodeSuffix" noStyle rules={[
+              { required: true, message: '请输入子级编码段' },
+              { pattern: /^\d+$/, message: '子级编码段只能包含数字' },
+              ...(childCodeWidth ? [{ len: childCodeWidth, message: `子级编码段必须为 ${childCodeWidth} 位` }] : []),
+            ]}>
+              <Input aria-label="科目编码"
+                disabled={Boolean(editing?.coreLocked || editing?.isTemplate || (parent && nextChildCodeQuery.isFetching))}
+                maxLength={childCodeWidth || 32 - formParent.code.length}
+                inputMode="numeric"
+                placeholder={parent && nextChildCodeQuery.isFetching ? '正在生成推荐编码…' : undefined} />
+            </Form.Item>
+          </Space.Compact>
+        </Form.Item> : <Form.Item name="code" label="科目编码" rules={[{ required: true }, { max: 32 }]}>
           <Input disabled={Boolean(editing?.coreLocked || editing?.isTemplate)} />
-        </Form.Item>
+        </Form.Item>}
         <Form.Item name="name" label="科目名称" rules={[{ required: true }, { max: 200 }]}><Input /></Form.Item>
         {!editing && !parent && <Form.Item name="standardAccountKey" label="法定报表归类"
           extra="稳定归类不会随科目名称或编码修改"

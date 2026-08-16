@@ -356,6 +356,13 @@ public class DefaultLedgerService implements LedgerService {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public AccountCodeRule getAccountCodeRule(UUID actorId, UUID ledgerId) {
+        requireRole(actorId, ledgerId, VIEW_ROLES);
+        return accounts.codeRule(ledgerId);
+    }
+
+    @Override
     @Transactional
     public AccountCodeRule updateAccountCodeRule(
             UUID actorId, UUID ledgerId, LedgerRequests.AccountCodeRuleUpdate request) {
@@ -371,6 +378,27 @@ public class DefaultLedgerService implements LedgerService {
                     "The account code rule cannot change after a subaccount exists");
         }
         return rule;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public String nextChildAccountCode(UUID actorId, UUID ledgerId, UUID parentAccountId) {
+        requireRole(actorId, ledgerId, VIEW_ROLES);
+        LedgerResponses.Account parent = requireAccount(ledgerId, parentAccountId);
+        if (parent.level() >= 4) {
+            throw problem(422, "ACCOUNT_LEVEL_LIMIT_REACHED", "Account level limit reached",
+                    "A level-four account cannot have child accounts");
+        }
+        AccountCodeRule rule = accounts.codeRule(ledgerId);
+        List<String> existingSiblingCodes = accounts.listChildCodes(ledgerId, parentAccountId);
+        try {
+            return rule.nextChildCode(parent.code(), existingSiblingCodes);
+        } catch (IllegalStateException exception) {
+            throw problem(409, "ACCOUNT_CHILD_CODE_EXHAUSTED", "Child account codes exhausted",
+                    exception.getMessage());
+        } catch (IllegalArgumentException exception) {
+            throw problem(422, "ACCOUNT_INVALID", "Account code invalid", exception.getMessage());
+        }
     }
 
     @Override

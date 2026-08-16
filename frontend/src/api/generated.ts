@@ -54,7 +54,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        get: operations["getAccountCodeRule"];
         put: operations["updateAccountCodeRule"];
         post?: never;
         delete?: never;
@@ -813,6 +813,22 @@ export interface paths {
         options?: never;
         head?: never;
         patch: operations["updateAccount"];
+        trace?: never;
+    };
+    "/v1/ledgers/{ledgerId}/accounts/{accountId}/next-child-code": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["nextChildAccountCode"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/v1/me": {
@@ -2906,6 +2922,17 @@ export interface components {
             code: string;
             name: string;
             required: boolean;
+        };
+        AccountCodeRule: {
+            /** Format: int32 */
+            level2Width: number;
+            /** Format: int32 */
+            level3Width: number;
+            /** Format: int32 */
+            level4Width: number;
+        };
+        NextAccountCodeResponse: {
+            code: string;
         };
         /** @default null */
         AccountingStandardFormula: {
@@ -5583,6 +5610,51 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    getAccountCodeRule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ledgerId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["AccountCodeRule"];
+                };
+            };
+        };
+    };
+    nextChildAccountCode: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ledgerId: string;
+                accountId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["NextAccountCodeResponse"];
+                };
             };
         };
     };

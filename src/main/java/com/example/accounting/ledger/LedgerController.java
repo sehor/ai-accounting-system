@@ -118,6 +118,20 @@ public class LedgerController {
         ledgerService.deleteAccount(user(request), ledgerId, accountId, expectedVersion);
     }
 
+    @GetMapping("/{ledgerId}/accounts/{accountId}/next-child-code")
+    public LedgerResponses.NextAccountCodeResponse nextChildAccountCode(
+            HttpServletRequest request,
+            @PathVariable UUID ledgerId,
+            @PathVariable UUID accountId) {
+        String code = ledgerService.nextChildAccountCode(user(request), ledgerId, accountId);
+        return new LedgerResponses.NextAccountCodeResponse(code);
+    }
+
+    @GetMapping("/{ledgerId}/account-code-rule")
+    public AccountCodeRule getAccountCodeRule(HttpServletRequest request, @PathVariable UUID ledgerId) {
+        return ledgerService.getAccountCodeRule(user(request), ledgerId);
+    }
+
     @PutMapping("/{ledgerId}/account-code-rule")
     public AccountCodeRule updateAccountCodeRule(HttpServletRequest request, @PathVariable UUID ledgerId,
                                                   @Valid @RequestBody LedgerRequests.AccountCodeRuleUpdate body) {
