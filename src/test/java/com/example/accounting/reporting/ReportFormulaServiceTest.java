@@ -87,6 +87,11 @@ class ReportFormulaServiceTest {
                 userId, ledgerId, "balance-sheet", "2026-01");
         assertThat(report.formulaVersion()).isEqualTo(2);
         assertThat(report.groups().get(0).lines().get(1).name()).isEqualTo("货币资金（改）");
+        assertThat(reporting.balanceSheet(userId, ledgerId, "2026-01").lines()).isNotEmpty();
+        assertThat(jdbc.queryForObject("""
+                select jsonb_exists(formula_json, 'debitCategories')
+                from report_formula_snapshot where ledger_id = ? and code = 'BALANCE_SHEET'
+                """, Boolean.class, ledgerId)).isTrue();
 
         ReportFormulaResponses.VersionPage page = service.versions(userId, ledgerId, "BALANCE_SHEET", 1, 20);
         assertThat(page.totalItems()).isEqualTo(2);
@@ -111,6 +116,41 @@ class ReportFormulaServiceTest {
                 new ReportFormulaRequests.PublishRequest(1, 1L, false)))
                 .isInstanceOfSatisfying(ApiProblemException.class,
                         error -> assertThat(error.code()).isEqualTo("REPORT_FORMULA_PREVIEW_REQUIRED"));
+    }
+
+    @Test
+    void publishesPreviewedDraftVersionsBeyondTheLongBoxCache() {
+        UUID userId = UUID.randomUUID();
+        UUID ledgerId = createLedger(userId, "SME", "v1");
+        service.createDraft(userId, ledgerId, "BALANCE_SHEET");
+        jdbc.update("""
+                update report_formula_revision revision
+                set draft_version = 128, last_previewed_draft_version = 128
+                from report_formula_snapshot snapshot
+                where snapshot.id = revision.formula_id and snapshot.ledger_id = ?
+                  and snapshot.code = 'BALANCE_SHEET' and revision.state = 'DRAFT'
+                """, ledgerId);
+
+        ReportFormulaResponses.PublishResult result = service.publish(
+                userId, ledgerId, "BALANCE_SHEET",
+                new ReportFormulaRequests.PublishRequest(1, 128L, false));
+
+        assertThat(result.publishedVersion()).isEqualTo(2);
+    }
+
+    @Test
+    void incomeFormulaPreviewRequiresAnOperatingProjection() {
+        UUID userId = UUID.randomUUID();
+        UUID ledgerId = createLedger(userId, "CAS", "2006-18");
+        postVoucher(userId, ledgerId, "2026-01", "1", List.of(
+                line(ledgerId, "1001", "DEBIT", "70"), line(ledgerId, "4001", "CREDIT", "70")));
+        service.createDraft(userId, ledgerId, "INCOME_STATEMENT");
+
+        assertThatThrownBy(() -> service.preview(userId, ledgerId, "INCOME_STATEMENT",
+                new ReportFormulaRequests.PreviewRequest(1L, null, "2026-01", "2026-01")))
+                .isInstanceOfSatisfying(ApiProblemException.class,
+                        error -> assertThat(error.code())
+                                .isEqualTo("REPORT_FORMULA_PROJECTION_NOT_READY"));
     }
 
     @Test

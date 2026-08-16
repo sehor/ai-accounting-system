@@ -24,11 +24,13 @@ import com.example.accounting.reporting.internal.port.ReportingRepository;
 import com.example.accounting.shared.web.ApiProblemException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
@@ -46,6 +48,8 @@ public class DefaultReportFormulaService implements ReportFormulaService {
     private static final Set<LedgerRole> WRITE_ROLES = Set.of(LedgerRole.OWNER, LedgerRole.EDITOR);
     private static final Set<String> CODES = Set.of(
             ReportFormulaDefinition.REPORT_BALANCE_SHEET, ReportFormulaDefinition.REPORT_INCOME_STATEMENT);
+    private static final List<String> LEGACY_CATEGORY_FIELDS = List.of(
+            "debitCategories", "creditCategories", "revenueCategories", "expenseCategories");
 
     private final LedgerAccessService ledgerAccess;
     private final ReportFormulaRepository formulas;
@@ -121,7 +125,8 @@ public class DefaultReportFormulaService implements ReportFormulaService {
             throw problem(422, "REPORT_FORMULA_INVALID", "Report formula is invalid",
                     "The edited formula does not pass validation: " + issues);
         }
-        String mergedJson = parser.write(merged);
+        String mergedJson = writeDefinition(merged, ledgerId, code,
+                draft.definitionJson(), snapshot.formulaJson());
         if (!formulas.updateDraft(draft.id(), mergedJson, draft.draftVersion(), actorId)) {
             throw versionConflict();
         }
@@ -189,7 +194,13 @@ public class DefaultReportFormulaService implements ReportFormulaService {
         List<ReportFormulaResponses.Warning> warnings = new ArrayList<>();
         Object statement;
         if (ReportFormulaDefinition.KIND_ACCOUNT_DETAIL.equals(definition.kind())) {
-            List<FormulaAccountAmount> source = reports.formulaAccountAmounts(ledgerId, range, true);
+            boolean operatingActivity = ReportFormulaDefinition.REPORT_INCOME_STATEMENT
+                    .equals(definition.reportType());
+            if (operatingActivity) {
+                requireFormulaProjection(ledgerId, range);
+            }
+            List<FormulaAccountAmount> source = reports.formulaAccountAmounts(
+                    ledgerId, range, operatingActivity);
             ReportResponses.Statement result = evaluator.evaluateAccountDetail(ledgerId, definition, source);
             statement = objectMapper.convertValue(result, Object.class);
         } else {
@@ -202,7 +213,10 @@ public class DefaultReportFormulaService implements ReportFormulaService {
             List<FormulaAccountAmount> primary;
             List<FormulaAccountAmount> comparative;
             if (income) {
-                primary = reports.formulaAccountAmounts(ledgerId, new PeriodRange(firstPeriod, range.periodTo()), true);
+                PeriodRange yearToDate = new PeriodRange(firstPeriod, range.periodTo());
+                requireFormulaProjection(ledgerId, yearToDate);
+                requireFormulaProjection(ledgerId, range);
+                primary = reports.formulaAccountAmounts(ledgerId, yearToDate, true);
                 comparative = reports.formulaAccountAmounts(ledgerId, range, true);
             } else {
                 primary = reports.formulaAccountAmounts(ledgerId, range, false);
@@ -239,11 +253,10 @@ public class DefaultReportFormulaService implements ReportFormulaService {
         ReportFormulaRepository.Revision draft = formulas.lockDraft(ledgerId, code)
                 .orElseThrow(() -> problem(404, "REPORT_FORMULA_DRAFT_NOT_FOUND", "Draft not found",
                         "There is no draft to publish"));
-        if (draft.draftVersion() != request.expectedDraftVersion()) {
+        if (!Objects.equals(draft.draftVersion(), request.expectedDraftVersion())) {
             throw versionConflict();
         }
-        if (draft.lastPreviewedDraftVersion() == null
-                || draft.lastPreviewedDraftVersion() != draft.draftVersion()) {
+        if (!Objects.equals(draft.lastPreviewedDraftVersion(), draft.draftVersion())) {
             throw problem(409, "REPORT_FORMULA_PREVIEW_REQUIRED", "Preview required",
                     "Preview the draft before publishing it");
         }
@@ -253,15 +266,17 @@ public class DefaultReportFormulaService implements ReportFormulaService {
         }
         ReportFormulaDefinition definition = parser.parse(draft.definitionJson());
         validator.requireValid(definition, ledgerId);
+        String publishedJson = writeDefinition(definition, ledgerId, code,
+                draft.definitionJson(), snapshot.formulaJson());
         int newVersion = snapshot.publishedVersion() + 1;
-        UUID revisionId = formulas.insertPublished(snapshot.id(), draft.definitionJson(),
+        UUID revisionId = formulas.insertPublished(snapshot.id(), publishedJson,
                 snapshot.publishedVersion(), newVersion, "USER", null, actorId);
         formulas.replaceAccountReferences(revisionId, ledgerId, concreteAccountIds(definition));
-        formulas.publishSnapshot(snapshot.id(), definition.kind(), draft.definitionJson(),
+        formulas.publishSnapshot(snapshot.id(), definition.kind(), publishedJson,
                 newVersion, actorId);
         formulas.deleteDraft(draft.id());
         formulas.recordAudit(ledgerId, snapshot.id(), "PUBLISH", actorId,
-                snapshot.formulaJson(), draft.definitionJson());
+                snapshot.formulaJson(), publishedJson);
         return new ReportFormulaResponses.PublishResult(code, newVersion);
     }
 
@@ -319,14 +334,16 @@ public class DefaultReportFormulaService implements ReportFormulaService {
                         "The ledger has no published version " + version + " of " + code));
         ReportFormulaDefinition definition = parser.parse(historical.definitionJson());
         validator.requireValid(definition, ledgerId);
+        String rollbackJson = writeDefinition(definition, ledgerId, code,
+                historical.definitionJson(), snapshot.formulaJson());
         int newVersion = snapshot.publishedVersion() + 1;
-        UUID revisionId = formulas.insertPublished(snapshot.id(), historical.definitionJson(),
+        UUID revisionId = formulas.insertPublished(snapshot.id(), rollbackJson,
                 snapshot.publishedVersion(), newVersion, "ROLLBACK", version, actorId);
         formulas.replaceAccountReferences(revisionId, ledgerId, concreteAccountIds(definition));
-        formulas.publishSnapshot(snapshot.id(), definition.kind(), historical.definitionJson(),
+        formulas.publishSnapshot(snapshot.id(), definition.kind(), rollbackJson,
                 newVersion, actorId);
         formulas.recordAudit(ledgerId, snapshot.id(), "ROLLBACK", actorId,
-                snapshot.formulaJson(), historical.definitionJson());
+                snapshot.formulaJson(), rollbackJson);
         return new ReportFormulaResponses.RollbackResult(code, newVersion);
     }
 
@@ -339,6 +356,10 @@ public class DefaultReportFormulaService implements ReportFormulaService {
             if (request.lines() == null || request.lines().isEmpty() || request.rules() != null) {
                 throw problem(422, "REPORT_FORMULA_INVALID", "Report formula is invalid",
                         "SME edits accept line keys, names and expressions only");
+            }
+            if (request.lines().stream().anyMatch(Objects::isNull)) {
+                throw problem(422, "REPORT_FORMULA_INVALID", "Report formula is invalid",
+                        "SME line edits must not contain null entries");
             }
             Map<String, ReportFormulaRequests.LineEdit> edits = new LinkedHashMap<>();
             request.lines().forEach(edit -> edits.put(edit.lineKey(), edit));
@@ -368,6 +389,10 @@ public class DefaultReportFormulaService implements ReportFormulaService {
         if (request.rules() == null || request.rules().isEmpty() || request.lines() != null) {
             throw problem(422, "REPORT_FORMULA_INVALID", "Report formula is invalid",
                     "CAS edits accept detail rules only");
+        }
+        if (request.rules().stream().anyMatch(Objects::isNull)) {
+            throw problem(422, "REPORT_FORMULA_INVALID", "Report formula is invalid",
+                    "CAS detail rules must not contain null entries");
         }
         List<DetailRule> rules = request.rules().stream()
                 .map(rule -> new DetailRule(rule.key(), rule.side(),
@@ -421,6 +446,34 @@ public class DefaultReportFormulaService implements ReportFormulaService {
                     "The selected periods do not exist in the ledger");
         }
         return range;
+    }
+
+    private void requireFormulaProjection(UUID ledgerId, PeriodRange range) {
+        if (!reports.statutoryProjectionReady(ledgerId, range)) {
+            throw problem(409, "REPORT_FORMULA_PROJECTION_NOT_READY", "Report projection is not ready",
+                    "The selected income-statement periods are still being projected; retry shortly");
+        }
+    }
+
+    private String writeDefinition(ReportFormulaDefinition definition, UUID ledgerId, String code,
+                                   String... compatibilitySources) {
+        ObjectNode target = (ObjectNode) parser.readTree(parser.write(definition));
+        if (!ReportFormulaDefinition.KIND_FIXED_LINES.equals(definition.kind())) {
+            return target.toString();
+        }
+        List<String> sources = new ArrayList<>(List.of(compatibilitySources));
+        formulas.findPublishedVersion(ledgerId, code, 1)
+                .map(ReportFormulaRepository.Revision::definitionJson)
+                .ifPresent(sources::add);
+        for (String sourceJson : sources) {
+            JsonNode source = parser.readTree(sourceJson);
+            for (String field : LEGACY_CATEGORY_FIELDS) {
+                if (!target.has(field) && source.path(field).isArray()) {
+                    target.set(field, source.path(field));
+                }
+            }
+        }
+        return target.toString();
     }
 
     private Set<UUID> concreteAccountIds(ReportFormulaDefinition definition) {

@@ -39,6 +39,9 @@ public interface ReportingRepository {
     /** Leaf account ids carrying any of the given standard account keys. */
     Set<UUID> leafAccountsByStandardKeys(UUID ledgerId, Collection<String> standardAccountKeys);
 
+    /** Leaf account ids carrying any of the given account categories. */
+    Set<UUID> leafAccountsByCategories(UUID ledgerId, Collection<String> categories);
+
     /**
      * For each requested account id, all of its leaf descendants (the account
      * itself when it is already a leaf). One parameterized recursive query.

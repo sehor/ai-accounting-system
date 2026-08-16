@@ -213,7 +213,7 @@ export function ReportFormulaSettingsTab() {
     setDirty(true)
   }
 
-  const canPreview = Boolean(data?.draft) && !dirty && draftVersion != null && previewDraft.isIdle
+  const canPreview = Boolean(data?.draft) && !dirty && draftVersion != null && !previewDraft.isPending
   const previewedCurrent = previewedVersion != null && previewedVersion === draftVersion
   const canPublish = Boolean(data?.draft) && !dirty && previewedCurrent && !publishDraft.isPending
     && (acknowledged || !previewHasWarnings)

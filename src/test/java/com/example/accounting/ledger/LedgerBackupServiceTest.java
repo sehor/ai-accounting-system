@@ -240,6 +240,12 @@ class LedgerBackupServiceTest {
         LedgerResponses.Ledger restored = backups.restore(
                 owner, null, archive.length, new ByteArrayInputStream(archive));
 
+        assertThat(jdbc.queryForObject("""
+                select count(*) from report_formula_snapshot
+                where ledger_id = ? and schema_version = 1 and formula_kind <> 'LEGACY'
+                """, Integer.class, restored.id())).isEqualTo(2);
+        assertThat(count("report_formula_revision", restored.id())).isEqualTo(2);
+
         LedgerResponses.DimensionType restoredType = ledgers.listDimensionTypes(owner.id(), restored.id()).stream()
                 .filter(type -> type.code().equals("CUSTOMER")).findFirst().orElseThrow();
         LedgerResponses.DimensionValue restoredValue = ledgers

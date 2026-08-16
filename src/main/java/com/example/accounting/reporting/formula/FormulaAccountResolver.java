@@ -2,6 +2,7 @@ package com.example.accounting.reporting.formula;
 
 import com.example.accounting.ledger.formula.ReportFormulaDefinition;
 import com.example.accounting.ledger.formula.ReportFormulaDefinition.AccountReference;
+import com.example.accounting.ledger.formula.ReportFormulaDefinition.DetailRule;
 import com.example.accounting.reporting.internal.port.ReportingRepository;
 import java.util.HashSet;
 import java.util.List;
@@ -32,12 +33,23 @@ public class FormulaAccountResolver {
             }
             if (ReportFormulaDefinition.REF_STANDARD_ACCOUNT_KEY.equals(reference.type())) {
                 standardKeys.add(reference.value());
-            } else {
-                accountIds.add(UUID.fromString(reference.value()));
+            } else if (ReportFormulaDefinition.REF_ACCOUNT_ID.equals(reference.type())) {
+                try {
+                    accountIds.add(UUID.fromString(reference.value()));
+                } catch (IllegalArgumentException ignored) {
+                    // The validator reports malformed UUIDs; expansion stays total for issue collection.
+                }
             }
         }
         Set<UUID> result = new HashSet<>(reports.leafAccountsByStandardKeys(ledgerId, standardKeys));
         reports.leafDescendants(ledgerId, accountIds).values().forEach(result::addAll);
+        return result;
+    }
+
+    /** Expands both category matches and explicit references using evaluator semantics. */
+    public Set<UUID> expandRuleToLeafIds(UUID ledgerId, DetailRule rule) {
+        Set<UUID> result = new HashSet<>(reports.leafAccountsByCategories(ledgerId, rule.categories()));
+        result.addAll(expandToLeafIds(ledgerId, rule.accounts()));
         return result;
     }
 }

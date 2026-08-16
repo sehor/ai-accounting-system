@@ -34,8 +34,10 @@ public class StandardFormulaConverter {
             "debitCategories", "creditCategories", "revenueCategories", "expenseCategories");
 
     private static final List<FormulaCheck> BALANCE_CHECKS = List.of(
-            new FormulaCheck("ASSET_EQUATION", "期末资产总计=负债和所有者权益总计", "bs-30", "bs-53"),
-            new FormulaCheck("OPENING_EQUATION", "年初资产总计=负债和所有者权益总计", "bs-30", "bs-53"));
+            new FormulaCheck("ASSET_EQUATION", "期末资产总计=负债和所有者权益总计",
+                    "bs-30", "bs-53", ReportFormulaDefinition.CheckColumn.PRIMARY),
+            new FormulaCheck("OPENING_EQUATION", "年初资产总计=负债和所有者权益总计",
+                    "bs-30", "bs-53", ReportFormulaDefinition.CheckColumn.COMPARATIVE));
 
     private final FormulaParser parser;
 

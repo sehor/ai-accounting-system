@@ -1,5 +1,6 @@
 package com.example.accounting.reporting.formula;
 
+import com.example.accounting.ledger.AccountCategory;
 import com.example.accounting.ledger.formula.ReportFormulaDefinition;
 import com.example.accounting.ledger.formula.ReportFormulaDefinition.AccountAmountExpression;
 import com.example.accounting.ledger.formula.ReportFormulaDefinition.AccountReference;
@@ -16,6 +17,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import org.springframework.stereotype.Component;
@@ -36,6 +38,8 @@ public class ReportFormulaValidator {
             ReportFormulaDefinition.OP_ACCOUNT_BALANCE, ReportFormulaDefinition.OP_ACCOUNT_ACTIVITY);
     private static final Set<String> SIDES = Set.of(
             ReportFormulaDefinition.SIDE_DEBIT, ReportFormulaDefinition.SIDE_CREDIT);
+    private static final Set<String> REFERENCE_TYPES = Set.of(
+            ReportFormulaDefinition.REF_STANDARD_ACCOUNT_KEY, ReportFormulaDefinition.REF_ACCOUNT_ID);
 
     private final ReportingRepository reports;
     private final FormulaAccountResolver resolver;
@@ -153,6 +157,29 @@ public class ReportFormulaValidator {
                                     "Factor must be +1 or -1"));
                         }
                     }
+                }
+            }
+        }
+        Set<String> ruleKeys = new HashSet<>();
+        for (DetailRule rule : definition.rules()) {
+            if (rule.key() == null || rule.key().isBlank()) {
+                issues.add(new FormulaIssue("RULE_KEY_INVALID", "rules", "Every detail rule needs a key"));
+            } else if (!ruleKeys.add(rule.key())) {
+                issues.add(new FormulaIssue("RULE_KEY_DUPLICATE", path(rule.key(), "key"),
+                        "Duplicate detail rule key " + rule.key()));
+            }
+            if (!SIDES.contains(rule.side())) {
+                issues.add(new FormulaIssue("SIDE_INVALID", path(rule.key(), "side"),
+                        "Unsupported side " + rule.side()));
+            }
+            if (rule.categories().isEmpty() && rule.accounts().isEmpty()) {
+                issues.add(new FormulaIssue("RULE_EMPTY", path(rule.key(), "matches"),
+                        "A detail rule needs at least one category or account"));
+            }
+            for (String category : rule.categories()) {
+                if (!AccountCategory.isValid(category)) {
+                    issues.add(new FormulaIssue("CATEGORY_INVALID", path(rule.key(), "categories"),
+                            "Unknown account category " + category));
                 }
             }
         }
@@ -284,7 +311,7 @@ public class ReportFormulaValidator {
             for (FormulaLine line : group.lines()) {
                 if (line.expression() instanceof AccountAmountExpression accountAmount) {
                     for (AccountReference reference : accountAmount.accounts()) {
-                        validateReferenceOwnership(definition, ledgerId, reference,
+                        validateReferenceOwnership(ledgerId, reference,
                                 path(line.key(), "accounts"), issues);
                     }
                 }
@@ -292,20 +319,26 @@ public class ReportFormulaValidator {
         }
         for (DetailRule rule : definition.rules()) {
             for (AccountReference reference : rule.accounts()) {
-                validateReferenceOwnership(definition, ledgerId, reference,
+                validateReferenceOwnership(ledgerId, reference,
                         path(rule.key(), "accounts"), issues);
             }
         }
     }
 
-    private void validateReferenceOwnership(ReportFormulaDefinition definition, UUID ledgerId,
-                                            AccountReference reference, String path, List<FormulaIssue> issues) {
+    private void validateReferenceOwnership(UUID ledgerId, AccountReference reference,
+                                            String path, List<FormulaIssue> issues) {
         if (reference == null || reference.value() == null || reference.value().isBlank()) {
             issues.add(new FormulaIssue("REFERENCE_INVALID", path, "Account references are required"));
             return;
         }
+        if (!REFERENCE_TYPES.contains(reference.type())) {
+            issues.add(new FormulaIssue("REFERENCE_INVALID", path,
+                    "Unsupported account reference type " + reference.type()));
+            return;
+        }
         if (ReportFormulaDefinition.REF_STANDARD_ACCOUNT_KEY.equals(reference.type())) {
-            return; // standard keys are validated against the ledger at evaluation/expansion time
+            // A standard key may legitimately be absent from a ledger. Evaluation treats it as zero.
+            return;
         }
         UUID accountId;
         try {
@@ -362,29 +395,22 @@ public class ReportFormulaValidator {
             return;
         }
         List<DetailRule> rules = definition.rules();
+        List<Set<UUID>> matchedLeaves = rules.stream()
+                .map(rule -> resolver.expandRuleToLeafIds(ledgerId, rule))
+                .toList();
         for (int left = 0; left < rules.size(); left++) {
             for (int right = left + 1; right < rules.size(); right++) {
                 DetailRule a = rules.get(left);
                 DetailRule b = rules.get(right);
-                if (a.side().equals(b.side())) {
+                if (Objects.equals(a.side(), b.side())) {
                     continue;
                 }
-                Set<String> sharedCategories = new HashSet<>(a.categories());
-                sharedCategories.retainAll(b.categories());
-                if (!sharedCategories.isEmpty()) {
-                    issues.add(new FormulaIssue("SIDE_CONFLICT", path(a.key(), "categories"),
-                            "Rules " + a.key() + " and " + b.key() + " share categories "
-                                    + sharedCategories + " with conflicting sides"));
-                    continue;
-                }
-                Set<UUID> expandedA = resolver.expandToLeafIds(ledgerId, a.accounts());
-                Set<UUID> expandedB = resolver.expandToLeafIds(ledgerId, b.accounts());
-                Set<UUID> shared = new HashSet<>(expandedA);
-                shared.retainAll(expandedB);
+                Set<UUID> shared = new HashSet<>(matchedLeaves.get(left));
+                shared.retainAll(matchedLeaves.get(right));
                 if (!shared.isEmpty()) {
-                    issues.add(new FormulaIssue("SIDE_CONFLICT", path(a.key(), "accounts"),
-                            "Rules " + a.key() + " and " + b.key() + " reference the same accounts "
-                                    + "with conflicting sides"));
+                    issues.add(new FormulaIssue("SIDE_CONFLICT", path(a.key(), "matches"),
+                            "Rules " + a.key() + " and " + b.key()
+                                    + " match the same accounts with conflicting sides"));
                 }
             }
         }

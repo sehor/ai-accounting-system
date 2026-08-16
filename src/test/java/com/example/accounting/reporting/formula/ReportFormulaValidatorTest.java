@@ -159,6 +159,34 @@ class ReportFormulaValidatorTest {
     }
 
     @Test
+    void rejectsCasCategoryAccountSideConflictsAndInvalidSides() {
+        UUID ledgerId = createLedger("CAS", "2006-18");
+        ReportFormulaDefinition definition = casDefinition(ledgerId, "BALANCE_SHEET");
+        UUID cash = accountId(ledgerId, "1001");
+        List<DetailRule> conflictingRules = List.of(
+                new DetailRule("CATEGORY", "DEBIT", List.of("CURRENT_ASSET"), List.of()),
+                new DetailRule("ACCOUNT", "CREDIT", List.of(), List.of(
+                        new AccountReference("ACCOUNT_ID", cash.toString()))));
+        ReportFormulaDefinition conflicted = new ReportFormulaDefinition(
+                definition.schemaVersion(), definition.kind(), definition.reportType(),
+                definition.templateCode(), definition.columnPolicy(), definition.groups(),
+                conflictingRules, definition.checks());
+
+        assertThat(validator.validate(conflicted, ledgerId))
+                .extracting(ReportFormulaValidator.FormulaIssue::code)
+                .contains("SIDE_CONFLICT");
+
+        ReportFormulaDefinition invalidSide = new ReportFormulaDefinition(
+                definition.schemaVersion(), definition.kind(), definition.reportType(),
+                definition.templateCode(), definition.columnPolicy(), definition.groups(),
+                List.of(new DetailRule("INVALID", "CREDTI", List.of("CURRENT_ASSET"), List.of())),
+                definition.checks());
+        assertThat(validator.validate(invalidSide, ledgerId))
+                .extracting(ReportFormulaValidator.FormulaIssue::code)
+                .contains("SIDE_INVALID");
+    }
+
+    @Test
     void rejectsLockedStructureChangesAgainstBase() {
         UUID ledgerId = createLedger("SME", "2011-17");
         ReportFormulaDefinition base = smeDefinition(ledgerId, "BALANCE_SHEET");

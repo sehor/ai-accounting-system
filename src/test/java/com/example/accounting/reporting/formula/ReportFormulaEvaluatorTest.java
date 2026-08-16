@@ -7,6 +7,7 @@ import com.example.accounting.ledger.formula.ReportFormulaDefinition.AccountAmou
 import com.example.accounting.ledger.formula.ReportFormulaDefinition.AccountReference;
 import com.example.accounting.ledger.formula.ReportFormulaDefinition.AmountBasis;
 import com.example.accounting.ledger.formula.ReportFormulaDefinition.ColumnPolicy;
+import com.example.accounting.ledger.formula.ReportFormulaDefinition.CheckColumn;
 import com.example.accounting.ledger.formula.ReportFormulaDefinition.DetailRule;
 import com.example.accounting.ledger.formula.ReportFormulaDefinition.FormulaCheck;
 import com.example.accounting.ledger.formula.ReportFormulaDefinition.FormulaGroup;
@@ -47,8 +48,11 @@ class ReportFormulaEvaluatorTest {
                         new FormulaLine("bs-2", 2, 0, "TOTAL", "资产合计",
                                 new LinearCombinationExpression(List.of(
                                         new LineComponent("bs-1", 1))))))),
-                List.of(), List.of(new FormulaCheck("ASSET_EQUATION", "资产平衡",
-                        "bs-2", "bs-2")));
+                List.of(), List.of(
+                        new FormulaCheck("ASSET_EQUATION", "资产平衡",
+                                "bs-2", "bs-2", CheckColumn.PRIMARY),
+                        new FormulaCheck("OPENING_EQUATION", "年初差额",
+                                "bs-2", "missing", CheckColumn.COMPARATIVE)));
         List<FormulaAccountAmount> primary = List.of(
                 amount(cashLeaf, "1001", "库存现金", "ASSET.CASH", "CURRENT_ASSET",
                         "10.00", "2.00", "10.00"),
@@ -70,10 +74,15 @@ class ReportFormulaEvaluatorTest {
         assertThat(rows.get(0).comparativeAmount()).isEqualByComparingTo("5.00");
         assertThat(rows.get(1).primaryAmount()).isEqualByComparingTo("10.00");
         assertThat(rows.get(1).comparativeAmount()).isEqualByComparingTo("5.00");
-        assertThat(statement.checks()).singleElement().satisfies(check -> {
+        assertThat(statement.checks()).first().satisfies(check -> {
             assertThat(check.key()).isEqualTo("ASSET_EQUATION");
             assertThat(check.passed()).isTrue();
             assertThat(check.difference()).isEqualByComparingTo("0.00");
+        });
+        assertThat(statement.checks()).element(1).satisfies(check -> {
+            assertThat(check.key()).isEqualTo("OPENING_EQUATION");
+            assertThat(check.passed()).isFalse();
+            assertThat(check.difference()).isEqualByComparingTo("5.00");
         });
     }
 

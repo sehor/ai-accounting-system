@@ -160,10 +160,10 @@ public class JdbcReportingRepository implements ReportingRepository {
     public List<com.example.accounting.reporting.formula.FormulaAccountAmount> formulaAccountAmounts(
             UUID ledgerId, PeriodRange range, boolean operatingActivity) {
         List<ReportResponses.TrialBalanceLine> leafAmounts;
-        if (useProjection(ledgerId, range)) {
-            leafAmounts = operatingActivity
-                    ? projection.operatingTrialBalance(ledgerId, range, false)
-                    : projection.trialBalance(ledgerId, range, false);
+        if (operatingActivity) {
+            leafAmounts = incomeStatementTrialBalance(ledgerId, range, false);
+        } else if (useProjection(ledgerId, range)) {
+            leafAmounts = projection.trialBalance(ledgerId, range, false);
         } else {
             markFallback(ledgerId, range);
             leafAmounts = readTrialBalance(ledgerId, range, false);
@@ -188,6 +188,21 @@ public class JdbcReportingRepository implements ReportingRepository {
                       select 1 from ledger_account child
                       where child.ledger_id = account.ledger_id and child.parent_id = account.id)
                 """, UUID.class, ledgerId, standardAccountKeys.toArray(String[]::new)));
+    }
+
+    @Override
+    public Set<UUID> leafAccountsByCategories(UUID ledgerId, Collection<String> categories) {
+        if (categories.isEmpty()) {
+            return Set.of();
+        }
+        return Set.copyOf(jdbc.queryForList("""
+                select account.id from ledger_account account
+                where account.ledger_id = ?
+                  and account.category = any(?)
+                  and not exists (
+                      select 1 from ledger_account child
+                      where child.ledger_id = account.ledger_id and child.parent_id = account.id)
+                """, UUID.class, ledgerId, categories.toArray(String[]::new)));
     }
 
     @Override
@@ -536,10 +551,17 @@ public class JdbcReportingRepository implements ReportingRepository {
                                from jsonb_array_elements(formula_json -> 'rules') rule
                                cross join jsonb_array_elements(rule -> 'categories') elem
                                where rule ->> 'side' = ?)
-                         else formula_json -> cast(? as text) end)
-                from report_formula_snapshot
-                where ledger_id = ? and code = ?
-                """, String.class, side, field, ledgerId, formulaCode));
+                         else coalesce(
+                             snapshot.formula_json -> cast(? as text),
+                             (select revision.definition_json -> cast(? as text)
+                              from report_formula_revision revision
+                              where revision.formula_id = snapshot.id
+                                and revision.state = 'PUBLISHED'
+                                and revision.published_version = 1
+                              limit 1)) end)
+                from report_formula_snapshot snapshot
+                where snapshot.ledger_id = ? and snapshot.code = ?
+                """, String.class, side, field, field, ledgerId, formulaCode));
     }
 
     @Override

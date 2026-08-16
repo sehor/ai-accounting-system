@@ -94,7 +94,24 @@ public record ReportFormulaDefinition(
         }
     }
 
-    public record FormulaCheck(String code, String name, String leftLineKey, String rightLineKey) {
+    public record FormulaCheck(
+            String code, String name, String leftLineKey, String rightLineKey, CheckColumn column) {
+
+        public FormulaCheck {
+            if (column == null) {
+                column = "OPENING_EQUATION".equals(code) ? CheckColumn.COMPARATIVE : CheckColumn.PRIMARY;
+            }
+        }
+
+        /** Compatibility constructor for schema-1 JSON and callers created before check columns were explicit. */
+        public FormulaCheck(String code, String name, String leftLineKey, String rightLineKey) {
+            this(code, name, leftLineKey, rightLineKey, null);
+        }
+    }
+
+    public enum CheckColumn {
+        PRIMARY,
+        COMPARATIVE
     }
 
     /** Amount basis of each column, resolved from the definition, never by template name. */

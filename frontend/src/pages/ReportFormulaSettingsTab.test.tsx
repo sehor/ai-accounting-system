@@ -163,6 +163,13 @@ describe('ReportFormulaSettingsTab', () => {
     await waitFor(() => expect(screen.getByText('试算通过')).toBeInTheDocument())
     await waitFor(() => expect((screen.getByRole('button', { name: /^发\s*布$/ }) as HTMLButtonElement).disabled).toBe(false))
 
+    fireEvent.change(nameInput, { target: { value: '货币资金（再次修改）' } })
+    fireEvent.click(screen.getByRole('button', { name: '保存草稿' }))
+    await waitFor(() => expect(backend.getDraft()?.version).toBe(3))
+    await waitFor(() => expect((screen.getByRole('button', { name: /^试\s*算$/ }) as HTMLButtonElement).disabled).toBe(false))
+    fireEvent.click(screen.getByRole('button', { name: /^试\s*算$/ }))
+    await waitFor(() => expect(backend.getDraft()?.lastPreviewedDraftVersion).toBe(3))
+
     fireEvent.click(screen.getByRole('button', { name: /^发\s*布$/ }))
     await waitFor(() => expect(backend.getDraft()).toBeNull())
     await waitFor(() => expect(screen.getByText('当前发布版本 v2')).toBeInTheDocument())

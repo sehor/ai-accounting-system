@@ -1,6 +1,8 @@
 package com.example.accounting.reporting;
 
+import com.example.accounting.ledger.formula.ReportFormulaDefinition.AccountReference;
 import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
@@ -15,8 +17,8 @@ public final class ReportFormulaRequests {
     @Schema(name = "ReportFormulaDraftUpdate", requiredProperties = {"expectedDraftVersion"})
     public record DraftUpdate(
             @NotNull Long expectedDraftVersion,
-            List<LineEdit> lines,
-            List<RuleEdit> rules) {
+            @Valid List<LineEdit> lines,
+            @Valid List<RuleEdit> rules) {
     }
 
     @Schema(name = "ReportFormulaLineEdit", requiredProperties = {"lineKey", "name", "expression"})
@@ -30,8 +32,8 @@ public final class ReportFormulaRequests {
     public record RuleEdit(
             @NotBlank String key,
             @NotBlank String side,
-            List<String> categories,
-            List<com.example.accounting.ledger.formula.ReportFormulaDefinition.AccountReference> accounts) {
+            List<@NotBlank String> categories,
+            List<@NotNull AccountReference> accounts) {
     }
 
     @Schema(name = "ReportFormulaDraftReset", requiredProperties = {"expectedDraftVersion"})

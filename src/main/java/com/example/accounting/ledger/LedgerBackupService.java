@@ -2,6 +2,7 @@ package com.example.accounting.ledger;
 
 import com.example.accounting.identity.CurrentUserResolver;
 import com.example.accounting.identity.IdentityService;
+import com.example.accounting.ledger.internal.application.ReportFormulaMigrationService;
 import com.example.accounting.ledger.internal.port.LedgerBackupRepository;
 import com.example.accounting.shared.web.ApiProblemException;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -77,6 +78,7 @@ public class LedgerBackupService {
     private final ObjectMapper objectMapper;
     private final Path storageRoot;
     private final AccountingStandardCatalog standards;
+    private final ReportFormulaMigrationService formulaMigration;
 
     @Autowired
     public LedgerBackupService(
@@ -84,13 +86,15 @@ public class LedgerBackupService {
             IdentityService identities,
             LedgerBackupRepository repository,
             @Value("${storage.local.root:./data/files}") String storageRoot,
-            AccountingStandardCatalog standards) {
+            AccountingStandardCatalog standards,
+            ReportFormulaMigrationService formulaMigration) {
         this.access = access;
         this.identities = identities;
         this.repository = repository;
         this.objectMapper = new ObjectMapper().findAndRegisterModules();
         this.storageRoot = Path.of(storageRoot);
         this.standards = standards;
+        this.formulaMigration = formulaMigration;
     }
 
     public LedgerBackupService(
@@ -98,7 +102,7 @@ public class LedgerBackupService {
             IdentityService identities,
             LedgerBackupRepository repository,
             String storageRoot) {
-        this(access, identities, repository, storageRoot, new AccountingStandardCatalog());
+        this(access, identities, repository, storageRoot, new AccountingStandardCatalog(), null);
     }
 
     @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
@@ -250,6 +254,12 @@ public class LedgerBackupService {
                 repository.backfillLegacyDimensionCombinations(ledgerId);
             } else {
                 repository.normalizeRestoredDimensionCombinations(ledgerId);
+            }
+            if (archive.version() < FORMAT_VERSION) {
+                if (formulaMigration == null) {
+                    throw new IllegalStateException("Report formula migration is not configured");
+                }
+                formulaMigration.migrateLedger(ledgerId);
             }
             return new LedgerResponses.Ledger(
                     ledgerId, name, source.path("description").asText(""),

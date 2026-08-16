@@ -145,8 +145,9 @@ public class ReportFormulaEvaluator {
             List<FormulaCheck> checks, Map<String, BigDecimal[]> calculated) {
         List<StatutoryReportResponses.Check> result = new ArrayList<>();
         for (FormulaCheck check : checks) {
-            BigDecimal difference = value(calculated, check.leftLineKey(), 0)
-                    .subtract(value(calculated, check.rightLineKey(), 0));
+            int column = check.column() == ReportFormulaDefinition.CheckColumn.COMPARATIVE ? 1 : 0;
+            BigDecimal difference = value(calculated, check.leftLineKey(), column)
+                    .subtract(value(calculated, check.rightLineKey(), column));
             result.add(new StatutoryReportResponses.Check(
                     check.code(), check.name(), difference.compareTo(BigDecimal.ZERO) == 0, difference));
         }
