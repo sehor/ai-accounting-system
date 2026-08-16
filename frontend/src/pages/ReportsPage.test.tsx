@@ -132,10 +132,14 @@ function cashFlowStatement(overrides: Record<string, unknown> = {}) {
   }
 }
 
-function installBackend(ledger = { accountingStandardCode: 'SME', baseCurrency: 'CNY' }, onReport?: () => unknown) {
+function installBackend(
+  ledger = { accountingStandardCode: 'SME', baseCurrency: 'CNY' },
+  onReport?: () => unknown,
+  periods = [{ id: 'period-8', ledgerId: 'ledger-1', periodCode: '2026-08', startDate: '2026-08-01', endDate: '2026-08-31', status: 'OPEN', hasVouchers: true }],
+) {
   const mock = vi.fn(async (path: string) => {
     if (path === '/ledgers/ledger-1') return { id: 'ledger-1', name: '测试账套', accountingStandardCode: ledger.accountingStandardCode, accountingStandardVersion: '2011-17', baseCurrency: ledger.baseCurrency, startDate: '2026-01-01', approvalEnabled: false, status: 'ACTIVE', description: '' }
-    if (path === '/ledgers/ledger-1/periods') return [{ id: 'period-8', ledgerId: 'ledger-1', periodCode: '2026-08', startDate: '2026-08-01', endDate: '2026-08-31', status: 'OPEN', hasVouchers: true }]
+    if (path === '/ledgers/ledger-1/periods') return periods
     if (path.includes('/reports/statutory/')) return onReport ? onReport() : cashFlowStatement()
     return []
   })
@@ -207,7 +211,7 @@ describe('ReportsPage cash-flow', () => {
   })
 
   it('shows the INCOMPLETE warning with per-column counts and expandable located samples', async () => {
-    installBackend({}, () => cashFlowStatement({
+    installBackend({ accountingStandardCode: 'SME', baseCurrency: 'CNY' }, () => cashFlowStatement({
       dataQuality: {
         status: 'INCOMPLETE',
         primaryUnclassifiedVoucherCount: 2,
@@ -234,7 +238,7 @@ describe('ReportsPage cash-flow', () => {
   })
 
   it('maps all four sample reasons to Chinese labels', async () => {
-    installBackend({}, () => cashFlowStatement({
+    installBackend({ accountingStandardCode: 'SME', baseCurrency: 'CNY' }, () => cashFlowStatement({
       dataQuality: {
         status: 'INCOMPLETE',
         primaryUnclassifiedVoucherCount: 4,
@@ -258,7 +262,7 @@ describe('ReportsPage cash-flow', () => {
   })
 
   it('shows failed reconciliation checks separately from data completeness', async () => {
-    installBackend({}, () => cashFlowStatement({
+    installBackend({ accountingStandardCode: 'SME', baseCurrency: 'CNY' }, () => cashFlowStatement({
       checks: [
         { key: 'c1', name: '行22 = 行20 + 行21（本年累计）', passed: false, difference: '1.50' },
         { key: 'c2', name: '行7 经营净额（本月）', passed: true, difference: '0.00' },
@@ -300,7 +304,7 @@ describe('ReportsPage cash-flow', () => {
   })
 
   it('shows the projection-pending hint when the backend returns 409', async () => {
-    installBackend({}, () => {
+    installBackend({ accountingStandardCode: 'SME', baseCurrency: 'CNY' }, () => {
       throw new ApiError(409, { code: 'STATUTORY_REPORT_PROJECTION_PENDING', title: '法定报表暂不可用', detail: '余额投影正在更新，请稍后刷新报表' })
     })
     renderPage()
@@ -308,10 +312,25 @@ describe('ReportsPage cash-flow', () => {
   })
 
   it('shows the formula-missing error when no published CASH_FLOW formula exists', async () => {
-    installBackend({}, () => {
+    installBackend({ accountingStandardCode: 'SME', baseCurrency: 'CNY' }, () => {
       throw new ApiError(500, { code: 'STATUTORY_FORMULA_NOT_FOUND', title: '法定报表公式缺失', detail: '当前账套缺少已发布的报表公式' })
     })
     renderPage()
     expect((await screen.findAllByText(/当前账套缺少已发布的报表公式/)).length).toBeGreaterThan(0)
+    expect(screen.queryByLabelText('正在生成法定报表')).not.toBeInTheDocument()
+  })
+
+  it('shows an explicit empty state when the ledger has no accounting periods', async () => {
+    const backend = installBackend(
+      { accountingStandardCode: 'SME', baseCurrency: 'CNY' },
+      undefined,
+      [],
+    )
+    renderPage()
+
+    expect(await screen.findByText('尚未设置会计期间')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '设置会计期间' })).toBeInTheDocument()
+    expect(screen.queryByLabelText('正在生成法定报表')).not.toBeInTheDocument()
+    expect(backend.mock.calls.some(([path]) => String(path).includes('/reports/statutory/'))).toBe(false)
   })
 })
