@@ -43,7 +43,8 @@ class LedgerBackupServiceTest {
             "dimension_combination_member", "ledger_account",
             "ledger_account_dimension", "accounting_period", "opening_balance", "opening_balance_dimension", "voucher",
             "voucher_line", "voucher_line_dimension", "voucher_approval", "period_action_audit",
-            "report_formula_snapshot", "audit_revision", "document", "document_extraction",
+            "report_formula_snapshot", "report_formula_revision", "report_formula_account_reference",
+            "audit_revision", "document", "document_extraction",
             "agent_tool_audit", "accounting_experience", "fixed_asset_category", "fixed_asset",
             "fixed_asset_change", "fixed_asset_depreciation_run", "fixed_asset_depreciation_line",
             "fixed_asset_disposal", "fixed_asset_import_batch", "fixed_asset_import_row");
@@ -211,7 +212,7 @@ class LedgerBackupServiceTest {
     }
 
     @Test
-    void restoresVersionThreeStructuredCombinationIdentityUsingRemappedMembers() {
+    void restoresVersionThreeStructuredCombinationIdentityUsingRemappedMembers() throws Exception {
         CurrentUserResolver.ResolvedUser owner = user(UUID.randomUUID());
         UUID sourceId = ledgers.create(owner, createRequest("V3 structured dimensions")).id();
         LedgerResponses.DimensionType sourceType = ledgers.listDimensionTypes(owner.id(), sourceId).stream()
@@ -221,8 +222,8 @@ class LedgerBackupServiceTest {
                 new LedgerRequests.DimensionValueCreate("RESTORE-C001", "Restore customer"));
         LedgerResponses.Account sourceReceivable = ledgers.createAccount(owner.id(), sourceId,
                 new LedgerRequests.AccountCreate(
-                        "1197", "Restore receivable", "CURRENT_ASSET", "DEBIT", null,
-                        false, null, false, null,
+                        "1197", "Restore receivable", "ASSET.ACCOUNTS_RECEIVABLE", "CURRENT_ASSET", "DEBIT",
+                        null, false, null, false, null,
                         List.of(new LedgerRequests.DimensionRequirement(sourceType.id(), true))));
         UUID sourcePeriodId = ledgers.periodId(sourceId, "2026-01");
         ledgers.replaceOpeningBalances(owner.id(), sourceId, List.of(
@@ -235,7 +236,7 @@ class LedgerBackupServiceTest {
                         ledgers.accountId(sourceId, "3001"), sourcePeriodId, "CNY", "",
                         BigDecimal.ZERO, new BigDecimal("25.00"), BigDecimal.ONE)));
 
-        byte[] archive = backups.backup(owner.id(), sourceId);
+        byte[] archive = downgrade(backups.backup(owner.id(), sourceId), 3);
         LedgerResponses.Ledger restored = backups.restore(
                 owner, null, archive.length, new ByteArrayInputStream(archive));
 
@@ -312,6 +313,14 @@ class LedgerBackupServiceTest {
     }
 
     private int count(String table, UUID ledgerId) {
+        if ("report_formula_revision".equals(table)) {
+            // The revision table carries no ledger_id; reach it through the snapshot.
+            return jdbc.queryForObject("""
+                    select count(*) from report_formula_revision revision
+                    join report_formula_snapshot snapshot on snapshot.id = revision.formula_id
+                    where snapshot.ledger_id = ?
+                    """, Integer.class, ledgerId);
+        }
         return jdbc.queryForObject("select count(*) from " + table + " where ledger_id = ?",
                 Integer.class, ledgerId);
     }
@@ -339,24 +348,30 @@ class LedgerBackupServiceTest {
         if (version == 1) {
             tables.remove("accounting_experience");
         }
-        Map<String, String> combinationCanonicalKeys = new LinkedHashMap<>();
-        tables.path("dimension_combination").forEach(row -> combinationCanonicalKeys.put(
-                row.path("id").asText(), row.path("canonical_key").asText()));
-        tables.path("opening_balance").forEach(row -> {
-            String canonical = combinationCanonicalKeys.get(row.path("dimension_combination_id").asText());
-            if ("v1;".equals(canonical)) {
-                ((ObjectNode) row).put("dimension_key", "");
-            } else if (canonical != null && canonical.startsWith("legacy-v1;")) {
-                ((ObjectNode) row).put("dimension_key", canonical.substring("legacy-v1;".length()));
-            }
-        });
-        tables.remove("dimension_combination");
-        tables.remove("dimension_combination_member");
-        tables.remove("opening_balance_dimension");
-        tables.path("opening_balance").forEach(
-                row -> ((ObjectNode) row).remove("dimension_combination_id"));
-        tables.path("voucher_line").forEach(
-                row -> ((ObjectNode) row).remove("dimension_combination_id"));
+        if (version <= 2) {
+            Map<String, String> combinationCanonicalKeys = new LinkedHashMap<>();
+            tables.path("dimension_combination").forEach(row -> combinationCanonicalKeys.put(
+                    row.path("id").asText(), row.path("canonical_key").asText()));
+            tables.path("opening_balance").forEach(row -> {
+                String canonical = combinationCanonicalKeys.get(row.path("dimension_combination_id").asText());
+                if ("v1;".equals(canonical)) {
+                    ((ObjectNode) row).put("dimension_key", "");
+                } else if (canonical != null && canonical.startsWith("legacy-v1;")) {
+                    ((ObjectNode) row).put("dimension_key", canonical.substring("legacy-v1;".length()));
+                }
+            });
+            tables.remove("dimension_combination");
+            tables.remove("dimension_combination_member");
+            tables.remove("opening_balance_dimension");
+            tables.path("opening_balance").forEach(
+                    row -> ((ObjectNode) row).remove("dimension_combination_id"));
+            tables.path("voucher_line").forEach(
+                    row -> ((ObjectNode) row).remove("dimension_combination_id"));
+        }
+        if (version <= 3) {
+            tables.remove("report_formula_revision");
+            tables.remove("report_formula_account_reference");
+        }
         if (version == 1) {
             data.path("tables").path("agent_tool_audit").forEach(
                     row -> ((ObjectNode) row).remove("duration_ms"));

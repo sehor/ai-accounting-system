@@ -22,7 +22,17 @@ public final class StatutoryReportResponses {
             String primaryColumn,
             String comparativeColumn,
             List<Group> groups,
-            List<Check> checks) {
+            List<Check> checks,
+            @Schema(nullable = true) String formulaCode,
+            @Schema(nullable = true) Integer formulaVersion) {
+
+        /** Compatibility constructor retained for pre-formula-editor call sites. */
+        public Statement(String reportType, String templateCode, String standardCode,
+                         String standardVersion, String periodCode, String primaryColumn,
+                         String comparativeColumn, List<Group> groups, List<Check> checks) {
+            this(reportType, templateCode, standardCode, standardVersion, periodCode,
+                    primaryColumn, comparativeColumn, groups, checks, null, null);
+        }
     }
 
     @Schema(requiredProperties = {"key", "title", "lines"})

@@ -46,7 +46,7 @@ public class LedgerBackupService {
     static final long MAX_ARCHIVE_BYTES = 100L * 1024 * 1024;
     static final long MAX_ATTACHMENT_BYTES = 20L * 1024 * 1024;
     private static final String FORMAT = "AI-ACCOUNTING-LEDGER-BACKUP";
-    private static final int FORMAT_VERSION = 3;
+    private static final int FORMAT_VERSION = 4;
     private static final List<TableDef> V1_TABLES = List.of(
             new TableDef("cash_flow_item"),
             new TableDef("dimension_type"),
@@ -68,7 +68,8 @@ public class LedgerBackupService {
     private static final Set<LedgerRole> OWNER = Set.of(LedgerRole.OWNER);
     private static final List<TableDef> V1_WITH_FIXED_ASSETS = appendFixedAssetTables(V1_TABLES);
     private static final List<TableDef> V2_TABLES = appendExperienceTable(V1_WITH_FIXED_ASSETS);
-    private static final List<TableDef> TABLES = appendDimensionFactTables(V2_TABLES);
+    private static final List<TableDef> V3_TABLES = appendDimensionFactTables(V2_TABLES);
+    private static final List<TableDef> TABLES = appendFormulaRevisionTables(V3_TABLES);
 
     private final LedgerAccessService access;
     private final IdentityService identities;
@@ -243,7 +244,9 @@ public class LedgerBackupService {
                 insertRows(table.name(), (ArrayNode) tables.path(table.name()),
                         ledgerId, actor.id(), idMap);
             }
-            if (archive.version() < FORMAT_VERSION) {
+            // v1/v2 archives lack dimension combinations and need the legacy
+            // backfill; v3+ archives carry them and are normalized after restore.
+            if (archive.version() < 3) {
                 repository.backfillLegacyDimensionCombinations(ledgerId);
             } else {
                 repository.normalizeRestoredDimensionCombinations(ledgerId);
@@ -594,7 +597,7 @@ public class LedgerBackupService {
                                            Map<String, byte[]> entries) {
         int version = manifest.path("version").asInt(-1);
         if (!FORMAT.equals(manifest.path("format").asText())
-                || (version != 1 && version != 2 && version != FORMAT_VERSION)
+                || (version != 1 && version != 2 && version != 3 && version != FORMAT_VERSION)
                 || !sha256(dataBytes).equals(requiredText(manifest, "dataSha256"))) {
             throw invalid("The backup format, version or data checksum is invalid");
         }
@@ -606,6 +609,7 @@ public class LedgerBackupService {
         Set<String> legacyTables = tableNames(V1_TABLES);
         Set<String> legacyWithFixedAssets = tableNames(V1_WITH_FIXED_ASSETS);
         Set<String> versionTwoTables = tableNames(V2_TABLES);
+        Set<String> versionThreeTables = tableNames(V3_TABLES);
         List<TableDef> tables;
         if (version == 1 && presentTables.equals(legacyTables)) {
             tables = V1_TABLES;
@@ -613,6 +617,8 @@ public class LedgerBackupService {
             tables = V1_WITH_FIXED_ASSETS;
         } else if (version == 2 && presentTables.equals(versionTwoTables)) {
             tables = V2_TABLES;
+        } else if (version == 3 && presentTables.equals(versionThreeTables)) {
+            tables = V3_TABLES;
         } else if (version == FORMAT_VERSION && presentTables.equals(tableNames(TABLES))) {
             tables = TABLES;
         } else {
@@ -712,6 +718,18 @@ public class LedgerBackupService {
     private static List<TableDef> appendExperienceTable(List<TableDef> base) {
         List<TableDef> result = new ArrayList<>(base);
         result.add(new TableDef("accounting_experience"));
+        return List.copyOf(result);
+    }
+
+    private static List<TableDef> appendFormulaRevisionTables(List<TableDef> base) {
+        List<TableDef> result = new ArrayList<>();
+        for (TableDef table : base) {
+            result.add(table);
+            if ("report_formula_snapshot".equals(table.name())) {
+                result.add(new TableDef("report_formula_revision"));
+                result.add(new TableDef("report_formula_account_reference"));
+            }
+        }
         return List.copyOf(result);
     }
 

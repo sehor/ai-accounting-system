@@ -11,6 +11,7 @@ import { decimalOrZero } from '../features/vouchers/money'
 import { LedgerBackupTab } from './LedgerBackupTab'
 import { PeriodClosingPanel } from './PeriodClosingPanel'
 import { OpeningDimensionFields, type OpeningFormLine } from './OpeningDimensionFields'
+import { ReportFormulaSettingsTab } from './ReportFormulaSettingsTab'
 
 type Account = components['schemas']['Account']
 type DimensionType = components['schemas']['DimensionType']
@@ -75,6 +76,7 @@ export function SettingsPage() {
     { key: 'openings', label: '期初余额', children: <OpeningsTab ledgerId={ledgerId} auth={session!} rows={openings.data || []} accounts={accounts.data || []} periods={periods.data || []} onSave={(lines) => openingSave.mutate(lines)} saving={openingSave.isPending} onImport={(file) => openingImport.mutate(file)} importing={openingImport.isPending} onConfirm={requestConfirmOpening} confirming={confirmOpening.isPending} /> },
     { key: 'dimensions', label: '辅助核算', children: <DimensionsTab ledgerId={ledgerId} session={session!} types={dimensionTypes.data || []} values={dimensionValues.data || []} selectedTypeId={selectedTypeId} onSelect={setSelectedTypeId} onChanged={() => { void client.invalidateQueries({ queryKey: ['dimension-types', ledgerId] }); void client.invalidateQueries({ queryKey: ['dimension-values', ledgerId, selectedTypeId] }) }} /> },
     { key: 'members', label: '成员', children: <MembersTab rows={members.data || []} form={emailForm} candidate={candidate} onFind={findCandidate} onAdd={addMember} /> },
+    { key: 'report-formulas', label: '报表公式', children: <ReportFormulaSettingsTab /> },
     { key: 'backup', label: '备份与恢复', children: <LedgerBackupTab ledgerId={ledgerId} session={session!} role={ledgerRole.data?.role as LedgerRole | undefined} onRestored={(ledger) => navigate(`/ledgers/${ledger.id}/settings/backup`)} /> },
   ]} /></Space></>
 }

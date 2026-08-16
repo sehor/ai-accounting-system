@@ -35,7 +35,14 @@ public final class ReportResponses {
     }
 
     @Schema(name = "AccountStatement", requiredProperties = {"totalLines", "lines"})
-    public record Statement(int totalLines, List<StatementLine> lines) {
+    public record Statement(int totalLines, List<StatementLine> lines,
+                            @Schema(nullable = true) String formulaCode,
+                            @Schema(nullable = true) Integer formulaVersion) {
+
+        /** Compatibility constructor retained for pre-formula-editor call sites. */
+        public Statement(int totalLines, List<StatementLine> lines) {
+            this(totalLines, lines, null, null);
+        }
     }
 
     @Schema(requiredProperties = {"voucherId", "voucherNumber", "voucherDate", "accountCode",

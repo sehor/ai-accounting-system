@@ -35,7 +35,7 @@ class Stage2LedgerInitializationTest {
 
         assertThat(jdbcTemplate.queryForObject(
                 "select count(*) from ledger_account where ledger_id = ?", Integer.class, ledger.id()))
-                .isEqualTo(15);
+                .isEqualTo(18);
         assertThat(jdbcTemplate.queryForObject(
                 "select count(*) from accounting_period where ledger_id = ?", Integer.class, ledger.id()))
                 .isEqualTo(expectedPeriods);

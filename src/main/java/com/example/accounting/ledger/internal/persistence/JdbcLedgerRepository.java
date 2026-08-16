@@ -102,14 +102,6 @@ public class JdbcLedgerRepository implements LedgerRepository {
     }
 
     @Override
-    public void createFormula(UUID ledgerId, String code, String name, String json) {
-        jdbc.update("""
-                insert into report_formula_snapshot (id, ledger_id, code, name, formula_json)
-                values (?, ?, ?, ?, ?::jsonb)
-                """, UUID.randomUUID(), ledgerId, code, name, json);
-    }
-
-    @Override
     public List<LedgerResponses.Ledger> list(UUID actorId) {
         return jdbc.query("""
                 select l.id, l.name, l.description, l.accounting_standard_code, l.accounting_standard_version,

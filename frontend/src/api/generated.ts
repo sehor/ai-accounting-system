@@ -15,6 +15,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/ledgers/{ledgerId}/report-formulas/{code}/draft": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["updateDraft"];
+        post: operations["createDraft"];
+        delete: operations["deleteDraft"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/ledgers/{ledgerId}/opening-balances": {
         parameters: {
             query?: never;
@@ -185,6 +201,70 @@ export interface paths {
         get?: never;
         put?: never;
         post: operations["restoreRevision"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/ledgers/{ledgerId}/report-formulas/{code}:publish": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["publish"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/ledgers/{ledgerId}/report-formulas/{code}/versions/{version}:rollback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["rollback"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/ledgers/{ledgerId}/report-formulas/{code}/draft:reset": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["resetDraft"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/ledgers/{ledgerId}/report-formulas/{code}/draft:preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["preview"];
         delete?: never;
         options?: never;
         head?: never;
@@ -616,7 +696,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        post: operations["preview"];
+        post: operations["preview_1"];
         delete?: never;
         options?: never;
         head?: never;
@@ -815,22 +895,6 @@ export interface paths {
         patch: operations["updateAccount"];
         trace?: never;
     };
-    "/v1/ledgers/{ledgerId}/accounts/{accountId}/next-child-code": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["nextChildAccountCode"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/v1/me": {
         parameters: {
             query?: never;
@@ -975,6 +1039,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/ledgers/{ledgerId}/report-formulas/{code}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["workspace"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/ledgers/{ledgerId}/report-formulas/{code}/versions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["versions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/ledgers/{ledgerId}/report-formulas/{code}/versions/{version}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["version"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/ledgers/{ledgerId}/periods": {
         parameters: {
             query?: never;
@@ -1078,7 +1190,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get: operations["preview_1"];
+        get: operations["preview_2"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1239,6 +1351,22 @@ export interface paths {
             cookie?: never;
         };
         get: operations["list_3"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/ledgers/{ledgerId}/accounts/{accountId}/next-child-code": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["nextChildAccountCode"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1507,6 +1635,43 @@ export interface components {
             unitPrice: string | null;
             dimensions: components["schemas"]["VoucherDimensionResponse"][];
         };
+        AccountReference: {
+            type?: string;
+            value?: string;
+        };
+        /** @default null */
+        ReportFormulaDraftUpdate: {
+            /** Format: int64 */
+            expectedDraftVersion: number;
+            lines?: components["schemas"]["ReportFormulaLineEdit"][];
+            rules?: components["schemas"]["ReportFormulaRuleEdit"][];
+        };
+        /** @default null */
+        ReportFormulaLineEdit: {
+            lineKey: string;
+            name: string;
+            expression: unknown;
+        };
+        /** @default null */
+        ReportFormulaRuleEdit: {
+            key: string;
+            side: string;
+            categories?: string[];
+            accounts?: components["schemas"]["AccountReference"][];
+        };
+        /** @default null */
+        ReportFormulaDraft: {
+            /** Format: int64 */
+            version: number;
+            /** Format: int32 */
+            basePublishedVersion: number;
+            definition: unknown;
+            /** Format: int64 */
+            lastPreviewedDraftVersion?: number;
+            previewHasWarnings?: boolean;
+            /** Format: date-time */
+            updatedAt?: string;
+        };
         /** @default null */
         OpeningBalanceDimensionRequest: {
             /** Format: uuid */
@@ -1707,6 +1872,70 @@ export interface components {
         };
         Comment: {
             comment: string;
+        };
+        /** @default null */
+        ReportFormulaPublishRequest: {
+            /** Format: int32 */
+            expectedPublishedVersion: number;
+            /** Format: int64 */
+            expectedDraftVersion: number;
+            acknowledgeWarnings?: boolean;
+        };
+        /** @default null */
+        ReportFormulaPublishResult: {
+            formulaCode: string;
+            /** Format: int32 */
+            publishedVersion: number;
+        };
+        /** @default null */
+        ReportFormulaRollbackRequest: {
+            /** Format: int32 */
+            expectedPublishedVersion: number;
+        };
+        /** @default null */
+        ReportFormulaRollbackResult: {
+            formulaCode: string;
+            /** Format: int32 */
+            publishedVersion: number;
+        };
+        /** @default null */
+        ReportFormulaDraftReset: {
+            /** Format: int64 */
+            expectedDraftVersion: number;
+        };
+        /** @default null */
+        ReportFormulaPreviewRequest: {
+            /** Format: int64 */
+            expectedDraftVersion: number;
+            /** @default  */
+            periodCode: string | null;
+            /** @default  */
+            periodFrom: string | null;
+            /** @default  */
+            periodTo: string | null;
+        };
+        /** @default null */
+        ReportFormulaIssue: {
+            code: string;
+            path: string;
+            message: string;
+        };
+        /** @default null */
+        ReportFormulaPreviewResult: {
+            /** Format: int64 */
+            draftVersion: number;
+            /** Format: int64 */
+            previewedDraftVersion: number;
+            previewHasWarnings: boolean;
+            blockingIssues?: components["schemas"]["ReportFormulaIssue"][];
+            warnings?: components["schemas"]["ReportFormulaWarning"][];
+            statement?: unknown;
+        };
+        /** @default null */
+        ReportFormulaWarning: {
+            code: string;
+            name: string;
+            difference: string;
         };
         PeriodAction: {
             reason: string;
@@ -2645,6 +2874,13 @@ export interface components {
             comparativeColumn: string;
             groups: components["schemas"]["Group"][];
             checks: components["schemas"]["Check"][];
+            /** @default  */
+            formulaCode: string | null;
+            /**
+             * Format: int32
+             * @default
+             */
+            formulaVersion: number | null;
         };
         /** @default null */
         StatutoryStatementLine: {
@@ -2663,12 +2899,56 @@ export interface components {
             /** Format: int32 */
             totalLines: number;
             lines: components["schemas"]["StatementLine"][];
+            /** @default  */
+            formulaCode: string | null;
+            /**
+             * Format: int32
+             * @default
+             */
+            formulaVersion: number | null;
         };
         /** @default null */
         StatementLine: {
             code: string;
             name: string;
             amount: string;
+        };
+        /** @default null */
+        ReportFormulaWorkspace: {
+            code: string;
+            name: string;
+            kind: string;
+            reportType: string;
+            templateCode: string;
+            /** Format: int32 */
+            publishedVersion: number;
+            publishedDefinition: unknown;
+            draft?: components["schemas"]["ReportFormulaDraft"];
+        };
+        /** @default null */
+        ReportFormulaVersionInfo: {
+            /** Format: int32 */
+            version: number;
+            source: string;
+            /** Format: int32 */
+            rollbackOfVersion?: number;
+            /** Format: uuid */
+            createdBy?: string;
+            /** Format: date-time */
+            createdAt?: string;
+            definition: unknown;
+        };
+        /** @default null */
+        ReportFormulaVersionPage: {
+            /** Format: int32 */
+            page: number;
+            /** Format: int32 */
+            pageSize: number;
+            /** Format: int64 */
+            totalItems: number;
+            /** Format: int32 */
+            totalPages: number;
+            items: components["schemas"]["ReportFormulaVersionInfo"][];
         };
         /** @default null */
         PeriodClosingStatus: {
@@ -2884,6 +3164,10 @@ export interface components {
             createdAt: string;
         };
         /** @default null */
+        NextAccountCodeResponse: {
+            code: string;
+        };
+        /** @default null */
         LedgerAccountSearchResult: {
             account: components["schemas"]["Account"];
             /** @default  */
@@ -2922,17 +3206,6 @@ export interface components {
             code: string;
             name: string;
             required: boolean;
-        };
-        AccountCodeRule: {
-            /** Format: int32 */
-            level2Width: number;
-            /** Format: int32 */
-            level3Width: number;
-            /** Format: int32 */
-            level4Width: number;
-        };
-        NextAccountCodeResponse: {
-            code: string;
         };
         /** @default null */
         AccountingStandardFormula: {
@@ -3040,6 +3313,77 @@ export interface operations {
             };
         };
     };
+    updateDraft: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ledgerId: string;
+                code: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReportFormulaDraftUpdate"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ReportFormulaDraft"];
+                };
+            };
+        };
+    };
+    createDraft: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ledgerId: string;
+                code: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ReportFormulaDraft"];
+                };
+            };
+        };
+    };
+    deleteDraft: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ledgerId: string;
+                code: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     listOpeningBalances: {
         parameters: {
             query?: never;
@@ -3112,6 +3456,28 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["AccountImportPreview"];
+                };
+            };
+        };
+    };
+    getAccountCodeRule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ledgerId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["AccountCodeRule"];
                 };
             };
         };
@@ -3386,6 +3752,115 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["Voucher"];
+                };
+            };
+        };
+    };
+    publish: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ledgerId: string;
+                code: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReportFormulaPublishRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ReportFormulaPublishResult"];
+                };
+            };
+        };
+    };
+    rollback: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ledgerId: string;
+                code: string;
+                version: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReportFormulaRollbackRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ReportFormulaRollbackResult"];
+                };
+            };
+        };
+    };
+    resetDraft: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ledgerId: string;
+                code: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReportFormulaDraftReset"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ReportFormulaDraft"];
+                };
+            };
+        };
+    };
+    preview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ledgerId: string;
+                code: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReportFormulaPreviewRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ReportFormulaPreviewResult"];
                 };
             };
         };
@@ -4243,7 +4718,7 @@ export interface operations {
             };
         };
     };
-    preview: {
+    preview_1: {
         parameters: {
             query: {
                 format: "STANDARD" | "KINGDEE";
@@ -4984,6 +5459,79 @@ export interface operations {
             };
         };
     };
+    workspace: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ledgerId: string;
+                code: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ReportFormulaWorkspace"];
+                };
+            };
+        };
+    };
+    versions: {
+        parameters: {
+            query?: {
+                page?: number;
+                pageSize?: number;
+            };
+            header?: never;
+            path: {
+                ledgerId: string;
+                code: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ReportFormulaVersionPage"];
+                };
+            };
+        };
+    };
+    version: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ledgerId: string;
+                code: string;
+                version: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["ReportFormulaVersionInfo"];
+                };
+            };
+        };
+    };
     listPeriods: {
         parameters: {
             query?: never;
@@ -5122,7 +5670,7 @@ export interface operations {
             };
         };
     };
-    preview_1: {
+    preview_2: {
         parameters: {
             query: {
                 periodId: string;
@@ -5392,6 +5940,29 @@ export interface operations {
             };
         };
     };
+    nextChildAccountCode: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ledgerId: string;
+                accountId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["NextAccountCodeResponse"];
+                };
+            };
+        };
+    };
     searchAccounts: {
         parameters: {
             query: {
@@ -5610,51 +6181,6 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
-            };
-        };
-    };
-    getAccountCodeRule: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                ledgerId: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "*/*": components["schemas"]["AccountCodeRule"];
-                };
-            };
-        };
-    };
-    nextChildAccountCode: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                ledgerId: string;
-                accountId: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "*/*": components["schemas"]["NextAccountCodeResponse"];
-                };
             };
         };
     };

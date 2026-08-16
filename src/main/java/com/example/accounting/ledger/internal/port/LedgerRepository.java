@@ -24,8 +24,6 @@ public interface LedgerRepository {
 
     void createPeriod(UUID ledgerId, String periodCode, LocalDate startDate, LocalDate endDate);
 
-    void createFormula(UUID ledgerId, String code, String name, String json);
-
     List<LedgerResponses.Ledger> list(UUID actorId);
 
     List<LedgerResponses.Ledger> listAllActive();

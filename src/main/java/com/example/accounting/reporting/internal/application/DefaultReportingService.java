@@ -2,16 +2,20 @@ package com.example.accounting.reporting.internal.application;
 
 import com.example.accounting.ledger.LedgerAccessService;
 import com.example.accounting.ledger.LedgerRole;
-import com.example.accounting.ledger.AccountingStandardCatalog;
+import com.example.accounting.ledger.formula.FormulaParser;
+import com.example.accounting.ledger.formula.ReportFormulaDefinition;
+import com.example.accounting.ledger.internal.port.ReportFormulaRepository;
 import com.example.accounting.reporting.FinanceQueryRequests;
 import com.example.accounting.reporting.DimensionLedgerRequests;
 import com.example.accounting.reporting.ReportResponses;
 import com.example.accounting.reporting.StatutoryReportResponses;
 import com.example.accounting.reporting.ReportingService;
 import com.example.accounting.reporting.PeriodRange;
+import com.example.accounting.reporting.formula.FormulaAccountAmount;
+import com.example.accounting.reporting.formula.ReportFormulaEvaluator;
+import com.example.accounting.reporting.formula.ReportFormulaValidator;
 import com.example.accounting.reporting.internal.port.ReportingRepository;
 import com.example.accounting.shared.web.ApiProblemException;
-import com.fasterxml.jackson.databind.JsonNode;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.ArrayList;
@@ -40,19 +44,21 @@ public class DefaultReportingService implements ReportingService {
 
     private final LedgerAccessService ledgerAccess;
     private final ReportingRepository reports;
-    private final AccountingStandardCatalog standards;
+    private final ReportFormulaRepository formulas;
+    private final FormulaParser formulaParser;
+    private final ReportFormulaValidator validator;
+    private final ReportFormulaEvaluator evaluator;
 
     @Autowired
     public DefaultReportingService(LedgerAccessService ledgerAccess, ReportingRepository reports,
-                                   AccountingStandardCatalog standards) {
+                                   ReportFormulaRepository formulas, FormulaParser formulaParser,
+                                   ReportFormulaValidator validator, ReportFormulaEvaluator evaluator) {
         this.ledgerAccess = ledgerAccess;
         this.reports = reports;
-        this.standards = standards;
-    }
-
-    /** Compatibility constructor retained for focused service unit tests. */
-    public DefaultReportingService(LedgerAccessService ledgerAccess, ReportingRepository reports) {
-        this(ledgerAccess, reports, new AccountingStandardCatalog());
+        this.formulas = formulas;
+        this.formulaParser = formulaParser;
+        this.validator = validator;
+        this.evaluator = evaluator;
     }
 
     @Override
@@ -88,16 +94,7 @@ public class DefaultReportingService implements ReportingService {
     public ReportResponses.Statement balanceSheet(UUID actorId, UUID ledgerId, PeriodRange range) {
         requireView(actorId, ledgerId);
         validateRange(ledgerId, range);
-        List<ReportResponses.TrialBalanceLine> lines = reports.trialBalance(ledgerId, range, false);
-        Set<String> debitCategories = reports.formulaCategories(ledgerId, "BALANCE_SHEET", "debitCategories");
-        Set<String> creditCategories = reports.formulaCategories(ledgerId, "BALANCE_SHEET", "creditCategories");
-        List<ReportResponses.StatementLine> result = lines.stream()
-                .filter(line -> debitCategories.contains(line.category()) || creditCategories.contains(line.category()))
-                .map(line -> new ReportResponses.StatementLine(line.code(), line.name(),
-                        debitCategories.contains(line.category()) ? line.closingDebit().subtract(line.closingCredit())
-                                : line.closingCredit().subtract(line.closingDebit())))
-                .toList();
-        return new ReportResponses.Statement(result.size(), result);
+        return dynamicStatement(ledgerId, "BALANCE_SHEET", range, false);
     }
 
     @Override
@@ -112,19 +109,47 @@ public class DefaultReportingService implements ReportingService {
         requireView(actorId, ledgerId);
         validateRange(ledgerId, range);
         requireIncomeProjection(ledgerId, range);
-        List<ReportResponses.TrialBalanceLine> lines = reports.incomeStatementTrialBalance(ledgerId, range, false);
-        Set<String> revenueCategories = reports.formulaCategories(
-                ledgerId, "INCOME_STATEMENT", "revenueCategories");
-        Set<String> expenseCategories = reports.formulaCategories(
-                ledgerId, "INCOME_STATEMENT", "expenseCategories");
+        return dynamicStatement(ledgerId, "INCOME_STATEMENT", range, true);
+    }
+
+    /**
+     * Dynamic (code/name/amount) statements read only the current published
+     * snapshot: ACCOUNT_DETAIL definitions go through the generic evaluator;
+     * FIXED_LINES definitions (SME ledgers using the dynamic endpoints) keep
+     * the legacy category mapping over the same snapshot JSON.
+     */
+    private ReportResponses.Statement dynamicStatement(
+            UUID ledgerId, String formulaCode, PeriodRange range, boolean operatingActivity) {
+        ReportFormulaRepository.Snapshot snapshot = formulas.findSnapshot(ledgerId, formulaCode).orElse(null);
+        if (snapshot == null) {
+            return new ReportResponses.Statement(0, List.of());
+        }
+        ReportFormulaDefinition definition = formulaParser.parse(snapshot.formulaJson());
+        validator.requireValid(definition, ledgerId);
+        if (ReportFormulaDefinition.KIND_ACCOUNT_DETAIL.equals(definition.kind())) {
+            List<FormulaAccountAmount> source = reports.formulaAccountAmounts(ledgerId, range, operatingActivity);
+            return addFormulaMetadata(
+                    evaluator.evaluateAccountDetail(ledgerId, definition, source),
+                    formulaCode, snapshot.publishedVersion());
+        }
+        List<ReportResponses.TrialBalanceLine> lines = operatingActivity
+                ? reports.incomeStatementTrialBalance(ledgerId, range, false)
+                : reports.trialBalance(ledgerId, range, false);
+        Set<String> debitCategories = reports.formulaCategories(
+                ledgerId, formulaCode, operatingActivity ? "expenseCategories" : "debitCategories");
+        Set<String> creditCategories = reports.formulaCategories(
+                ledgerId, formulaCode, operatingActivity ? "revenueCategories" : "creditCategories");
         List<ReportResponses.StatementLine> result = lines.stream()
-                .filter(line -> revenueCategories.contains(line.category())
-                        || expenseCategories.contains(line.category()))
+                .filter(line -> debitCategories.contains(line.category()) || creditCategories.contains(line.category()))
                 .map(line -> new ReportResponses.StatementLine(line.code(), line.name(),
-                        revenueCategories.contains(line.category()) ? line.periodCredit().subtract(line.periodDebit())
-                                : line.periodDebit().subtract(line.periodCredit())))
+                        debitCategories.contains(line.category())
+                                ? (operatingActivity ? line.periodDebit().subtract(line.periodCredit())
+                                        : line.closingDebit().subtract(line.closingCredit()))
+                                : (operatingActivity ? line.periodCredit().subtract(line.periodDebit())
+                                        : line.closingCredit().subtract(line.closingDebit()))))
                 .toList();
-        return new ReportResponses.Statement(result.size(), result);
+        return addFormulaMetadata(new ReportResponses.Statement(result.size(), result),
+                formulaCode, snapshot.publishedVersion());
     }
 
     @Override
@@ -149,39 +174,40 @@ public class DefaultReportingService implements ReportingService {
         }
         String standardVersion = "v1".equals(profile.accountingStandardVersion())
                 ? "2011-17" : profile.accountingStandardVersion();
-        String formulaCode = "balance-sheet".equals(reportType) ? "BALANCE_SHEET" : "INCOME_STATEMENT";
-        JsonNode formula = standards.formula("SME", standardVersion, formulaCode)
-                .map(com.example.accounting.ledger.AccountingStandard.Formula::definition)
+        boolean income = "income-statement".equals(reportType);
+        String formulaCode = income ? "INCOME_STATEMENT" : "BALANCE_SHEET";
+        ReportFormulaRepository.Snapshot snapshot = formulas.findSnapshot(ledgerId, formulaCode)
                 .orElseThrow(() -> problem(500, "STATUTORY_FORMULA_NOT_FOUND", "法定报表公式缺失",
-                        "当前小企业会计准则标准包缺少法定报表公式"));
+                        "当前账套缺少已发布的报表公式"));
+        ReportFormulaDefinition definition = formulaParser.parse(snapshot.formulaJson());
+        validator.requireValid(definition, ledgerId);
         String firstPeriod = reports.firstPeriodOfYear(ledgerId, periodCode);
         if (firstPeriod == null) {
             throw problem(404, "PERIOD_NOT_FOUND", "Period not found",
                     "No accounting period is available in the selected year");
         }
-        List<ReportingRepository.StatutoryAccountAmount> primary;
-        List<ReportingRepository.StatutoryAccountAmount> comparative;
-        if ("income-statement".equals(reportType)) {
+        List<FormulaAccountAmount> primary;
+        List<FormulaAccountAmount> comparative;
+        if (income) {
             PeriodRange yearToDate = new PeriodRange(firstPeriod, periodCode);
             requireStatutoryProjection(ledgerId, yearToDate);
             requireStatutoryProjection(ledgerId, selected);
-            primary = reports.statutoryAccountAmounts(ledgerId, yearToDate, true);
-            comparative = reports.statutoryAccountAmounts(ledgerId, selected, true);
-            requireStatutoryMappings(primary);
-            requireStatutoryMappings(comparative);
+            primary = reports.formulaAccountAmounts(ledgerId, yearToDate, true);
+            comparative = reports.formulaAccountAmounts(ledgerId, selected, true);
         } else {
             PeriodRange openingPeriod = PeriodRange.single(firstPeriod);
             requireStatutoryProjection(ledgerId, selected);
             requireStatutoryProjection(ledgerId, openingPeriod);
-            primary = reports.statutoryAccountAmounts(ledgerId, selected, false);
-            List<ReportingRepository.StatutoryAccountAmount> opening =
-                    reports.statutoryAccountAmounts(ledgerId, openingPeriod, false);
-            requireStatutoryMappings(primary);
-            requireStatutoryMappings(opening);
-            comparative = openingAmounts(opening);
+            primary = reports.formulaAccountAmounts(ledgerId, selected, false);
+            comparative = reports.formulaAccountAmounts(ledgerId, openingPeriod, false);
         }
-        return new StatutoryReportCalculator().calculate(reportType, periodCode, standardVersion, formula,
-                primary, comparative);
+        requireStatutoryMappings(primary);
+        requireStatutoryMappings(comparative);
+        StatutoryReportResponses.Statement result = evaluator.evaluateFixedLines(ledgerId, definition,
+                primary, comparative, new ReportFormulaEvaluator.FixedLinesMetadata(
+                        reportType, "SME", standardVersion, periodCode,
+                        income ? "本年累计金额" : "期末余额", income ? "本月金额" : "年初余额"));
+        return addFormulaMetadata(result, formulaCode, snapshot.publishedVersion());
     }
 
     private void requireStatutoryProjection(UUID ledgerId, PeriodRange range) {
@@ -198,13 +224,13 @@ public class DefaultReportingService implements ReportingService {
         }
     }
 
-    private void requireStatutoryMappings(List<ReportingRepository.StatutoryAccountAmount> amounts) {
-        List<ReportingRepository.StatutoryAccountAmount> unmapped = amounts.stream()
+    private void requireStatutoryMappings(List<FormulaAccountAmount> amounts) {
+        List<FormulaAccountAmount> unmapped = amounts.stream()
                 .filter(amount -> amount.standardAccountKey() == null && hasAnyAmount(amount))
                 .toList();
         if (!unmapped.isEmpty()) {
             String identifiers = unmapped.stream().limit(10)
-                    .map(amount -> amount.accountId() + "/" + amount.accountCode())
+                    .map(amount -> amount.accountId() + "/" + amount.code())
                     .collect(Collectors.joining(", "));
             if (unmapped.size() > 10) {
                 identifiers += ", ... (" + unmapped.size() + " accounts)";
@@ -214,18 +240,25 @@ public class DefaultReportingService implements ReportingService {
         }
     }
 
-    private boolean hasAnyAmount(ReportingRepository.StatutoryAccountAmount amount) {
+    private boolean hasAnyAmount(FormulaAccountAmount amount) {
         return amount.openingDebit().signum() != 0 || amount.openingCredit().signum() != 0
                 || amount.periodDebit().signum() != 0 || amount.periodCredit().signum() != 0
                 || amount.closingDebit().signum() != 0 || amount.closingCredit().signum() != 0;
     }
 
-    private List<ReportingRepository.StatutoryAccountAmount> openingAmounts(
-            List<ReportingRepository.StatutoryAccountAmount> amounts) {
-        return amounts.stream().map(amount -> new ReportingRepository.StatutoryAccountAmount(
-                amount.accountId(), amount.accountCode(), amount.standardAccountKey(),
-                amount.openingDebit(), amount.openingCredit(), BigDecimal.ZERO, BigDecimal.ZERO,
-                amount.openingDebit(), amount.openingCredit())).toList();
+    private ReportResponses.Statement addFormulaMetadata(
+            ReportResponses.Statement statement, String formulaCode, int formulaVersion) {
+        return new ReportResponses.Statement(statement.totalLines(), statement.lines(),
+                formulaCode, formulaVersion);
+    }
+
+    private StatutoryReportResponses.Statement addFormulaMetadata(
+            StatutoryReportResponses.Statement statement, String formulaCode, int formulaVersion) {
+        return new StatutoryReportResponses.Statement(
+                statement.reportType(), statement.templateCode(), statement.standardCode(),
+                statement.standardVersion(), statement.periodCode(), statement.primaryColumn(),
+                statement.comparativeColumn(), statement.groups(), statement.checks(),
+                formulaCode, formulaVersion);
     }
 
     @Override

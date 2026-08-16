@@ -26,7 +26,10 @@ public class JdbcLedgerBackupRepository implements LedgerBackupRepository {
             Map.entry("voucher_line_dimension", "voucher_line_id, dimension_type_id"),
             Map.entry("voucher_approval", "created_at, id"),
             Map.entry("period_action_audit", "created_at, id"),
-            Map.entry("report_formula_snapshot", "id"), Map.entry("audit_revision", "created_at, id"),
+            Map.entry("report_formula_snapshot", "id"),
+            Map.entry("report_formula_revision", "created_at, id"),
+            Map.entry("report_formula_account_reference", "revision_id, account_id"),
+            Map.entry("audit_revision", "created_at, id"),
             Map.entry("document", "created_at, id"), Map.entry("document_extraction", "created_at, id"),
             Map.entry("agent_tool_audit", "created_at, id"),
             Map.entry("accounting_experience", "updated_at, id"),
@@ -54,6 +57,16 @@ public class JdbcLedgerBackupRepository implements LedgerBackupRepository {
     @Override
     public String rowsJson(String table, UUID ledgerId) {
         String orderBy = requireTable(table);
+        if ("report_formula_revision".equals(table)) {
+            // The revision table carries no ledger_id; reach it through the snapshot.
+            return jdbc.queryForObject("""
+                    select coalesce(jsonb_agg(to_jsonb(revision) order by revision.created_at, revision.id),
+                                    '[]'::jsonb)::text
+                    from report_formula_revision revision
+                    join report_formula_snapshot snapshot on snapshot.id = revision.formula_id
+                    where snapshot.ledger_id = ?
+                    """, String.class, ledgerId);
+        }
         return jdbc.queryForObject("select coalesce(jsonb_agg(to_jsonb(t) order by " + orderBy
                 + "), '[]'::jsonb)::text from " + table + " t where ledger_id = ?",
                 String.class, ledgerId);

@@ -21,8 +21,11 @@ import com.example.accounting.shared.balance.BalanceProjectionService;
 import com.example.accounting.shared.audit.AuditSnapshotSerializer;
 import com.example.accounting.shared.accounting.DimensionCombinationKey;
 import com.example.accounting.shared.accounting.DimensionCombinationStore;
+import com.example.accounting.ledger.formula.ReportFormulaDefinition;
+import com.example.accounting.ledger.formula.StandardFormulaConverter;
 import com.example.accounting.ledger.internal.persistence.AccountManagementRepository;
 import com.example.accounting.ledger.internal.port.LedgerRepository;
+import com.example.accounting.ledger.internal.port.ReportFormulaRepository;
 import com.example.accounting.shared.web.ApiProblemException;
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -73,6 +76,8 @@ public class DefaultLedgerService implements LedgerService {
     private final BalanceProjectionService balanceProjection;
     private final DimensionCombinationStore dimensionCombinations;
     private final AuditSnapshotSerializer auditSnapshots;
+    private final ReportFormulaRepository reportFormulas;
+    private final StandardFormulaConverter formulaConverter;
     private final ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
 
     @Autowired
@@ -83,7 +88,9 @@ public class DefaultLedgerService implements LedgerService {
                                 PlatformAdminPolicy platformAdmin,
                                 BalanceProjectionService balanceProjection,
                                 DimensionCombinationStore dimensionCombinations,
-                                AuditSnapshotSerializer auditSnapshots) {
+                                AuditSnapshotSerializer auditSnapshots,
+                                ReportFormulaRepository reportFormulas,
+                                StandardFormulaConverter formulaConverter) {
         this.ledgers = ledgers;
         this.accounts = accounts;
         this.ledgerAccess = ledgerAccess;
@@ -95,16 +102,8 @@ public class DefaultLedgerService implements LedgerService {
         this.balanceProjection = balanceProjection;
         this.dimensionCombinations = dimensionCombinations;
         this.auditSnapshots = auditSnapshots;
-    }
-
-    public DefaultLedgerService(LedgerRepository ledgers, AccountManagementRepository accounts,
-                                LedgerAccessService ledgerAccess, IdentityService identityService,
-                                AccountingStandardCatalog standards, ObjectProvider<PeriodCloseGuard> periodCloseGuard,
-                                LocalSuperAgentPolicy localSuperAgent, PlatformAdminPolicy platformAdmin,
-                                BalanceProjectionService balanceProjection,
-                                DimensionCombinationStore dimensionCombinations) {
-        this(ledgers, accounts, ledgerAccess, identityService, standards, periodCloseGuard, localSuperAgent,
-                platformAdmin, balanceProjection, dimensionCombinations, new AuditSnapshotSerializer());
+        this.reportFormulas = reportFormulas;
+        this.formulaConverter = formulaConverter;
     }
 
     @Override
@@ -1133,9 +1132,12 @@ public class DefaultLedgerService implements LedgerService {
             ledgers.createPeriod(ledgerId, current.toString().substring(0, 7),
                     current, current.plusMonths(1).minusDays(1));
         }
-        standard.formulas().forEach(formula ->
-                ledgers.createFormula(ledgerId, formula.code(), formula.name(),
-                        formula.definition().toString()));
+        for (AccountingStandard.Formula formula : standard.formulas()) {
+            ReportFormulaDefinition canonical = formulaConverter.convert(standard, formula);
+            reportFormulas.createSnapshotWithPublishedVersion(
+                    ledgerId, formula.code(), formula.name(), canonical.kind(),
+                    formulaConverter.canonicalJson(standard, formula), actorId);
+        }
     }
 
     private UUID lookupAccount(UUID ledgerId, String code, int rowNumber) {

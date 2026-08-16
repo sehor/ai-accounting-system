@@ -150,6 +150,9 @@ export function ReportsPage() {
       <div>
         <Typography.Title id="report-title" level={1}>{reportNames[reportType] || '报表'}</Typography.Title>
         {statutory && <Typography.Text type="secondary">小企业会计准则 · {ledger.data?.baseCurrency || 'CNY'}</Typography.Text>}
+      {statutoryData?.formulaVersion && <Tag color="green">公式版本 v{statutoryData.formulaVersion}</Tag>}
+      {(query.data as Statement | undefined)?.formulaVersion && !statutoryData
+        && <Tag color="green">公式版本 v{(query.data as Statement).formulaVersion}</Tag>}
       </div>
       {balanceSource && <Tag color={balanceSource === 'projection' ? 'blue' : 'orange'}>
         数据来源：{balanceSource === 'projection' ? '余额投影' : '实时凭证'}

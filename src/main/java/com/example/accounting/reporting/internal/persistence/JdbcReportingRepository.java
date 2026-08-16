@@ -10,6 +10,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.Duration;
 import java.time.OffsetDateTime;
+import java.util.Collection;
 import java.util.List;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -156,38 +157,73 @@ public class JdbcReportingRepository implements ReportingRepository {
     }
 
     @Override
-    public List<ReportResponses.TrialBalanceLine> statutoryTrialBalance(
-            UUID ledgerId, PeriodRange range, boolean includeParents) {
-        if (projection == null) {
-            throw new IllegalStateException("Balance projection is not configured");
+    public List<com.example.accounting.reporting.formula.FormulaAccountAmount> formulaAccountAmounts(
+            UUID ledgerId, PeriodRange range, boolean operatingActivity) {
+        List<ReportResponses.TrialBalanceLine> leafAmounts;
+        if (useProjection(ledgerId, range)) {
+            leafAmounts = operatingActivity
+                    ? projection.operatingTrialBalance(ledgerId, range, false)
+                    : projection.trialBalance(ledgerId, range, false);
+        } else {
+            markFallback(ledgerId, range);
+            leafAmounts = readTrialBalance(ledgerId, range, false);
         }
-        BalanceProjectionService.ProjectionStatus status = projection.status(ledgerId, range);
-        if (!status.fresh()) {
-            throw new IllegalStateException("Balance projection is not ready");
-        }
-        BalanceReadMetadata.set("projection", status.projectedAt() == null
-                ? (status.lastEnqueuedAt() == null ? OffsetDateTime.now() : status.lastEnqueuedAt())
-                : status.projectedAt(), lagMs(status));
-        return projection.trialBalance(ledgerId, range, includeParents);
+        Map<UUID, String> keys = leafStandardAccountKeys(ledgerId);
+        return leafAmounts.stream().map(line -> new com.example.accounting.reporting.formula.FormulaAccountAmount(
+                line.accountId(), line.code(), line.name(), keys.get(line.accountId()), line.category(),
+                line.openingDebit(), line.openingCredit(), line.periodDebit(), line.periodCredit(),
+                line.closingDebit(), line.closingCredit())).toList();
     }
 
     @Override
-    public List<ReportingRepository.StatutoryAccountAmount> statutoryAccountAmounts(
-            UUID ledgerId, PeriodRange range, boolean operatingActivity) {
-        if (projection == null) {
-            throw new IllegalStateException("Balance projection is not configured");
+    public Set<UUID> leafAccountsByStandardKeys(UUID ledgerId, Collection<String> standardAccountKeys) {
+        if (standardAccountKeys.isEmpty()) {
+            return Set.of();
         }
-        BalanceProjectionService.ProjectionStatus status = projection.status(ledgerId, range);
-        if (!status.fresh()) {
-            throw new IllegalStateException("Balance projection is not ready");
+        return Set.copyOf(jdbc.queryForList("""
+                select account.id from ledger_account account
+                where account.ledger_id = ?
+                  and account.standard_account_key = any(?)
+                  and not exists (
+                      select 1 from ledger_account child
+                      where child.ledger_id = account.ledger_id and child.parent_id = account.id)
+                """, UUID.class, ledgerId, standardAccountKeys.toArray(String[]::new)));
+    }
+
+    @Override
+    public Map<UUID, Set<UUID>> leafDescendants(UUID ledgerId, Collection<UUID> accountIds) {
+        if (accountIds.isEmpty()) {
+            return Map.of();
         }
-        BalanceReadMetadata.set("projection", status.projectedAt() == null
-                ? (status.lastEnqueuedAt() == null ? OffsetDateTime.now() : status.lastEnqueuedAt())
-                : status.projectedAt(), lagMs(status));
-        List<ReportResponses.TrialBalanceLine> leafAmounts = operatingActivity
-                ? projection.operatingTrialBalance(ledgerId, range, false)
-                : projection.trialBalance(ledgerId, range, false);
-        Map<UUID, String> keys = jdbc.query("""
+        Map<UUID, Set<UUID>> result = new java.util.LinkedHashMap<>();
+        jdbc.query("""
+                with recursive scope as (
+                    select id ancestor_id, id account_id, parent_id
+                    from ledger_account where ledger_id = ? and id = any(?)
+                    union all
+                    select scope.ancestor_id, child.id, child.parent_id
+                    from ledger_account child
+                    join scope on child.parent_id = scope.account_id
+                    where child.ledger_id = ?
+                )
+                select scope.ancestor_id, scope.account_id
+                from scope
+                where not exists (
+                    select 1 from ledger_account descendant
+                    where descendant.ledger_id = ? and descendant.parent_id = scope.account_id)
+                """, rs -> {
+            while (rs.next()) {
+                UUID ancestor = rs.getObject("ancestor_id", UUID.class);
+                result.computeIfAbsent(ancestor, ignored -> new java.util.HashSet<>())
+                        .add(rs.getObject("account_id", UUID.class));
+            }
+            return null;
+        }, ledgerId, accountIds.toArray(UUID[]::new), ledgerId, ledgerId);
+        return result;
+    }
+
+    private Map<UUID, String> leafStandardAccountKeys(UUID ledgerId) {
+        return jdbc.query("""
                 select id, standard_account_key
                 from ledger_account account
                 where ledger_id = ? and not exists (
@@ -200,10 +236,6 @@ public class JdbcReportingRepository implements ReportingRepository {
             }
             return result;
         }, ledgerId);
-        return leafAmounts.stream().map(line -> new ReportingRepository.StatutoryAccountAmount(
-                line.accountId(), line.code(), keys.get(line.accountId()),
-                line.openingDebit(), line.openingCredit(), line.periodDebit(), line.periodCredit(),
-                line.closingDebit(), line.closingCredit())).toList();
     }
 
     @Override
@@ -489,11 +521,25 @@ public class JdbcReportingRepository implements ReportingRepository {
 
     @Override
     public Set<String> formulaCategories(UUID ledgerId, String formulaCode, String field) {
+        // Canonical schema-1 snapshots store category lists in rules keyed by side;
+        // pre-editor legacy snapshots store them at the field name directly.
+        String side = switch (field) {
+            case "debitCategories", "expenseCategories" -> "DEBIT";
+            case "creditCategories", "revenueCategories" -> "CREDIT";
+            default -> throw new IllegalArgumentException("Unknown formula category field " + field);
+        };
         return Set.copyOf(jdbc.queryForList("""
-                select jsonb_array_elements_text(formula_json -> cast(? as text))
+                select jsonb_array_elements_text(
+                    case when jsonb_typeof(formula_json -> 'rules') = 'array'
+                           and jsonb_array_length(formula_json -> 'rules') > 0
+                         then (select coalesce(jsonb_agg(elem), '[]'::jsonb)
+                               from jsonb_array_elements(formula_json -> 'rules') rule
+                               cross join jsonb_array_elements(rule -> 'categories') elem
+                               where rule ->> 'side' = ?)
+                         else formula_json -> cast(? as text) end)
                 from report_formula_snapshot
                 where ledger_id = ? and code = ?
-                """, String.class, field, ledgerId, formulaCode));
+                """, String.class, side, field, ledgerId, formulaCode));
     }
 
     @Override

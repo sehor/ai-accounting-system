@@ -3,7 +3,10 @@ package com.example.accounting.reporting.internal.port;
 import com.example.accounting.reporting.ReportResponses;
 import com.example.accounting.reporting.PeriodRange;
 import com.example.accounting.reporting.DimensionLedgerRequests;
+import com.example.accounting.reporting.formula.FormulaAccountAmount;
+import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.math.BigDecimal;
@@ -25,12 +28,22 @@ public interface ReportingRepository {
      */
     boolean statutoryProjectionReady(UUID ledgerId, PeriodRange range);
 
-    List<ReportResponses.TrialBalanceLine> statutoryTrialBalance(
-            UUID ledgerId, PeriodRange range, boolean includeParents);
-
-    /** Leaf-only statutory source joined to the ledger's stable standard-account mapping. */
-    List<StatutoryAccountAmount> statutoryAccountAmounts(
+    /**
+     * Unified formula amount source: leaf accounts only (including disabled
+     * accounts that still carry historical amounts), with account identity,
+     * standard key, category and opening/period/closing debit and credit.
+     */
+    List<FormulaAccountAmount> formulaAccountAmounts(
             UUID ledgerId, PeriodRange range, boolean operatingActivity);
+
+    /** Leaf account ids carrying any of the given standard account keys. */
+    Set<UUID> leafAccountsByStandardKeys(UUID ledgerId, Collection<String> standardAccountKeys);
+
+    /**
+     * For each requested account id, all of its leaf descendants (the account
+     * itself when it is already a leaf). One parameterized recursive query.
+     */
+    Map<UUID, Set<UUID>> leafDescendants(UUID ledgerId, Collection<UUID> accountIds);
 
     List<ReportResponses.LedgerLine> ledgerLines(UUID ledgerId, String periodCode);
 
@@ -93,13 +106,6 @@ public interface ReportingRepository {
         public DimensionBalanceRow {
             dimensions = dimensions == null ? List.of() : List.copyOf(dimensions);
         }
-    }
-
-    record StatutoryAccountAmount(
-            UUID accountId, String accountCode, String standardAccountKey,
-            BigDecimal openingDebit, BigDecimal openingCredit,
-            BigDecimal periodDebit, BigDecimal periodCredit,
-            BigDecimal closingDebit, BigDecimal closingCredit) {
     }
 
     record DimensionTypeInfo(UUID id, String code, String name) {

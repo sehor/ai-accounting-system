@@ -1,5 +1,6 @@
 package com.example.accounting.ledger;
 
+import com.example.accounting.ledger.formula.StandardFormulaValidator;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.IOException;
 import java.io.InputStream;
@@ -32,9 +33,11 @@ public class AccountingStandardCatalog {
 
     public AccountingStandardCatalog(ObjectMapper objectMapper) {
         Map<String, AccountingStandard.Package> loaded = new LinkedHashMap<>();
+        StandardFormulaValidator formulaValidator = new StandardFormulaValidator();
         for (String resource : RESOURCES) {
             AccountingStandard.Package standard = read(objectMapper, resource);
             validate(standard);
+            formulaValidator.validateAll(standard);
             if (loaded.put(standard.key(), standard) != null) {
                 throw new IllegalStateException("duplicate accounting standard " + standard.key());
             }

@@ -13,8 +13,10 @@ import com.example.accounting.ledger.LedgerAccessService;
 import com.example.accounting.ledger.LedgerRequests;
 import com.example.accounting.ledger.LedgerRole;
 import com.example.accounting.ledger.PeriodCloseGuard;
+import com.example.accounting.ledger.formula.StandardFormulaConverter;
 import com.example.accounting.ledger.internal.persistence.AccountManagementRepository;
 import com.example.accounting.ledger.internal.port.LedgerRepository;
+import com.example.accounting.ledger.internal.port.ReportFormulaRepository;
 import com.example.accounting.shared.web.ApiProblemException;
 import com.example.accounting.shared.balance.BalanceProjectionService;
 import com.example.accounting.shared.accounting.DimensionCombinationStore;
@@ -35,11 +37,14 @@ class DefaultLedgerServiceAccountSearchTest {
     private final PlatformAdminPolicy platformAdmin = mock(PlatformAdminPolicy.class);
     private final BalanceProjectionService balanceProjection = mock(BalanceProjectionService.class);
     private final DimensionCombinationStore dimensionCombinations = mock(DimensionCombinationStore.class);
+    private final ReportFormulaRepository reportFormulas = mock(ReportFormulaRepository.class);
     @SuppressWarnings("unchecked")
     private final ObjectProvider<PeriodCloseGuard> closeGuards = mock(ObjectProvider.class);
     private final DefaultLedgerService service = new DefaultLedgerService(
             ledgers, accounts, ledgerAccess, identityService, standards, closeGuards,
-            localSuperAgent, platformAdmin, balanceProjection, dimensionCombinations);
+            localSuperAgent, platformAdmin, balanceProjection, dimensionCombinations,
+            new com.example.accounting.shared.audit.AuditSnapshotSerializer(),
+            reportFormulas, new StandardFormulaConverter());
 
     private final UUID actorId = UUID.randomUUID();
     private final UUID ledgerId = UUID.randomUUID();

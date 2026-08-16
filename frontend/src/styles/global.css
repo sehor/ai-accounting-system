@@ -421,3 +421,15 @@ a { color: #1677a7; }
   .period-selector { width: 100%; }
   .period-selector .ant-select { flex: 1; }
 }
+
+/* Report formula editor: desktop left editor / right preview; stacked on narrow screens. */
+.formula-preview-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 320px) minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+@media (max-width: 1024px) {
+  .formula-preview-layout { grid-template-columns: minmax(0, 1fr); }
+}
+.formula-preview-layout .statutory-statement-table { min-width: 560px; }
