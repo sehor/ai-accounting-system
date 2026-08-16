@@ -238,6 +238,128 @@ describe('VoucherListPage', () => {
     expect(closeTab).toHaveBeenCalledWith('voucher-voucher-1', { discardChanges: true })
   })
 
+  it('permanently deletes selected vouchers from open accounting periods after a severe warning', async () => {
+    const vouchers = [
+      { id: 'voucher-open-1', ledgerId: 'ledger-1', periodId: 'period-open', voucherDate: '2026-06-11', voucherType: '记', voucherNumber: '1', summary: '开放期间凭证一', status: 'DRAFT', approvalRequired: false, version: 0, lines: [] },
+      { id: 'voucher-open-2', ledgerId: 'ledger-1', periodId: 'period-open', voucherDate: '2026-06-12', voucherType: '记', voucherNumber: '2', summary: '开放期间凭证二', status: 'DRAFT', approvalRequired: false, version: 0, lines: [] },
+    ]
+    vi.mocked(apiFetch).mockImplementation((path) => Promise.resolve(path.endsWith('/periods') ? [{
+      id: 'period-open', ledgerId: 'ledger-1', periodCode: '2026-06', startDate: '2026-06-01',
+      endDate: '2026-06-30', status: 'OPEN', hasVouchers: true,
+    }] : []))
+    vi.mocked(apiFetchWithHeaders).mockResolvedValue({ data: vouchers, headers: new Headers({ 'X-Total-Count': '2' }) })
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    const closeTab = vi.fn()
+    vouchers.forEach((voucher) => queryClient.setQueryData(['voucher', 'ledger-1', voucher.id], voucher))
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <WorkspaceTabsProvider value={{ closeTab }}><App>
+          <MemoryRouter initialEntries={['/ledgers/ledger-1/vouchers']}>
+            <Routes><Route path="/ledgers/:ledgerId/vouchers" element={<VoucherListPage />} /></Routes>
+          </MemoryRouter>
+        </App></WorkspaceTabsProvider>
+      </QueryClientProvider>,
+    )
+
+    await screen.findByText('开放期间凭证一')
+    fireEvent.click(screen.getByRole('checkbox', { name: '选择凭证 记-1' }))
+    fireEvent.click(screen.getByRole('checkbox', { name: '选择凭证 记-2' }))
+    fireEvent.click(screen.getByRole('button', { name: '批量删除' }))
+    const confirmDialog = await screen.findByRole('dialog', { name: '严重警告：确认批量删除？' })
+    expect(within(confirmDialog).getByText('此操作将永久删除 2 张凭证，且不可撤销。')).toBeInTheDocument()
+    expect(within(confirmDialog).getByText(/仅所属会计期间为 OPEN 的凭证可以删除/)).toBeInTheDocument()
+    fireEvent.click(within(confirmDialog).getByRole('button', { name: /永久删除/ }))
+
+    await waitFor(() => expect(apiFetch).toHaveBeenCalledWith(
+      '/ledgers/ledger-1/vouchers/voucher-open-1',
+      { localUserId: 'user-1', localUserName: 'admin' },
+      { method: 'DELETE' },
+    ))
+    expect(apiFetch).toHaveBeenCalledWith(
+      '/ledgers/ledger-1/vouchers/voucher-open-2',
+      { localUserId: 'user-1', localUserName: 'admin' },
+      { method: 'DELETE' },
+    )
+    await waitFor(() => {
+      expect(queryClient.getQueryData(['voucher', 'ledger-1', 'voucher-open-1'])).toBeUndefined()
+      expect(queryClient.getQueryData(['voucher', 'ledger-1', 'voucher-open-2'])).toBeUndefined()
+    })
+    expect(closeTab).toHaveBeenCalledWith('voucher-voucher-open-1', { discardChanges: true })
+    expect(closeTab).toHaveBeenCalledWith('voucher-voucher-open-2', { discardChanges: true })
+  })
+
+  it('skips closed-period vouchers when a mixed selection is batch deleted', async () => {
+    const vouchers = [
+      { id: 'voucher-open', ledgerId: 'ledger-1', periodId: 'period-open', voucherDate: '2026-06-11', voucherType: '记', voucherNumber: '1', summary: '开放期间凭证', status: 'DRAFT', approvalRequired: false, version: 0, lines: [] },
+      { id: 'voucher-closed', ledgerId: 'ledger-1', periodId: 'period-closed', voucherDate: '2026-05-11', voucherType: '记', voucherNumber: '2', summary: '已结账期间凭证', status: 'DRAFT', approvalRequired: false, version: 0, lines: [] },
+    ]
+    vi.mocked(apiFetch).mockImplementation((path) => Promise.resolve(path.endsWith('/periods') ? [
+      { id: 'period-open', ledgerId: 'ledger-1', periodCode: '2026-06', startDate: '2026-06-01', endDate: '2026-06-30', status: 'OPEN', hasVouchers: true },
+      { id: 'period-closed', ledgerId: 'ledger-1', periodCode: '2026-05', startDate: '2026-05-01', endDate: '2026-05-31', status: 'CLOSED', hasVouchers: true },
+    ] : []))
+    vi.mocked(apiFetchWithHeaders).mockResolvedValue({ data: vouchers, headers: new Headers({ 'X-Total-Count': '2' }) })
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <App>
+          <MemoryRouter initialEntries={['/ledgers/ledger-1/vouchers?periodFrom=2026-05&periodTo=2026-06']}>
+            <Routes><Route path="/ledgers/:ledgerId/vouchers" element={<VoucherListPage />} /></Routes>
+          </MemoryRouter>
+        </App>
+      </QueryClientProvider>,
+    )
+
+    await screen.findByText('开放期间凭证')
+    fireEvent.click(screen.getByRole('checkbox', { name: '选择凭证 记-1' }))
+    fireEvent.click(screen.getByRole('checkbox', { name: '选择凭证 记-2' }))
+    fireEvent.click(screen.getByRole('button', { name: '批量删除' }))
+    const confirmDialog = await screen.findByRole('dialog', { name: '严重警告：确认批量删除？' })
+    expect(within(confirmDialog).getByText('此操作将永久删除 1 张凭证，且不可撤销。')).toBeInTheDocument()
+    expect(within(confirmDialog).getByText(/已结账或其他非 OPEN 期间的凭证不会被删除/)).toBeInTheDocument()
+    fireEvent.click(within(confirmDialog).getByRole('button', { name: /永久删除/ }))
+
+    await waitFor(() => expect(apiFetch).toHaveBeenCalledWith(
+      '/ledgers/ledger-1/vouchers/voucher-open',
+      { localUserId: 'user-1', localUserName: 'admin' },
+      { method: 'DELETE' },
+    ))
+    expect(apiFetch).not.toHaveBeenCalledWith(
+      '/ledgers/ledger-1/vouchers/voucher-closed',
+      { localUserId: 'user-1', localUserName: 'admin' },
+      { method: 'DELETE' },
+    )
+  })
+
+  it('does not offer batch deletion when the selection belongs only to closed accounting periods', async () => {
+    const voucher = {
+      id: 'voucher-closed', ledgerId: 'ledger-1', periodId: 'period-closed', voucherDate: '2026-06-11',
+      voucherType: '记', voucherNumber: '1', summary: '已结账期间凭证', status: 'DRAFT', approvalRequired: false, version: 0, lines: [],
+    }
+    vi.mocked(apiFetch).mockImplementation((path) => Promise.resolve(path.endsWith('/periods') ? [{
+      id: 'period-closed', ledgerId: 'ledger-1', periodCode: '2026-06', startDate: '2026-06-01',
+      endDate: '2026-06-30', status: 'CLOSED', hasVouchers: true,
+    }] : []))
+    vi.mocked(apiFetchWithHeaders).mockResolvedValue({ data: [voucher], headers: new Headers({ 'X-Total-Count': '1' }) })
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <App>
+          <MemoryRouter initialEntries={['/ledgers/ledger-1/vouchers']}>
+            <Routes><Route path="/ledgers/:ledgerId/vouchers" element={<VoucherListPage />} /></Routes>
+          </MemoryRouter>
+        </App>
+      </QueryClientProvider>,
+    )
+
+    await screen.findByText('已结账期间凭证')
+    fireEvent.click(screen.getByRole('checkbox', { name: '选择凭证 记-1' }))
+    expect(screen.queryByRole('button', { name: '批量删除' })).not.toBeInTheDocument()
+    expect(apiFetch.mock.calls.some(([, , options]) => options?.method === 'DELETE')).toBe(false)
+  })
+
   it('shows voucher line subjects and supports bulk posting', async () => {
     const voucher = {
       id: 'voucher-1', ledgerId: 'ledger-1', periodId: 'period-1', voucherDate: '2026-06-11',

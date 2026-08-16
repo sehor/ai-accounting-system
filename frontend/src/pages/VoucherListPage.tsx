@@ -47,7 +47,7 @@ export function VoucherListPage() {
   const endDate = search.get('endDate') || ''
   const keyword = search.get('keyword') || ''
   const [selectedKeys, setSelectedKeys] = useState<string[]>([])
-  const [bulkAction, setBulkAction] = useState<'approve' | null>(null)
+  const [bulkAction, setBulkAction] = useState<'approve' | 'delete' | null>(null)
   const [bulkComment, setBulkComment] = useState('')
   const [exportOpen, setExportOpen] = useState(false)
   const [mergeEntries, setMergeEntries] = useState(false)
@@ -94,30 +94,42 @@ export function VoucherListPage() {
   const reviewable = selected.filter((voucher) => voucher.status === 'SUBMITTED')
   const postable = selected.filter((voucher) => voucher.status === 'APPROVED'
     || (voucher.status === 'VALIDATED' && !voucher.approvalRequired))
+  const deletable = selected.filter((voucher) => periods.data?.some((period) => period.id === voucher.periodId && period.status === 'OPEN'))
 
   const batch = useMutation({
     mutationFn: async ({ action, selectedVouchers, comment }: {
-      action: 'approve' | 'post'; selectedVouchers: Voucher[]; comment?: string
+      action: 'approve' | 'post' | 'delete'; selectedVouchers: Voucher[]; comment?: string
     }) => {
       const results = await Promise.allSettled(selectedVouchers.map((voucher) => action === 'approve'
         ? apiData(openApiClient.POST('/v1/ledgers/{ledgerId}/vouchers/{voucherId}:approve', {
             headers: apiHeaders(session!), params: { path: { ledgerId, voucherId: voucher.id } }, body: { comment: comment! },
           }))
-        : apiData(openApiClient.POST('/v1/ledgers/{ledgerId}/vouchers/{voucherId}:post', {
+        : action === 'post'
+          ? apiData(openApiClient.POST('/v1/ledgers/{ledgerId}/vouchers/{voucherId}:post', {
+            headers: apiHeaders(session!), params: { path: { ledgerId, voucherId: voucher.id } },
+          }))
+          : apiData(openApiClient.DELETE('/v1/ledgers/{ledgerId}/vouchers/{voucherId}', {
             headers: apiHeaders(session!), params: { path: { ledgerId, voucherId: voucher.id } },
           }))))
       return {
         succeeded: results.filter((result) => result.status === 'fulfilled').length,
         failed: results.filter((result) => result.status === 'rejected').length,
+        succeededVouchers: selectedVouchers.filter((_, index) => results[index].status === 'fulfilled'),
       }
     },
-    onSuccess: ({ succeeded, failed }) => {
+    onSuccess: ({ succeeded, failed, succeededVouchers }, { action }) => {
       setSelectedKeys([])
       setBulkAction(null)
       setBulkComment('')
+      if (action === 'delete') {
+        succeededVouchers.forEach((voucher) => {
+          client.removeQueries({ queryKey: ['voucher', ledgerId, voucher.id], exact: true })
+          closeTab(`voucher-${voucher.id}`, { discardChanges: true })
+        })
+      }
       void client.invalidateQueries({ queryKey: ['vouchers', ledgerId] })
-      if (failed) message.warning(`已完成 ${succeeded} 张，${failed} 张失败`)
-      else message.success(`已完成 ${succeeded} 张凭证`)
+      if (failed) message.warning(`已${action === 'delete' ? '删除' : '完成'} ${succeeded} 张，${failed} 张失败`)
+      else message.success(`已${action === 'delete' ? '删除' : '完成'} ${succeeded} 张凭证`)
     },
   })
   const importKingdee = useMutation({
@@ -244,6 +256,7 @@ export function VoucherListPage() {
           disabled={!effectiveStartDate || !effectiveEndDate} onClick={() => setExportOpen(true)}>导出金蝶凭证</Button>
         {reviewable.length > 0 && <Button onClick={() => setBulkAction('approve')}>批量审核</Button>}
         {postable.length > 0 && <Button loading={batch.isPending} onClick={() => batch.mutate({ action: 'post', selectedVouchers: postable })}>批量记账</Button>}
+        {deletable.length > 0 && <Button danger loading={batch.isPending} onClick={() => setBulkAction('delete')}>批量删除</Button>}
         <Button type="primary" icon={<PlusOutlined />} onClick={() => navigate(`/ledgers/${ledgerId}/vouchers/new`)}>新建凭证</Button>
       </Space>
     </div>
@@ -293,6 +306,16 @@ export function VoucherListPage() {
       cancelText="取消" confirmLoading={batch.isPending} okButtonProps={{ disabled: !bulkComment.trim() }}
       onCancel={() => setBulkAction(null)} onOk={() => batch.mutate({ action: 'approve', selectedVouchers: reviewable, comment: bulkComment.trim() })}>
       <Input.TextArea rows={3} value={bulkComment} onChange={(event) => setBulkComment(event.target.value)} placeholder="请输入审核意见（必填）" />
+    </Modal>
+    <Modal open={bulkAction === 'delete'} title="严重警告：确认批量删除？" okText="永久删除"
+      cancelText="取消" confirmLoading={batch.isPending} okButtonProps={{ danger: true }}
+      onCancel={() => setBulkAction(null)} onOk={() => batch.mutate({ action: 'delete', selectedVouchers: deletable })}>
+      <Typography.Paragraph type="danger" strong>
+        此操作将永久删除 {deletable.length} 张凭证，且不可撤销。
+      </Typography.Paragraph>
+      <Typography.Paragraph>
+        仅所属会计期间为 OPEN 的凭证可以删除；已结账或其他非 OPEN 期间的凭证不会被删除。
+      </Typography.Paragraph>
     </Modal>
     <Modal open={exportOpen} title="导出金蝶凭证" okText="导出" cancelText="取消"
       confirmLoading={exportKingdee.isPending} onCancel={() => setExportOpen(false)} onOk={() => exportKingdee.mutate(mergeEntries)}>
