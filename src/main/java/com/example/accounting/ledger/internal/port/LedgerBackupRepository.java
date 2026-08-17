@@ -14,7 +14,7 @@ public interface LedgerBackupRepository {
 
     void createLedger(UUID ledgerId, UUID actorId, String name, String description, String standardCode,
                       String standardVersion, String baseCurrency, LocalDate startDate,
-                      boolean approvalEnabled, String separator, int level2Width,
+                      boolean approvalEnabled, boolean cashFlowCheckEnabled, String separator, int level2Width,
                       int level3Width, int level4Width);
 
     void createOwner(UUID ledgerId, UUID actorId);

@@ -62,9 +62,10 @@ public class ReportController {
                                                         HttpServletResponse response,
                                                         @PathVariable UUID ledgerId,
                                                         @PathVariable String reportType,
-                                                        @RequestParam String periodCode) {
+                                                        @RequestParam String periodCode,
+                                                        @RequestParam(required = false) String cashFlowSource) {
         return respond(response, () -> reportingService.statutoryStatement(
-                user(request), ledgerId, reportType, periodCode));
+                user(request), ledgerId, reportType, periodCode, cashFlowSource));
     }
 
     @GetMapping("/general-ledger")

@@ -27,7 +27,9 @@ public final class StatutoryReportResponses {
             List<Check> checks,
             @Schema(nullable = true) String formulaCode,
             @Schema(nullable = true) Integer formulaVersion,
-            DataQuality dataQuality) {
+            DataQuality dataQuality,
+            @Schema(nullable = true) String cashFlowSource,
+            @Schema(nullable = true) String calculationVersion) {
 
         /** Compatibility constructor retained for pre-formula-editor call sites. */
         public Statement(String reportType, String templateCode, String standardCode,
@@ -35,7 +37,7 @@ public final class StatutoryReportResponses {
                          String comparativeColumn, List<Group> groups, List<Check> checks) {
             this(reportType, templateCode, standardCode, standardVersion, periodCode,
                     primaryColumn, comparativeColumn, groups, checks, null, null,
-                    DataQuality.complete());
+                    DataQuality.complete(), null, null);
         }
 
         /** Compatibility constructor for call sites that add formula metadata without quality data. */
@@ -45,7 +47,17 @@ public final class StatutoryReportResponses {
                          String formulaCode, Integer formulaVersion) {
             this(reportType, templateCode, standardCode, standardVersion, periodCode,
                     primaryColumn, comparativeColumn, groups, checks, formulaCode,
-                    formulaVersion, DataQuality.complete());
+                    formulaVersion, DataQuality.complete(), null, null);
+        }
+
+        /** Compatibility constructor for existing statutory formula projections. */
+        public Statement(String reportType, String templateCode, String standardCode,
+                         String standardVersion, String periodCode, String primaryColumn,
+                         String comparativeColumn, List<Group> groups, List<Check> checks,
+                         String formulaCode, Integer formulaVersion, DataQuality dataQuality) {
+            this(reportType, templateCode, standardCode, standardVersion, periodCode,
+                    primaryColumn, comparativeColumn, groups, checks, formulaCode,
+                    formulaVersion, dataQuality, null, null);
         }
     }
 
@@ -92,6 +104,10 @@ public final class StatutoryReportResponses {
 
         public static DataQuality complete() {
             return new DataQuality("COMPLETE", 0, 0, 0, 0, List.of());
+        }
+
+        public static DataQuality estimated() {
+            return new DataQuality("ESTIMATED", 0, 0, 0, 0, List.of());
         }
     }
 

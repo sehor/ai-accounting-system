@@ -918,6 +918,10 @@ describe('cash-flow voucher classification', () => {
   const installCashFlowBackend = (options: { formulaError?: boolean; itemsError?: boolean; postError?: unknown } = {}) => {
     const postedBodies: Record<string, unknown>[] = []
     vi.mocked(apiFetch).mockImplementation((path, _session, init) => {
+      if (path === '/ledgers/ledger-1') return Promise.resolve({
+        id: 'ledger-1', name: '测试账套', description: '', accountingStandardCode: 'SME', accountingStandardVersion: '2011-17',
+        baseCurrency: 'CNY', startDate: '2026-01-01', approvalEnabled: false, cashFlowCheckEnabled: true, status: 'ACTIVE',
+      })
       if (path.endsWith('/periods')) return Promise.resolve([{
         id: 'period-open', ledgerId: 'ledger-1', periodCode: '2026-08', startDate: '2026-08-01', endDate: '2026-08-31', status: 'OPEN', hasVouchers: true,
       }])

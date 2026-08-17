@@ -56,11 +56,16 @@ public final class LedgerRequests {
     public record AddMember(@NotNull UUID userId, @NotNull LedgerRole role) {
     }
 
-    public record Rename(@NotBlank @Size(max = 200) String name,
-                         @Size(max = 2000) String description) {
+    public record Rename(@Size(max = 200) String name,
+                         @Size(max = 2000) String description,
+                         Boolean cashFlowCheckEnabled) {
 
         public Rename(String name) {
-            this(name, null);
+            this(name, null, null);
+        }
+
+        public Rename(String name, String description) {
+            this(name, description, null);
         }
     }
 

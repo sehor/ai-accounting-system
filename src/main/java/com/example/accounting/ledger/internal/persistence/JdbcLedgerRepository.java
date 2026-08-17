@@ -105,7 +105,7 @@ public class JdbcLedgerRepository implements LedgerRepository {
     public List<LedgerResponses.Ledger> list(UUID actorId) {
         return jdbc.query("""
                 select l.id, l.name, l.description, l.accounting_standard_code, l.accounting_standard_version,
-                    l.base_currency, l.start_date, l.approval_enabled, l.status
+                    l.base_currency, l.start_date, l.approval_enabled, l.enable_cash_flow_check, l.status
                 from ledger l
                 join ledger_membership m on m.ledger_id = l.id
                 join app_user u on u.id = m.user_id
@@ -119,7 +119,7 @@ public class JdbcLedgerRepository implements LedgerRepository {
     public List<LedgerResponses.Ledger> listAllActive() {
         return jdbc.query("""
                 select id, name, description, accounting_standard_code, accounting_standard_version,
-                    base_currency, start_date, approval_enabled, status
+                    base_currency, start_date, approval_enabled, enable_cash_flow_check, status
                 from ledger
                 where status = 'ACTIVE' and deleted_at is null
                 order by name, id
@@ -136,16 +136,17 @@ public class JdbcLedgerRepository implements LedgerRepository {
     public Optional<LedgerResponses.Ledger> findLedger(UUID ledgerId) {
         return Optional.ofNullable(jdbc.query("""
                 select id, name, description, accounting_standard_code, accounting_standard_version,
-                    base_currency, start_date, approval_enabled, status
+                    base_currency, start_date, approval_enabled, enable_cash_flow_check, status
                 from ledger where id = ? and deleted_at is null
                 """, rs -> rs.next() ? mapLedger(rs) : null, ledgerId));
     }
 
     @Override
-    public void updateLedger(UUID ledgerId, String name, String description, UUID actorId) {
-        jdbc.update("update ledger set name = ?, description = coalesce(?, description), updated_at = now(), "
-                + "updated_by = ?, version = version + 1 where id = ? and deleted_at is null",
-                name, description, actorId, ledgerId);
+    public void updateLedger(UUID ledgerId, String name, String description, Boolean cashFlowCheckEnabled, UUID actorId) {
+        jdbc.update("update ledger set name = ?, description = coalesce(?, description), "
+                        + "enable_cash_flow_check = coalesce(?, enable_cash_flow_check), updated_at = now(), "
+                        + "updated_by = ?, version = version + 1 where id = ? and deleted_at is null",
+                name, description, cashFlowCheckEnabled, actorId, ledgerId);
     }
 
     @Override
@@ -511,7 +512,7 @@ public class JdbcLedgerRepository implements LedgerRepository {
                 rs.getString("description"), rs.getString("accounting_standard_code"),
                 rs.getString("accounting_standard_version"),
                 rs.getString("base_currency"), rs.getObject("start_date", LocalDate.class),
-                rs.getBoolean("approval_enabled"), rs.getString("status"));
+                rs.getBoolean("approval_enabled"), rs.getBoolean("enable_cash_flow_check"), rs.getString("status"));
     }
 
     private LedgerResponses.Account mapAccount(java.sql.ResultSet rs) throws java.sql.SQLException {

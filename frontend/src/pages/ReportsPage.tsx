@@ -1,4 +1,4 @@
-import { Alert, Button, Card, Empty, Space, Spin, Switch, Table, Tag, Typography } from 'antd'
+import { Alert, Button, Card, Empty, Segmented, Space, Spin, Switch, Table, Tag, Typography } from 'antd'
 import type { TableProps } from 'antd'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate, useParams } from 'react-router-dom'
@@ -84,9 +84,12 @@ function StatutoryStatementView({ statement }: { statement: StatutoryStatement }
 }
 
 function CashFlowStatementView({ statement, ledgerId }: { statement: StatutoryStatement; ledgerId: string }) {
+  const formulaDerived = statement.cashFlowSource === 'FORMULA' || statement.calculationVersion === 'DERIVED_V1'
   return <Space direction="vertical" size={12} style={{ width: '100%' }}>
     <CashFlowChecksAlert checks={statement.checks} />
-    <CashFlowQualityAlert dataQuality={statement.dataQuality} ledgerId={ledgerId} />
+    {formulaDerived
+      ? <Alert type="info" showIcon message="公式推导（估算）" description="本报表按 DERIVED_V1 规则从科目余额与发生额推导，未分类凭证不会影响该估算结果。" />
+      : <CashFlowQualityAlert dataQuality={statement.dataQuality} ledgerId={ledgerId} />}
     <Card className="financial-grid-card">
       <CashFlowStatementTable statement={statement} />
     </Card>
@@ -99,6 +102,7 @@ export function ReportsPage() {
   const navigate = useNavigate()
   const [search, setSearch] = useWorkspaceSearchParams()
   const includeParents = search.get('includeParents') === 'true'
+  const cashFlowSourceParam = search.get('cashFlowSource')
   const [balanceSource, setBalanceSource] = useState<string | null>(null)
   const cashFlow = reportType === 'cash-flow'
   const statement = reportType === 'balance-sheet' || reportType === 'income-statement' || cashFlow
@@ -107,6 +111,9 @@ export function ReportsPage() {
     queryFn: async () => (await apiResponse(openApiClient.GET('/v1/ledgers/{ledgerId}', { params: { path: { ledgerId } }, headers: apiHeaders(session!) }))).data,
     enabled: Boolean(session && ledgerId),
   })
+  const cashFlowSource = cashFlowSourceParam === 'FORMULA' ? 'FORMULA'
+    : cashFlowSourceParam === 'VOUCHER' ? 'VOUCHER'
+      : ledger.data?.cashFlowCheckEnabled === false ? 'FORMULA' : 'VOUCHER'
   // The cash-flow report has no legacy fallback: always call the statutory endpoint
   // and surface the backend's standard/currency errors for unsupported ledgers.
   const statutory = ledger.isSuccess && statement && (ledger.data?.accountingStandardCode?.toUpperCase() === 'SME' || cashFlow)
@@ -114,12 +121,12 @@ export function ReportsPage() {
   const { periods: rangePeriods, periodFrom, periodTo, setPeriodRange } = usePeriodRangeFilter(ledgerId, legacyReport)
   const { periods: singlePeriods, periodCode, setPeriodCode } = usePeriodFilter(ledgerId, statutory)
   const query = useQuery({
-    queryKey: ['report', ledgerId, reportType, statutory, periodCode, periodFrom, periodTo, includeParents],
+    queryKey: ['report', ledgerId, reportType, statutory, periodCode, periodFrom, periodTo, includeParents, cashFlow ? cashFlowSource : undefined],
     queryFn: async () => {
       const options = { headers: apiHeaders(session!) }
       const result = statutory
         ? await apiResponse(openApiClient.GET('/v1/ledgers/{ledgerId}/reports/statutory/{reportType}', {
-            ...options, params: { path: { ledgerId, reportType }, query: { periodCode: periodCode! } },
+            ...options, params: { path: { ledgerId, reportType }, query: cashFlow ? { periodCode: periodCode!, cashFlowSource: cashFlowSourceParam === null ? undefined : cashFlowSource } : { periodCode: periodCode! } },
           }))
         : reportType === 'trial-balance'
           ? await apiResponse(openApiClient.GET('/v1/ledgers/{ledgerId}/reports/trial-balance', {
@@ -170,13 +177,19 @@ export function ReportsPage() {
   const statutoryPeriodsError = singlePeriods.error instanceof ApiError ? singlePeriods.error.message : undefined
   const noStatutoryPeriods = statutory && singlePeriods.isSuccess && (singlePeriods.data?.length || 0) === 0
   const statutoryLoading = statutory && (singlePeriods.isLoading || query.isLoading)
+  const setCashFlowSource = (next: string | number) => {
+    const updated = new URLSearchParams(search)
+    updated.set('cashFlowSource', String(next))
+    setSearch(updated)
+  }
 
   return <section className="financial-page" aria-labelledby="report-title">
     <div className="financial-toolbar">
       <div>
         <Typography.Title id="report-title" level={1}>{reportNames[reportType] || '报表'}</Typography.Title>
         {statutory && <Typography.Text type="secondary">小企业会计准则 · {ledger.data?.baseCurrency || 'CNY'}</Typography.Text>}
-      {statutoryData?.formulaVersion && <Tag color="green">公式版本 v{statutoryData.formulaVersion}</Tag>}
+      {cashFlow && statutoryData?.calculationVersion === 'DERIVED_V1' && <Tag color="blue">公式推导 · 估算</Tag>}
+      {statutoryData?.formulaVersion && statutoryData.cashFlowSource !== 'FORMULA' && <Tag color="green">公式版本 v{statutoryData.formulaVersion}</Tag>}
       {(query.data as Statement | undefined)?.formulaVersion && !statutoryData
         && <Tag color="green">公式版本 v{(query.data as Statement).formulaVersion}</Tag>}
       </div>
@@ -189,6 +202,12 @@ export function ReportsPage() {
           checkedChildren="含父级"
           unCheckedChildren="仅末级"
           onChange={toggleParents}
+        />}
+        {cashFlow && <Segmented
+          aria-label="现金流量表取数方式"
+          value={cashFlowSource}
+          options={[{ label: '凭证分类', value: 'VOUCHER' }, { label: '公式推导（估算）', value: 'FORMULA' }]}
+          onChange={setCashFlowSource}
         />}
         {statutory
           ? <PeriodSelector

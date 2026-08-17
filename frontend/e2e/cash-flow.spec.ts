@@ -32,6 +32,10 @@ test('cash-flow report: navigate, switch period, view quality alert, jump to vou
     method: 'POST',
     data: { name: `CF-E2E ${Date.now()}`, accountingStandardCode: 'SME', accountingStandardVersion: 'v1', baseCurrency: 'CNY', startDate: '2026-01-01', approvalEnabled: false },
   })
+  await json(request, `/ledgers/${ledger.id}`, {
+    method: 'PATCH',
+    data: { name: `CF-E2E ${Date.now()}`, description: '', cashFlowCheckEnabled: true },
+  })
   const accounts = await json<Array<{ id: string; code: string }>>(request, `/ledgers/${ledger.id}/accounts`)
   const periods = await json<Array<{ id: string; periodCode: string }>>(request, `/ledgers/${ledger.id}/periods`)
   const cash = accounts.find((account) => account.code === '1001')
@@ -81,6 +85,13 @@ test('cash-flow report: navigate, switch period, view quality alert, jump to vou
   // 期初 100 + 流入 300 → 期末现金余额 400.00 in both columns.
   await expect(page.getByText('400.00')).toHaveCount(2)
   await expect(page.getByText('数据完整')).toBeVisible()
+
+  // The formula track is a temporary report-view choice: it is URL-addressable and
+  // intentionally replaces voucher-classification quality hints with an estimate note.
+  await page.getByRole('radio', { name: '公式推导（估算）' }).click()
+  await expect(page).toHaveURL(/cashFlowSource=FORMULA/)
+  await expect(page.getByText('公式推导（估算）')).toBeVisible()
+  await expect(page.getByText('存在未分类的现金收支')).not.toBeVisible()
 
   // 2. Switch the accounting period and keep the report rendering.
   const periodSelector = page.locator('div.ant-select', { has: page.locator('input[aria-label="会计期间"]') })
