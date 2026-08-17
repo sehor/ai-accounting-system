@@ -285,31 +285,50 @@ public class DefaultReportingService implements ReportingService {
         BigDecimal monthlyDelta = monthlyClosing.subtract(monthlyOpening);
         BigDecimal primaryResidual = primaryDelta.subtract(derivedNet(ytd));
         BigDecimal monthlyResidual = monthlyDelta.subtract(derivedNet(monthly));
-        List<StatutoryReportResponses.Group> groups = derivedGroups(ytd, monthly, primaryResidual, monthlyResidual,
-                primaryOpening, primaryClosing, monthlyOpening, monthlyClosing);
+        List<StatutoryReportResponses.Group> groups = derivedGroups(ytd, monthly,
+                primaryResidual, monthlyResidual, primaryOpening, primaryClosing,
+                monthlyOpening, monthlyClosing);
         BigDecimal primaryCheck = amount(groups, 20, true).subtract(primaryDelta);
         BigDecimal monthlyCheck = amount(groups, 20, false).subtract(monthlyDelta);
-        return new StatutoryReportResponses.Statement("cash-flow", "DERIVED_V1", "SME", standardVersion,
+        return new StatutoryReportResponses.Statement("cash-flow", definition.templateCode(), "SME", standardVersion,
                 periodCode, "本年累计金额", "本月金额", groups,
                 List.of(new StatutoryReportResponses.Check("cash-net-change", "现金及现金等价物净增加额", 
                         primaryCheck.signum() == 0 && monthlyCheck.signum() == 0, primaryCheck.abs().add(monthlyCheck.abs()))),
                 null, null, StatutoryReportResponses.DataQuality.estimated());
     }
 
-    private List<StatutoryReportResponses.Group> derivedGroups(List<FormulaAccountAmount> ytd, List<FormulaAccountAmount> monthly,
+    private List<StatutoryReportResponses.Group> derivedGroups(
+            List<FormulaAccountAmount> ytd, List<FormulaAccountAmount> monthly,
             BigDecimal ytdResidual, BigDecimal monthlyResidual, BigDecimal ytdOpening, BigDecimal ytdClosing,
             BigDecimal monthlyOpening, BigDecimal monthlyClosing) {
-        List<String> names = List.of("销售商品、提供劳务收到的现金", "收到的其他与经营活动有关的现金", "购买商品、接受劳务支付的现金", "支付给职工以及为职工支付的现金", "支付的各项税费", "支付的其他与经营活动有关的现金", "经营活动产生的现金流量净额", "收回投资收到的现金", "取得投资收益收到的现金", "处置固定资产、无形资产和其他长期资产收回的现金净额", "投资支付的现金", "购建固定资产、无形资产和其他长期资产支付的现金", "投资活动产生的现金流量净额", "吸收投资收到的现金", "取得借款收到的现金", "偿还债务支付的现金", "分配股利、利润或偿付利息支付的现金", "支付的其他与筹资活动有关的现金", "筹资活动产生的现金流量净额", "现金及现金等价物净增加额", "期初现金及现金等价物余额", "期末现金及现金等价物余额");
+        List<String> names = List.of(
+                "销售产成品、商品、提供劳务收到的现金", "收到其他与经营活动有关的现金",
+                "购买原材料、商品、接受劳务支付的现金", "支付的职工薪酬", "支付的税费",
+                "支付其他与经营活动有关的现金", "经营活动产生的现金流量净额",
+                "收回短期投资、长期债券投资和长期股权投资收到的现金", "取得投资收益收到的现金",
+                "处置固定资产、无形资产和其他非流动资产收回的现金净额",
+                "短期投资、长期债券投资和长期股权投资支付的现金",
+                "购建固定资产、无形资产和其他非流动资产支付的现金", "投资活动产生的现金流量净额",
+                "取得借款收到的现金", "吸收投资者投资收到的现金", "偿还借款本金支付的现金",
+                "偿还借款利息支付的现金", "分配利润支付的现金", "筹资活动产生的现金流量净额",
+                "四、现金净增加额", "加：期初现金余额", "五、期末现金余额");
+        Set<Integer> totalLines = Set.of(7, 13, 19, 20, 22);
         List<StatutoryReportResponses.Line> lines = new ArrayList<>();
-        for (int n = 1; n <= 22; n++) {
+        for (int n = 1; n <= ReportFormulaDefinition.CASH_FLOW_LINE_COUNT; n++) {
             BigDecimal p = derivedAmount(n, ytd, ytdResidual, ytdOpening, ytdClosing);
             BigDecimal m = derivedAmount(n, monthly, monthlyResidual, monthlyOpening, monthlyClosing);
-            lines.add(new StatutoryReportResponses.Line("CF" + n, n, names.get(n - 1), 0, n == 7 || n == 13 || n == 19 || n == 20 ? "TOTAL" : "DETAIL", p, m));
+            lines.add(new StatutoryReportResponses.Line("cf-" + n, n, names.get(n - 1), 0,
+                    totalLines.contains(n) ? "TOTAL" : "DETAIL", p, m));
         }
-        return List.of(new StatutoryReportResponses.Group("OPERATING", "经营活动", lines.subList(0, 7)),
-                new StatutoryReportResponses.Group("INVESTING", "投资活动", lines.subList(7, 13)),
-                new StatutoryReportResponses.Group("FINANCING", "筹资活动", lines.subList(13, 19)),
-                new StatutoryReportResponses.Group("SUPPLEMENT", "现金及现金等价物", lines.subList(19, 22)));
+        return List.of(
+                new StatutoryReportResponses.Group("OPERATING", "一、经营活动产生的现金流量",
+                        List.copyOf(lines.subList(0, 7))),
+                new StatutoryReportResponses.Group("INVESTING", "二、投资活动产生的现金流量",
+                        List.copyOf(lines.subList(7, 13))),
+                new StatutoryReportResponses.Group("FINANCING", "三、筹资活动产生的现金流量",
+                        List.copyOf(lines.subList(13, 19))),
+                new StatutoryReportResponses.Group("BALANCES", "四、现金净增加额及现金余额",
+                        List.copyOf(lines.subList(19, 22))));
     }
 
     private BigDecimal derivedAmount(int line, List<FormulaAccountAmount> amounts, BigDecimal residual,
@@ -332,7 +351,7 @@ public class DefaultReportingService implements ReportingService {
     private BigDecimal derivedNet(List<FormulaAccountAmount> amounts) {
         return derivedLine(1, amounts).subtract(derivedLine(3, amounts)).subtract(derivedLine(4, amounts))
                 .subtract(derivedLine(5, amounts)).add(derivedLine(8, amounts)).add(derivedLine(9, amounts))
-                .subtract(derivedLine(10, amounts)).subtract(derivedLine(11, amounts)).subtract(derivedLine(12, amounts))
+                .add(derivedLine(10, amounts)).subtract(derivedLine(11, amounts)).subtract(derivedLine(12, amounts))
                 .add(derivedLine(14, amounts)).add(derivedLine(15, amounts)).subtract(derivedLine(16, amounts))
                 .subtract(derivedLine(17, amounts)).subtract(derivedLine(18, amounts));
     }
@@ -362,7 +381,8 @@ public class DefaultReportingService implements ReportingService {
             case 16 -> DerivedCashFlowCalculator.debit(a, "LIABILITY.SHORT_TERM_BORROWING", "LIABILITY.LONG_TERM_BORROWING");
             case 17 -> DerivedCashFlowCalculator.debit(a, "EXPENSE.FINANCE");
             case 18 -> DerivedCashFlowCalculator.debit(a, "LIABILITY.PROFIT_PAYABLE");
-            case 13 -> derivedLine(8, a).add(derivedLine(9, a)).subtract(derivedLine(11, a)).subtract(derivedLine(12, a));
+            case 13 -> derivedLine(8, a).add(derivedLine(9, a)).add(derivedLine(10, a))
+                    .subtract(derivedLine(11, a)).subtract(derivedLine(12, a));
             case 19 -> derivedLine(14, a).add(derivedLine(15, a)).subtract(derivedLine(16, a)).subtract(derivedLine(17, a)).subtract(derivedLine(18, a));
             default -> BigDecimal.ZERO;
         };

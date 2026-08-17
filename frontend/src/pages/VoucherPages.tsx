@@ -25,6 +25,12 @@ type VoucherCreateRequest = components['schemas']['VoucherCreateRequest']
 type VoucherUpdateRequest = components['schemas']['VoucherUpdateRequest']
 type CashFlowItem = components['schemas']['LedgerCashFlowItem']
 
+const STANDARD_CASH_FLOW_ACCOUNT_KEYS = [
+  'ASSET.CASH',
+  'ASSET.BANK_DEPOSIT',
+  'ASSET.OTHER_MONETARY_FUNDS',
+] as const
+
 type VoucherForm = { periodId?: string; voucherDate: Dayjs; voucherType: string; voucherNumber?: string; summary?: string; lines: Array<{ accountId?: string; side: 'DEBIT' | 'CREDIT'; currency: string; originalAmount: string; exchangeRate: string; summary?: string; cashFlowItemId?: string; quantity?: string; unitPrice?: string; dimensionValues?: Record<string, string> }> }
 const emptyLines: VoucherForm['lines'] = []
 const blankLine = (): VoucherForm['lines'][number] => ({ side: 'DEBIT', currency: 'CNY', originalAmount: '', exchangeRate: '1' })
@@ -49,9 +55,12 @@ export class CashFlowValidationError extends Error {
 
 /** Resolve formula references with the same leaf-account semantics as the backend. */
 export function resolveCashFlowAccountIds(references: AccountReference[], accounts: Account[]): Set<string> {
-  const standardKeys = new Set(references
-    .filter((reference) => reference.type === 'STANDARD_ACCOUNT_KEY')
-    .map((reference) => reference.value))
+  const standardKeys = new Set<string>([
+    ...STANDARD_CASH_FLOW_ACCOUNT_KEYS,
+    ...references
+      .filter((reference) => reference.type === 'STANDARD_ACCOUNT_KEY')
+      .map((reference) => reference.value),
+  ])
   const concreteIds = new Set(references
     .filter((reference) => reference.type === 'ACCOUNT_ID')
     .map((reference) => reference.value))
@@ -60,13 +69,12 @@ export function resolveCashFlowAccountIds(references: AccountReference[], accoun
 
   for (const account of accounts) {
     if (!account.isLeaf) continue
-    if (account.standardAccountKey && standardKeys.has(account.standardAccountKey)) {
-      result.add(account.id)
-    }
     const visited = new Set<string>()
     let current: Account | undefined = account
     while (current && !visited.has(current.id)) {
-      if (concreteIds.has(current.id)) {
+      if (concreteIds.has(current.id)
+        || current.cashFlowRequired
+        || Boolean(current.standardAccountKey && standardKeys.has(current.standardAccountKey))) {
         result.add(account.id)
         break
       }
@@ -79,9 +87,10 @@ export function resolveCashFlowAccountIds(references: AccountReference[], accoun
 
 /**
  * Frontend mirror of the backend cash-flow classification constraint. Cash lines are
- * lines whose account belongs to the published formula's cash account set (or is
- * flagged `cashFlowRequired`). Pure cash internal transfers stay optional; a compound
- * voucher with non-cash lines requires every cash line to carry an active item
+ * lines whose account belongs to the fixed standard cash keys, the published formula's
+ * compatible cash account set, or is flagged `cashFlowRequired`. Pure cash internal
+ * transfers stay optional; a compound voucher with non-cash lines requires every cash
+ * line to carry an active item
  * referenced by the published CASH_FLOW formula.
  *
  * Pass `reportableItems: null` when the published formula is unavailable so the
@@ -279,9 +288,9 @@ export function VoucherEditorPage() {
     && cashFlowFormula.error.problem.code === 'STATUTORY_FORMULA_NOT_FOUND'
   const cashFlowPolicyLoadFailed = (cashFlowFormula.isError && !cashFlowFormulaMissing)
     || (Boolean(publishedCashFlowDefinition) && cashFlowItems.isError)
-  // Cash accounts come from the published formula (standard keys expanded to leaf
-  // accounts plus concrete ids), matching the backend voucher-side contract; the
-  // legacy `cashFlowRequired` account flag is honoured as an additional signal.
+  // Cash accounts are the fixed standard keys plus published-formula compatibility
+  // references, expanded to leaf accounts. The legacy `cashFlowRequired` flag is
+  // honoured as an additional signal.
   const cashAccountIds = useMemo(() => {
     const definition = publishedCashFlowDefinition
     if (!definition) return new Set<string>()
@@ -290,8 +299,7 @@ export function VoucherEditorPage() {
       accounts.data || [],
     )
   }, [accounts.data, publishedCashFlowDefinition])
-  const isCashAccount = (accountId?: string) => Boolean(accountId)
-    && (accountsById.get(accountId!)?.cashFlowRequired || cashAccountIds.has(accountId!))
+  const isCashAccount = (accountId?: string) => Boolean(accountId) && cashAccountIds.has(accountId!)
   const watchedLines = Form.useWatch('lines', form)
   const lines = watchedLines ?? emptyLines
   const dimensionTypesById = useMemo(() => new Map((dimensionTypes.data || []).map((type) => [type.id, type])), [dimensionTypes.data])

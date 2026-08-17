@@ -2910,8 +2910,8 @@ export interface components {
              * @default
              */
             formulaVersion: number | null;
-            cashFlowSource: "VOUCHER" | "FORMULA";
-            calculationVersion: string;
+            cashFlowSource: "VOUCHER" | "FORMULA" | null;
+            calculationVersion: string | null;
             dataQuality: components["schemas"]["DataQuality"];
         };
         /** @default null */

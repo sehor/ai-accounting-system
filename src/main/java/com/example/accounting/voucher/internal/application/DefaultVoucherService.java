@@ -230,11 +230,14 @@ public class DefaultVoucherService implements VoucherService, GeneratedVoucherCo
         Map<UUID, VoucherRepository.AccountControls> controlsByAccount =
                 new HashMap<>(vouchers.accountControlsByAccounts(ledgerId, accountIds));
         Set<UUID> activeAccounts = vouchers.activeAccountIds(ledgerId, accountIds);
-        Set<UUID> cashFlowIds = effectiveLines.stream().map(VoucherRequests.Line::cashFlowItemId)
-                .filter(Objects::nonNull).collect(java.util.stream.Collectors.toSet());
-        controlsByAccount.values().stream().map(VoucherRepository.AccountControls::defaultCashFlowItemId)
-                .filter(Objects::nonNull).forEach(cashFlowIds::add);
-        Set<UUID> activeCashFlowItems = vouchers.activeCashFlowItemIds(ledgerId, cashFlowIds);
+        Set<UUID> activeCashFlowItems = Set.of();
+        if (context.cashFlowCheckEnabled()) {
+            Set<UUID> cashFlowIds = effectiveLines.stream().map(VoucherRequests.Line::cashFlowItemId)
+                    .filter(Objects::nonNull).collect(java.util.stream.Collectors.toSet());
+            controlsByAccount.values().stream().map(VoucherRepository.AccountControls::defaultCashFlowItemId)
+                    .filter(Objects::nonNull).forEach(cashFlowIds::add);
+            activeCashFlowItems = vouchers.activeCashFlowItemIds(ledgerId, cashFlowIds);
+        }
         Set<String> requestedDimensionBindings = effectiveLines.stream()
                 .flatMap(line -> (line.dimensions() == null ? List.<VoucherRequests.Dimension>of() : line.dimensions()).stream())
                 .map(dimension -> dimension.dimensionTypeId() + ":" + dimension.dimensionValueId())
@@ -277,7 +280,8 @@ public class DefaultVoucherService implements VoucherService, GeneratedVoucherCo
                     .anyMatch(previous -> previous.accountId().equals(line.accountId())
                             && sameDimensionBindings(dimensions, previous.dimensions()));
             validateLineControls(ledgerId, line, original, cashFlowItemId, controls, dimensions,
-                    unchangedHistoricalDimensions, activeCashFlowItems, activeDimensionBindings);
+                    unchangedHistoricalDimensions, context.cashFlowCheckEnabled(), activeCashFlowItems,
+                    activeDimensionBindings);
             String combinationKey = (unchangedHistoricalDimensions ? "H:" : "A:")
                     + combinationDimensions(dimensions).toString();
             DimensionCombinationStore.Resolved combination = combinations.computeIfAbsent(combinationKey, ignored ->
@@ -329,8 +333,8 @@ public class DefaultVoucherService implements VoucherService, GeneratedVoucherCo
             UUID ledgerId, VoucherRequests.Line line, BigDecimal original,
             UUID cashFlowItemId, VoucherRepository.AccountControls controls,
             List<VoucherRequests.Dimension> dimensions, boolean allowInactiveHistoricalDimensions,
-            Set<UUID> activeCashFlowItems, Set<String> activeDimensionBindings) {
-        if (cashFlowItemId != null && !activeCashFlowItems.contains(cashFlowItemId)) {
+            boolean cashFlowCheckEnabled, Set<UUID> activeCashFlowItems, Set<String> activeDimensionBindings) {
+        if (cashFlowCheckEnabled && cashFlowItemId != null && !activeCashFlowItems.contains(cashFlowItemId)) {
             throw problem(422, "INVALID_CASH_FLOW_ITEM", "Invalid cash-flow item",
                     "The cash-flow item must be active in this ledger");
         }

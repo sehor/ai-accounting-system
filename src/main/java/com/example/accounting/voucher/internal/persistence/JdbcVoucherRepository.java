@@ -58,7 +58,8 @@ public class JdbcVoucherRepository implements VoucherRepository {
     @Override
     public Optional<LedgerContext> findLedgerContext(UUID ledgerId, UUID periodId) {
         return Optional.ofNullable(jdbcTemplate.query("""
-                select p.id, l.base_currency, l.approval_enabled, p.status, p.start_date, p.end_date
+                select p.id, l.base_currency, l.approval_enabled, l.enable_cash_flow_check,
+                       p.status, p.start_date, p.end_date
                 from ledger l join accounting_period p on p.ledger_id = l.id
                 where l.id = ? and p.id = ? and l.deleted_at is null
                 """, rs -> rs.next() ? ledgerContext(rs) : null,
@@ -68,7 +69,8 @@ public class JdbcVoucherRepository implements VoucherRepository {
     @Override
     public List<LedgerContext> findLedgerContextsByDate(UUID ledgerId, LocalDate voucherDate) {
         return jdbcTemplate.query("""
-                select p.id, l.base_currency, l.approval_enabled, p.status, p.start_date, p.end_date
+                select p.id, l.base_currency, l.approval_enabled, l.enable_cash_flow_check,
+                       p.status, p.start_date, p.end_date
                 from ledger l join accounting_period p on p.ledger_id = l.id
                 where l.id = ? and l.deleted_at is null and ? between p.start_date and p.end_date
                 order by p.start_date, p.id
@@ -77,7 +79,7 @@ public class JdbcVoucherRepository implements VoucherRepository {
 
     private LedgerContext ledgerContext(java.sql.ResultSet rs) throws java.sql.SQLException {
         return new LedgerContext(rs.getObject("id", UUID.class), rs.getString("base_currency"),
-                rs.getBoolean("approval_enabled"), rs.getString("status"),
+                rs.getBoolean("approval_enabled"), rs.getBoolean("enable_cash_flow_check"), rs.getString("status"),
                 rs.getObject("start_date", LocalDate.class), rs.getObject("end_date", LocalDate.class));
     }
 
@@ -400,17 +402,19 @@ public class JdbcVoucherRepository implements VoucherRepository {
                     from voucher_line line
                     join ledger_account account
                       on account.ledger_id = line.ledger_id and account.id = line.account_id
+                    join ledger ledger on ledger.id = line.ledger_id
                     where line.ledger_id = ? and line.voucher_id = ?
                       and (
                         account.status <> 'ACTIVE'
                         or exists (
                             select 1 from ledger_account child
                             where child.ledger_id = account.ledger_id and child.parent_id = account.id)
-                        or (account.cash_flow_required and line.cash_flow_item_id is null)
-                        or (line.cash_flow_item_id is not null and not exists (
-                            select 1 from cash_flow_item item
-                            where item.ledger_id = line.ledger_id
-                              and item.id = line.cash_flow_item_id and item.status = 'ACTIVE'))
+                        or (ledger.enable_cash_flow_check and (
+                            (account.cash_flow_required and line.cash_flow_item_id is null)
+                            or (line.cash_flow_item_id is not null and not exists (
+                                select 1 from cash_flow_item item
+                                where item.ledger_id = line.ledger_id
+                                  and item.id = line.cash_flow_item_id and item.status = 'ACTIVE'))))
                         or (account.quantity_enabled and (
                             line.quantity is null or line.unit_price is null
                             or round(line.quantity * line.unit_price, 4) <> line.original_amount))

@@ -148,6 +148,7 @@ class VoucherAccountControlsIntegrationTest {
         UUID ledgerId = ledgers.create(user(owner), new LedgerRequests.Create(
                 "cash-flow-classification", "SME", "2011-17", "CNY",
                 LocalDate.of(2026, 1, 1), false)).id();
+        jdbc.update("update ledger set enable_cash_flow_check = true where id = ?", ledgerId);
         LedgerResponses.Account cash = ledgers.listAccounts(owner, ledgerId).stream()
                 .filter(account -> account.code().equals("1001")).findFirst().orElseThrow();
         LedgerResponses.Account bank = ledgers.listAccounts(owner, ledgerId).stream()
@@ -210,6 +211,47 @@ class VoucherAccountControlsIntegrationTest {
                 List.of(cashLine(cash.id(), "DEBIT", "100", salesItem),
                         line(capital.id(), "CREDIT", "100"))));
         assertThat(posted.status()).isEqualTo("POSTED");
+    }
+
+    @Test
+    void appliesCashFlowCompletenessControlsOnlyWhenTheLedgerSwitchIsEnabled() {
+        UUID owner = UUID.randomUUID();
+        UUID ledgerId = ledgers.create(user(owner), new LedgerRequests.Create(
+                "cash-flow-control-switch", "SME", "2011-17", "CNY",
+                LocalDate.of(2026, 1, 1), false)).id();
+        LedgerResponses.Account controlled = ledgers.createAccount(owner, ledgerId,
+                new LedgerRequests.AccountCreate(
+                        "1412", "现金流受控资产", "ASSET.ACCOUNTS_RECEIVABLE", "CURRENT_ASSET", "DEBIT", null,
+                        true, null, false, null, List.of()));
+        LedgerResponses.Account capital = ledgers.listAccounts(owner, ledgerId).stream()
+                .filter(account -> account.code().equals("3001")).findFirst().orElseThrow();
+        UUID periodId = ledgers.listPeriods(owner, ledgerId).getFirst().id();
+        UUID inactiveItem = insertItem(ledgerId, "INACTIVE_FOR_SWITCH_TEST", "停用项目", false);
+        jdbc.update("update cash_flow_item set status = 'INACTIVE' where ledger_id = ? and id = ?",
+                ledgerId, inactiveItem);
+
+        VoucherResponses.Voucher withoutItem = vouchers.create(owner, ledgerId, new VoucherRequests.Create(
+                periodId, LocalDate.of(2026, 1, 10), "记", "switch-off-1", "disabled missing item",
+                List.of(line(controlled.id(), "DEBIT", "10"), line(capital.id(), "CREDIT", "10"))));
+        VoucherResponses.Voucher withInactiveItem = vouchers.create(owner, ledgerId, new VoucherRequests.Create(
+                periodId, LocalDate.of(2026, 1, 10), "记", "switch-off-2", "disabled inactive item",
+                List.of(cashLine(controlled.id(), "DEBIT", "10", inactiveItem),
+                        line(capital.id(), "CREDIT", "10"))));
+        assertThat(withoutItem.status()).isEqualTo("POSTED");
+        assertThat(withInactiveItem.status()).isEqualTo("POSTED");
+
+        jdbc.update("update ledger set enable_cash_flow_check = true where id = ?", ledgerId);
+        assertThatThrownBy(() -> vouchers.create(owner, ledgerId, new VoucherRequests.Create(
+                periodId, LocalDate.of(2026, 1, 10), "记", "switch-on-1", "enabled missing item",
+                List.of(line(controlled.id(), "DEBIT", "10"), line(capital.id(), "CREDIT", "10")))))
+                .isInstanceOfSatisfying(ApiProblemException.class,
+                        exception -> assertThat(exception.code()).isEqualTo("VOUCHER_CONTROL_INCOMPLETE"));
+        assertThatThrownBy(() -> vouchers.create(owner, ledgerId, new VoucherRequests.Create(
+                periodId, LocalDate.of(2026, 1, 10), "记", "switch-on-2", "enabled inactive item",
+                List.of(cashLine(controlled.id(), "DEBIT", "10", inactiveItem),
+                        line(capital.id(), "CREDIT", "10")))))
+                .isInstanceOfSatisfying(ApiProblemException.class,
+                        exception -> assertThat(exception.code()).isEqualTo("INVALID_CASH_FLOW_ITEM"));
     }
 
     private UUID itemId(UUID ledgerId, String code) {

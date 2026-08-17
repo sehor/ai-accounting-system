@@ -119,7 +119,8 @@ public interface VoucherRepository {
     record Idempotency(String requestHash, UUID voucherId) {
     }
 
-    record LedgerContext(UUID periodId, String baseCurrency, boolean approvalRequired, String status,
+    record LedgerContext(UUID periodId, String baseCurrency, boolean approvalRequired,
+                         boolean cashFlowCheckEnabled, String status,
                          LocalDate startDate, LocalDate endDate) {
     }
 

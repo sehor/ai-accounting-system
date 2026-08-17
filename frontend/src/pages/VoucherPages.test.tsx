@@ -1045,6 +1045,31 @@ describe('cash-flow voucher classification', () => {
         [parent, child, unrelated],
       )).toEqual(new Set([child.id]))
     })
+
+    it('always includes the standard cash account keys even when the formula omits them', () => {
+      expect(resolveCashFlowAccountIds([], [cashAccount, bankAccount, expenseAccount]))
+        .toEqual(new Set([cashAccount.id, bankAccount.id]))
+    })
+
+    it('expands a standard cash key on a parent account to its leaf descendants', () => {
+      const parent = { ...cashAccount, id: 'account-standard-parent', isLeaf: false }
+      const child = { ...cashAccount, id: 'account-standard-child', parentId: parent.id, standardAccountKey: null }
+
+      expect(resolveCashFlowAccountIds([], [parent, child, expenseAccount]))
+        .toEqual(new Set([child.id]))
+    })
+
+    it('expands a cash-flow-required parent account to its leaf descendants', () => {
+      const parent = {
+        ...expenseAccount, id: 'account-required-parent', isLeaf: false, cashFlowRequired: true,
+      }
+      const child = {
+        ...expenseAccount, id: 'account-required-child', parentId: parent.id, cashFlowRequired: false,
+      }
+
+      expect(resolveCashFlowAccountIds([], [parent, child]))
+        .toEqual(new Set([child.id]))
+    })
   })
 
   it('blocks saving an external cash receipt without a cash-flow item', async () => {
