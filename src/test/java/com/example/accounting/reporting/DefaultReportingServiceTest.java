@@ -54,6 +54,42 @@ class DefaultReportingServiceTest {
     }
 
     @Test
+    void derivedCashFlowUsesFixedSmeLayoutAndTreatsAssetDisposalsAsInflows() {
+        UUID userId = UUID.randomUUID();
+        UUID ledgerId = createLedger(userId, "SME", "2011-17", "derived cash flow");
+        postVoucher(userId, ledgerId, "2026-01", "1", List.of(
+                line(ledgerId, "1001", "DEBIT", "100"),
+                line(ledgerId, "1601", "CREDIT", "100")));
+        applyProjection(ledgerId);
+        jdbc.update("""
+                update report_formula_snapshot
+                set formula_json = replace(formula_json::text,
+                    '取得借款收到的现金', '自定义筹资流入名称')::jsonb
+                where ledger_id = ? and code = 'CASH_FLOW'
+                """, ledgerId);
+
+        StatutoryReportResponses.Statement result = reporting.statutoryStatement(
+                userId, ledgerId, "cash-flow", "2026-01", "FORMULA");
+
+        assertThat(result.templateCode()).isEqualTo("SME-2011-17");
+        assertThat(result.cashFlowSource()).isEqualTo("FORMULA");
+        assertThat(result.calculationVersion()).isEqualTo("DERIVED_V1");
+        assertThat(result.groups()).extracting(StatutoryReportResponses.Group::key)
+                .containsExactly("OPERATING", "INVESTING", "FINANCING", "BALANCES");
+        List<StatutoryReportResponses.Line> lines = result.groups().stream()
+                .flatMap(group -> group.lines().stream()).toList();
+        assertThat(lines).hasSize(22);
+        assertThat(line(lines, 10).primaryAmount()).isEqualByComparingTo("100");
+        assertThat(line(lines, 13).primaryAmount()).isEqualByComparingTo("100");
+        assertThat(line(lines, 2).primaryAmount()).isEqualByComparingTo("0");
+        assertThat(line(lines, 6).primaryAmount()).isEqualByComparingTo("0");
+        assertThat(line(lines, 14).name()).isEqualTo("取得借款收到的现金");
+        assertThat(line(lines, 15).name()).isEqualTo("吸收投资者投资收到的现金");
+        assertThat(line(lines, 17).name()).isEqualTo("偿还借款利息支付的现金");
+        assertThat(line(lines, 18).name()).isEqualTo("分配利润支付的现金");
+    }
+
+    @Test
     void dynamicStatementsCarryFormulaCodeAndVersion() {
         UUID userId = UUID.randomUUID();
         UUID ledgerId = createLedger(userId, "SME", "v1", "dynamic metadata");
@@ -151,5 +187,9 @@ class DefaultReportingServiceTest {
             }
         }
         assertThat(projection.status(ledgerId, "2026-01").fresh()).isTrue();
+    }
+
+    private StatutoryReportResponses.Line line(List<StatutoryReportResponses.Line> lines, int lineNo) {
+        return lines.stream().filter(line -> line.lineNo() == lineNo).findFirst().orElseThrow();
     }
 }

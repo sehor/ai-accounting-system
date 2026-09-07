@@ -95,6 +95,12 @@ public interface ReportingRepository {
     /** Active cash-flow item codes that can be selected and published for this ledger. */
     Set<String> activeCashFlowItemCodes(UUID ledgerId);
 
+    /** Whether voucher cash-flow classification is enabled for this ledger. */
+    boolean cashFlowCheckEnabled(UUID ledgerId);
+
+    /** Active leaf monetary accounts, including the compatibility cash-flow flag. */
+    Set<UUID> cashFlowCashAccountLeafIds(UUID ledgerId);
+
     boolean leafAccount(UUID ledgerId, UUID accountId);
 
     ReportResponses.GeneralLedgerPage generalLedgerBook(

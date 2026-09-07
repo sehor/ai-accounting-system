@@ -1857,6 +1857,7 @@ export interface components {
             /** Format: date */
             startDate: string;
             approvalEnabled: boolean;
+            cashFlowCheckEnabled: boolean;
             status: string;
         };
         /** @default null */
@@ -2653,6 +2654,7 @@ export interface components {
         Rename: {
             name: string;
             description?: string;
+            cashFlowCheckEnabled?: boolean;
         };
         SettingsPatch: {
             /** Format: uuid */
@@ -2908,6 +2910,8 @@ export interface components {
              * @default
              */
             formulaVersion: number | null;
+            cashFlowSource: "VOUCHER" | "FORMULA" | null;
+            calculationVersion: string | null;
             dataQuality: components["schemas"]["DataQuality"];
         };
         /** @default null */
@@ -5390,6 +5394,7 @@ export interface operations {
         parameters: {
             query: {
                 periodCode: string;
+                cashFlowSource?: "VOUCHER" | "FORMULA";
             };
             header?: never;
             path: {

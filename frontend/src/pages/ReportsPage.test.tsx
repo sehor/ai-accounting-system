@@ -138,7 +138,7 @@ function installBackend(
   periods = [{ id: 'period-8', ledgerId: 'ledger-1', periodCode: '2026-08', startDate: '2026-08-01', endDate: '2026-08-31', status: 'OPEN', hasVouchers: true }],
 ) {
   const mock = vi.fn(async (path: string) => {
-    if (path === '/ledgers/ledger-1') return { id: 'ledger-1', name: '测试账套', accountingStandardCode: ledger.accountingStandardCode, accountingStandardVersion: '2011-17', baseCurrency: ledger.baseCurrency, startDate: '2026-01-01', approvalEnabled: false, status: 'ACTIVE', description: '' }
+    if (path === '/ledgers/ledger-1') return { id: 'ledger-1', name: '测试账套', accountingStandardCode: ledger.accountingStandardCode, accountingStandardVersion: '2011-17', baseCurrency: ledger.baseCurrency, startDate: '2026-01-01', approvalEnabled: false, cashFlowCheckEnabled: true, status: 'ACTIVE', description: '' }
     if (path === '/ledgers/ledger-1/periods') return periods
     if (path.includes('/reports/statutory/')) return onReport ? onReport() : cashFlowStatement()
     return []
@@ -277,6 +277,17 @@ describe('ReportsPage cash-flow', () => {
     expect(screen.getByText('数据完整')).toBeInTheDocument()
   })
 
+  it('marks the formula track as estimated and omits voucher classification warnings', async () => {
+    installBackend({ accountingStandardCode: 'SME', baseCurrency: 'CNY' }, () => cashFlowStatement({
+      cashFlowSource: 'FORMULA', calculationVersion: 'DERIVED_V1',
+      dataQuality: { status: 'INCOMPLETE', primaryUnclassifiedVoucherCount: 2, primaryUnclassifiedLineCount: 3, comparativeUnclassifiedVoucherCount: 1, comparativeUnclassifiedLineCount: 1, samples: [] },
+    }))
+    renderPage('/ledgers/ledger-1/reports/cash-flow?cashFlowSource=FORMULA')
+    expect(await screen.findByText('公式推导（估算）')).toBeInTheDocument()
+    expect(screen.queryByText('存在未分类的现金收支')).not.toBeInTheDocument()
+    expect(screen.getByRole('radio', { name: '公式推导（估算）' })).toBeChecked()
+  })
+
   it('jumps to the formula settings preselected for CASH_FLOW via 调整公式', async () => {
     installBackend()
     renderPage()
@@ -288,7 +299,7 @@ describe('ReportsPage cash-flow', () => {
   it('shows the backend standard error for non-SME ledgers without falling back to the legacy endpoint', async () => {
     installBackend({ accountingStandardCode: 'CAS', baseCurrency: 'CNY' })
     ;(apiFetch as unknown as ReturnType<typeof vi.fn>).mockImplementation(async (path: string) => {
-      if (path === '/ledgers/ledger-1') return { id: 'ledger-1', name: '测试账套', accountingStandardCode: 'CAS', accountingStandardVersion: '2011-17', baseCurrency: 'CNY', startDate: '2026-01-01', approvalEnabled: false, status: 'ACTIVE', description: '' }
+      if (path === '/ledgers/ledger-1') return { id: 'ledger-1', name: '测试账套', accountingStandardCode: 'CAS', accountingStandardVersion: '2011-17', baseCurrency: 'CNY', startDate: '2026-01-01', approvalEnabled: false, cashFlowCheckEnabled: true, status: 'ACTIVE', description: '' }
       if (path === '/ledgers/ledger-1/periods') return [{ id: 'period-8', ledgerId: 'ledger-1', periodCode: '2026-08', startDate: '2026-08-01', endDate: '2026-08-31', status: 'OPEN', hasVouchers: true }]
       if (path.includes('/reports/statutory/cash-flow')) {
         throw new ApiError(422, { code: 'STATUTORY_REPORT_UNSUPPORTED_STANDARD', title: '法定报表不可用', detail: '当前账套不是小企业会计准则，暂不提供法定报表' })

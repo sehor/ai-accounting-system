@@ -24,6 +24,12 @@ public interface ReportingService {
     StatutoryReportResponses.Statement statutoryStatement(UUID actorId, UUID ledgerId,
                                                           String reportType, String periodCode);
 
+    default StatutoryReportResponses.Statement statutoryStatement(UUID actorId, UUID ledgerId,
+                                                                   String reportType, String periodCode,
+                                                                   String cashFlowSource) {
+        return statutoryStatement(actorId, ledgerId, reportType, periodCode);
+    }
+
     List<ReportResponses.LedgerLine> generalLedger(UUID actorId, UUID ledgerId, String periodCode);
 
     List<ReportResponses.LedgerLine> subLedger(UUID actorId, UUID ledgerId, String periodCode);

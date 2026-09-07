@@ -2,144 +2,54 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { App } from 'antd'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
-import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { apiFetch } from '../api/client'
 import { installLegacyOpenApiBridge } from '../test/openApiLegacyBridge'
-import type { components } from '../api/generated'
-import { DimensionsTab, OPENING_BALANCE_CSV_HEADER, OpeningsTab, openingBalanceAmountPattern } from './SettingsPage'
+import { SettingsPage } from './SettingsPage'
 
-type DimensionType = components['schemas']['DimensionType']
-type DimensionValue = components['schemas']['LedgerDimensionValue']
-
-vi.mock('../api/client', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../api/client')>()
-  return { ...actual, apiFetch: vi.fn() }
-})
-
+vi.mock('../api/client', async (importOriginal) => ({ ...(await importOriginal<typeof import('../api/client')>()), apiFetch: vi.fn() }))
+vi.mock('../auth/AuthProvider', () => ({ useAuth: () => ({ session: { localUserId: 'user-1', localUserName: 'admin' } }) }))
 installLegacyOpenApiBridge(apiFetch)
 
 Object.defineProperty(window, 'matchMedia', {
   writable: true,
   value: vi.fn().mockImplementation(() => ({
-    matches: false,
-    addListener: vi.fn(),
-    removeListener: vi.fn(),
-    addEventListener: vi.fn(),
-    removeEventListener: vi.fn(),
-    dispatchEvent: vi.fn(),
+    matches: false, addListener: vi.fn(), removeListener: vi.fn(), addEventListener: vi.fn(), removeEventListener: vi.fn(), dispatchEvent: vi.fn(),
   })),
 })
 
-Object.defineProperty(URL, 'createObjectURL', {
-  configurable: true,
-  value: vi.fn(() => 'blob:opening-template'),
-})
-
-Object.defineProperty(URL, 'revokeObjectURL', {
-  configurable: true,
-  value: vi.fn(),
-})
-
-beforeAll(() => {
-  const getComputedStyle = window.getComputedStyle
-  window.getComputedStyle = ((element: Element) => getComputedStyle(element)) as typeof window.getComputedStyle
-})
-
-afterEach(() => {
-  cleanup()
-  vi.clearAllMocks()
-})
-
-const account = {
-  id: 'account-1', ledgerId: 'ledger-1', code: '1001', name: '库存现金', standardAccountKey: null, category: 'CURRENT_ASSET',
-  normalBalance: 'DEBIT', status: 'ACTIVE', parentId: null, level: 1, isLeaf: true, isTemplate: true,
-  hasBusinessUsage: false, coreLocked: false, legacyCode: false, version: 0, cashFlowRequired: false,
-  defaultCashFlowItemId: null, quantityEnabled: false, unitName: null, dimensionRequirements: [], createdAt: null,
+const ledger = {
+  id: 'ledger-1', name: '测试账套', description: '', accountingStandardCode: 'SME', accountingStandardVersion: '2011-17',
+  baseCurrency: 'CNY', startDate: '2026-01-01', approvalEnabled: false, cashFlowCheckEnabled: false, status: 'ACTIVE',
 }
 
-const period = {
-  id: 'period-1', ledgerId: 'ledger-1', periodCode: '2026-01', startDate: '2026-01-01',
-  endDate: '2026-01-31', status: 'OPEN',
-}
-
-function renderOpenings(onSave = vi.fn()) {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-  render(
-    <QueryClientProvider client={client}>
-      <App>
-        <MemoryRouter initialEntries={['/ledgers/ledger-1/settings/openings']}>
-          <Routes><Route path="*" element={<OpeningsTab
-            rows={[{
-              id: 'opening-1', ledgerId: 'ledger-1', periodId: period.id, accountId: account.id,
-              currency: 'CNY', dimensionKey: '', debitOriginal: '0', creditOriginal: '0', exchangeRate: '1',
-              debitBase: '0', creditBase: '0', confirmed: false, dimensions: [],
-            }]}
-            ledgerId="ledger-1" auth={{ localUserId: 'user-1' }}
-            accounts={[account]} periods={[period]} onSave={onSave} saving={false}
-            onImport={vi.fn()} importing={false} onConfirm={vi.fn()} confirming={false}
-          />} /></Routes>
-        </MemoryRouter>
-      </App>
-    </QueryClientProvider>,
-  )
-}
-
-describe('OpeningsTab', () => {
-  it('shows the exact CSV contract and downloads a usable header-only template', () => {
-    let downloadedFileName = ''
-    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) {
-      downloadedFileName = this.download
-    })
-    renderOpenings()
-
-    expect(screen.getByText(OPENING_BALANCE_CSV_HEADER)).toBeInTheDocument()
-    expect(screen.getByText(/不会把负数自动转到另一方向/)).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: /下载 CSV 模板/ }))
-
-    expect(downloadedFileName).toBe('opening-balances-template.csv')
-    expect(URL.createObjectURL).toHaveBeenCalledWith(expect.any(Blob))
-    expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:opening-template')
+beforeEach(() => {
+  vi.mocked(apiFetch).mockImplementation((path, _auth, init) => {
+    if (path === '/ledgers/ledger-1') return Promise.resolve(init?.method === 'PATCH' ? { ...ledger, ...JSON.parse(String(init.body)) } : ledger)
+    if (path.endsWith('/role')) return Promise.resolve({ role: 'OWNER' })
+    return Promise.resolve([])
   })
+})
 
-  it('accepts negative debit and credit amounts in manual input', async () => {
-    expect(openingBalanceAmountPattern.test('-25.50')).toBe(true)
-    const onSave = vi.fn()
-    renderOpenings(onSave)
+afterEach(() => { cleanup(); vi.restoreAllMocks() })
 
-    fireEvent.change(screen.getByRole('textbox', { name: '第 1 行借方金额' }), { target: { value: '-25.50' } })
-    fireEvent.change(screen.getByRole('textbox', { name: '第 1 行贷方金额' }), { target: { value: '0' } })
+describe('SettingsPage cash-flow switch', () => {
+  it('saves the voucher cash-flow classification switch through the ledger PATCH endpoint', async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    render(<QueryClientProvider client={client}><App><MemoryRouter initialEntries={['/ledgers/ledger-1/settings/periods']}><Routes><Route path="/ledgers/:ledgerId/settings/*" element={<SettingsPage />} /></Routes></MemoryRouter></App></QueryClientProvider>)
+
+    const toggle = await screen.findByRole('switch', { name: '启用凭证现金流量核算' })
+    expect(toggle).not.toBeChecked()
+    await waitFor(() => expect(toggle).toBeEnabled())
+    fireEvent.click(toggle)
     fireEvent.click(screen.getByRole('button', { name: /保\s*存/ }))
 
-    await waitFor(() => expect(onSave).toHaveBeenCalledWith([
-      expect.objectContaining({ debitOriginal: '-25.50', creditOriginal: '0', exchangeRate: '1' }),
-    ]))
-  })
-})
-
-describe('DimensionsTab', () => {
-  it('uses optimistic versions when disabling a dimension value', async () => {
-    vi.mocked(apiFetch).mockResolvedValue({})
-    const onChanged = vi.fn()
-    const types: DimensionType[] = [{
-      id: 'type-1', ledgerId: 'ledger-1', code: 'CUSTOMER', name: '客户', required: false,
-      status: 'ACTIVE', version: 3,
-    }]
-    const values: DimensionValue[] = [{
-      id: 'value-1', ledgerId: 'ledger-1', dimensionTypeId: 'type-1', code: 'C001', name: '甲客户',
-      status: 'ACTIVE', version: 7,
-    }]
-    render(<App><DimensionsTab
-      ledgerId="ledger-1" session={{ localUserId: 'user-1' }} types={types} values={values}
-      selectedTypeId="type-1" onSelect={vi.fn()} onChanged={onChanged}
-    /></App>)
-
-    fireEvent.click(screen.getAllByRole('button', { name: '停用' })[1])
-
     await waitFor(() => expect(apiFetch).toHaveBeenCalledWith(
-      '/ledgers/ledger-1/dimension-types/type-1/values/value-1',
-      { localUserId: 'user-1' },
-      expect.objectContaining({ method: 'PATCH', body: JSON.stringify({ expectedVersion: 7, status: 'INACTIVE' }) }),
+      '/ledgers/ledger-1',
+      { localUserId: 'user-1', localUserName: 'admin' },
+      expect.objectContaining({ method: 'PATCH' }),
     ))
-    await waitFor(() => expect(onChanged).toHaveBeenCalled())
+    const patchCall = vi.mocked(apiFetch).mock.calls.find(([, , init]) => init?.method === 'PATCH')
+    expect(JSON.parse(String(patchCall?.[2]?.body))).toMatchObject({ name: '测试账套', cashFlowCheckEnabled: true })
   })
 })

@@ -144,13 +144,19 @@ public class DefaultLedgerService implements LedgerService {
     public LedgerResponses.Ledger renameLedger(
             UUID actorId, UUID ledgerId, LedgerRequests.Rename request) {
         requireRole(actorId, ledgerId, WRITE_ROLES);
-        String name = request == null || request.name() == null ? "" : request.name().trim();
+        if (request == null || (request.name() == null && request.description() == null
+                && request.cashFlowCheckEnabled() == null)) {
+            throw problem(422, "EMPTY_LEDGER_UPDATE", "Ledger update is empty",
+                    "Provide at least one ledger setting to update");
+        }
+        LedgerResponses.Ledger before = requireLedger(ledgerId);
+        String name = request.name() == null ? before.name() : request.name().trim();
         if (name.isEmpty() || name.length() > 200) {
             throw problem(422, "INVALID_LEDGER_NAME", "Invalid ledger name",
                     "Ledger name must contain between 1 and 200 characters");
         }
         String description = request.description() == null ? null : normalizeDescription(request.description());
-        ledgers.updateLedger(ledgerId, name, description, actorId);
+        ledgers.updateLedger(ledgerId, name, description, request.cashFlowCheckEnabled(), actorId);
         return requireLedger(ledgerId);
     }
 

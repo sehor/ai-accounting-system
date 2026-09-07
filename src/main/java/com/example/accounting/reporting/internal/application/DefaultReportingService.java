@@ -166,11 +166,22 @@ public class DefaultReportingService implements ReportingService {
     @Transactional(readOnly = true)
     public StatutoryReportResponses.Statement statutoryStatement(
             UUID actorId, UUID ledgerId, String reportType, String periodCode) {
+        return statutoryStatement(actorId, ledgerId, reportType, periodCode, null);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public StatutoryReportResponses.Statement statutoryStatement(
+            UUID actorId, UUID ledgerId, String reportType, String periodCode, String requestedCashFlowSource) {
         requireView(actorId, ledgerId);
         boolean cashFlow = "cash-flow".equals(reportType);
         if (!"balance-sheet".equals(reportType) && !"income-statement".equals(reportType) && !cashFlow) {
             throw problem(404, "STATUTORY_REPORT_NOT_FOUND", "Statutory report not found",
                     "Only balance-sheet, income-statement and cash-flow are supported");
+        }
+        if (!cashFlow && requestedCashFlowSource != null) {
+            throw problem(422, "CASH_FLOW_SOURCE_UNSUPPORTED", "现金流取数方式不可用",
+                    "cashFlowSource is only supported by the cash-flow statutory report");
         }
         PeriodRange selected = PeriodRange.single(periodCode);
         validateRange(ledgerId, selected);
@@ -198,8 +209,14 @@ public class DefaultReportingService implements ReportingService {
                     "No accounting period is available in the selected year");
         }
         if (cashFlow) {
-            return cashFlowStatement(ledgerId, definition, snapshot, firstPeriod, selected,
+            String cashFlowSource = resolveCashFlowSource(ledgerId, requestedCashFlowSource);
+            StatutoryReportResponses.Statement result = "FORMULA".equals(cashFlowSource)
+                    ? derivedCashFlowStatement(ledgerId, definition, snapshot, firstPeriod, selected,
+                    periodCode, standardVersion)
+                    : cashFlowStatement(ledgerId, definition, snapshot, firstPeriod, selected,
                     periodCode, standardVersion);
+            return withCashFlowMetadata(result, cashFlowSource,
+                    "FORMULA".equals(cashFlowSource) ? "DERIVED_V1" : "CASH_FLOW");
         }
         List<FormulaAccountAmount> primary;
         List<FormulaAccountAmount> comparative;
@@ -224,6 +241,166 @@ public class DefaultReportingService implements ReportingService {
                         income ? "本年累计金额" : "期末余额", income ? "本月金额" : "年初余额"));
         return addFormulaMetadata(result, formulaCode, snapshot.publishedVersion(),
                 StatutoryReportResponses.DataQuality.complete());
+    }
+
+    private String resolveCashFlowSource(UUID ledgerId, String requested) {
+        if (requested == null || requested.isBlank()) {
+            return reports.cashFlowCheckEnabled(ledgerId) ? "VOUCHER" : "FORMULA";
+        }
+        if (!"VOUCHER".equals(requested) && !"FORMULA".equals(requested)) {
+            throw problem(422, "CASH_FLOW_SOURCE_INVALID", "现金流取数方式无效",
+                    "cashFlowSource must be VOUCHER or FORMULA");
+        }
+        return requested;
+    }
+
+    private StatutoryReportResponses.Statement withCashFlowMetadata(
+            StatutoryReportResponses.Statement statement, String source, String version) {
+        StatutoryReportResponses.DataQuality quality = "FORMULA".equals(source)
+                ? new StatutoryReportResponses.DataQuality("ESTIMATED", 0, 0, 0, 0, List.of())
+                : statement.dataQuality();
+        return new StatutoryReportResponses.Statement(statement.reportType(), statement.templateCode(),
+                statement.standardCode(), statement.standardVersion(), statement.periodCode(),
+                statement.primaryColumn(), statement.comparativeColumn(), statement.groups(), statement.checks(),
+                statement.formulaCode(), statement.formulaVersion(), quality, source, version);
+    }
+
+    /**
+     * The derived track deliberately does not read voucher cash-flow item ids.
+     * The fixed formula still provides the statutory layout and monetary opening/
+     * closing balances; residual operating cash is placed into line 2 or 6 so
+     * the statutory cash reconciliation always remains exact.
+     */
+    private StatutoryReportResponses.Statement derivedCashFlowStatement(UUID ledgerId,
+            ReportFormulaDefinition definition, ReportFormulaRepository.Snapshot snapshot, String firstPeriod,
+            PeriodRange selected, String periodCode, String standardVersion) {
+        List<FormulaAccountAmount> ytd = reports.formulaAccountAmounts(ledgerId,
+                new PeriodRange(firstPeriod, periodCode), false);
+        List<FormulaAccountAmount> monthly = reports.formulaAccountAmounts(ledgerId, selected, false);
+        BigDecimal primaryOpening = monetaryOpening(ytd);
+        BigDecimal primaryClosing = monetaryClosing(ytd);
+        BigDecimal monthlyOpening = monetaryOpening(monthly);
+        BigDecimal monthlyClosing = monetaryClosing(monthly);
+        BigDecimal primaryDelta = primaryClosing.subtract(primaryOpening);
+        BigDecimal monthlyDelta = monthlyClosing.subtract(monthlyOpening);
+        BigDecimal primaryResidual = primaryDelta.subtract(derivedNet(ytd));
+        BigDecimal monthlyResidual = monthlyDelta.subtract(derivedNet(monthly));
+        List<StatutoryReportResponses.Group> groups = derivedGroups(ytd, monthly,
+                primaryResidual, monthlyResidual, primaryOpening, primaryClosing,
+                monthlyOpening, monthlyClosing);
+        BigDecimal primaryCheck = amount(groups, 20, true).subtract(primaryDelta);
+        BigDecimal monthlyCheck = amount(groups, 20, false).subtract(monthlyDelta);
+        return new StatutoryReportResponses.Statement("cash-flow", definition.templateCode(), "SME", standardVersion,
+                periodCode, "本年累计金额", "本月金额", groups,
+                List.of(new StatutoryReportResponses.Check("cash-net-change", "现金及现金等价物净增加额", 
+                        primaryCheck.signum() == 0 && monthlyCheck.signum() == 0, primaryCheck.abs().add(monthlyCheck.abs()))),
+                null, null, StatutoryReportResponses.DataQuality.estimated());
+    }
+
+    private List<StatutoryReportResponses.Group> derivedGroups(
+            List<FormulaAccountAmount> ytd, List<FormulaAccountAmount> monthly,
+            BigDecimal ytdResidual, BigDecimal monthlyResidual, BigDecimal ytdOpening, BigDecimal ytdClosing,
+            BigDecimal monthlyOpening, BigDecimal monthlyClosing) {
+        List<String> names = List.of(
+                "销售产成品、商品、提供劳务收到的现金", "收到其他与经营活动有关的现金",
+                "购买原材料、商品、接受劳务支付的现金", "支付的职工薪酬", "支付的税费",
+                "支付其他与经营活动有关的现金", "经营活动产生的现金流量净额",
+                "收回短期投资、长期债券投资和长期股权投资收到的现金", "取得投资收益收到的现金",
+                "处置固定资产、无形资产和其他非流动资产收回的现金净额",
+                "短期投资、长期债券投资和长期股权投资支付的现金",
+                "购建固定资产、无形资产和其他非流动资产支付的现金", "投资活动产生的现金流量净额",
+                "取得借款收到的现金", "吸收投资者投资收到的现金", "偿还借款本金支付的现金",
+                "偿还借款利息支付的现金", "分配利润支付的现金", "筹资活动产生的现金流量净额",
+                "四、现金净增加额", "加：期初现金余额", "五、期末现金余额");
+        Set<Integer> totalLines = Set.of(7, 13, 19, 20, 22);
+        List<StatutoryReportResponses.Line> lines = new ArrayList<>();
+        for (int n = 1; n <= ReportFormulaDefinition.CASH_FLOW_LINE_COUNT; n++) {
+            BigDecimal p = derivedAmount(n, ytd, ytdResidual, ytdOpening, ytdClosing);
+            BigDecimal m = derivedAmount(n, monthly, monthlyResidual, monthlyOpening, monthlyClosing);
+            lines.add(new StatutoryReportResponses.Line("cf-" + n, n, names.get(n - 1), 0,
+                    totalLines.contains(n) ? "TOTAL" : "DETAIL", p, m));
+        }
+        return List.of(
+                new StatutoryReportResponses.Group("OPERATING", "一、经营活动产生的现金流量",
+                        List.copyOf(lines.subList(0, 7))),
+                new StatutoryReportResponses.Group("INVESTING", "二、投资活动产生的现金流量",
+                        List.copyOf(lines.subList(7, 13))),
+                new StatutoryReportResponses.Group("FINANCING", "三、筹资活动产生的现金流量",
+                        List.copyOf(lines.subList(13, 19))),
+                new StatutoryReportResponses.Group("BALANCES", "四、现金净增加额及现金余额",
+                        List.copyOf(lines.subList(19, 22))));
+    }
+
+    private BigDecimal derivedAmount(int line, List<FormulaAccountAmount> amounts, BigDecimal residual,
+            BigDecimal opening, BigDecimal closing) {
+        if (line == 2) return positive(residual);
+        if (line == 6) return negative(residual);
+        if (line == 7) return derivedLine(1, amounts).add(positive(residual)).subtract(derivedLine(3, amounts))
+                .subtract(derivedLine(4, amounts)).subtract(derivedLine(5, amounts)).subtract(negative(residual));
+        if (line == 20) return derivedAmount(7, amounts, residual, opening, closing)
+                .add(derivedLine(13, amounts)).add(derivedLine(19, amounts));
+        if (line == 21) return opening;
+        if (line == 22) return closing;
+        return derivedLine(line, amounts);
+    }
+
+    private BigDecimal monetaryOpening(List<FormulaAccountAmount> amounts) { return DerivedCashFlowCalculator.openingNet(amounts, "ASSET.CASH", "ASSET.BANK_DEPOSIT", "ASSET.OTHER_MONETARY_FUNDS"); }
+    private BigDecimal monetaryClosing(List<FormulaAccountAmount> amounts) { return DerivedCashFlowCalculator.closingNet(amounts, "ASSET.CASH", "ASSET.BANK_DEPOSIT", "ASSET.OTHER_MONETARY_FUNDS"); }
+    private BigDecimal amount(List<StatutoryReportResponses.Group> groups, int line, boolean primary) { return groups.stream().flatMap(g -> g.lines().stream()).filter(l -> l.lineNo() == line).findFirst().map(l -> primary ? l.primaryAmount() : l.comparativeAmount()).orElse(BigDecimal.ZERO); }
+
+    private BigDecimal derivedNet(List<FormulaAccountAmount> amounts) {
+        return derivedLine(1, amounts).subtract(derivedLine(3, amounts)).subtract(derivedLine(4, amounts))
+                .subtract(derivedLine(5, amounts)).add(derivedLine(8, amounts)).add(derivedLine(9, amounts))
+                .add(derivedLine(10, amounts)).subtract(derivedLine(11, amounts)).subtract(derivedLine(12, amounts))
+                .add(derivedLine(14, amounts)).add(derivedLine(15, amounts)).subtract(derivedLine(16, amounts))
+                .subtract(derivedLine(17, amounts)).subtract(derivedLine(18, amounts));
+    }
+
+    private BigDecimal derivedLine(int line, List<FormulaAccountAmount> a) {
+        return switch (line) {
+            case 1 -> DerivedCashFlowCalculator.credit(a, "INCOME.MAIN_BUSINESS_REVENUE",
+                    "INCOME.OTHER_BUSINESS_REVENUE", "LIABILITY.TAX_PAYABLE.OUTPUT_VAT")
+                    .subtract(DerivedCashFlowCalculator.debitIncrease(a, "ASSET.ACCOUNTS_RECEIVABLE", "ASSET.NOTES_RECEIVABLE"))
+                    .add(DerivedCashFlowCalculator.creditIncrease(a, "LIABILITY.ADVANCE_RECEIPT"));
+            case 3 -> DerivedCashFlowCalculator.debit(a, "EXPENSE.MAIN_BUSINESS_COST", "EXPENSE.OTHER_BUSINESS_COST", "COST.PRODUCTION",
+                    "LIABILITY.TAX_PAYABLE.INPUT_VAT")
+                    .add(DerivedCashFlowCalculator.debitIncrease(a, "ASSET.MATERIAL_PROCUREMENT", "ASSET.MATERIAL_IN_TRANSIT", "ASSET.RAW_MATERIAL", "ASSET.INVENTORY_GOODS"))
+                    .subtract(DerivedCashFlowCalculator.creditIncrease(a, "LIABILITY.ACCOUNTS_PAYABLE", "LIABILITY.NOTES_PAYABLE"));
+            case 4 -> DerivedCashFlowCalculator.debit(a, "LIABILITY.EMPLOYEE_BENEFITS_PAYABLE");
+            case 5 -> DerivedCashFlowCalculator.debit(a, "LIABILITY.TAX_PAYABLE")
+                    .subtract(DerivedCashFlowCalculator.debit(a, "LIABILITY.TAX_PAYABLE.INPUT_VAT"))
+                    .add(DerivedCashFlowCalculator.debit(a, "EXPENSE.TAX_AND_SURCHARGE"));
+            case 8 -> DerivedCashFlowCalculator.credit(a, "ASSET.SHORT_TERM_INVESTMENT", "ASSET.LONG_TERM_BOND_INVESTMENT", "ASSET.LONG_TERM_EQUITY_INVESTMENT");
+            case 9 -> DerivedCashFlowCalculator.credit(a, "INCOME.INVESTMENT").subtract(
+                    DerivedCashFlowCalculator.debitIncrease(a, "ASSET.DIVIDEND_RECEIVABLE", "ASSET.INTEREST_RECEIVABLE"));
+            case 10 -> DerivedCashFlowCalculator.credit(a, "ASSET.FIXED_ASSET", "ASSET.CONSTRUCTION_IN_PROGRESS", "ASSET.CONSTRUCTION_MATERIAL", "ASSET.INTANGIBLE_ASSET", "ASSET.OTHER_NON_CURRENT");
+            case 11 -> DerivedCashFlowCalculator.debit(a, "ASSET.SHORT_TERM_INVESTMENT", "ASSET.LONG_TERM_BOND_INVESTMENT", "ASSET.LONG_TERM_EQUITY_INVESTMENT");
+            case 12 -> DerivedCashFlowCalculator.debit(a, "ASSET.FIXED_ASSET", "ASSET.CONSTRUCTION_IN_PROGRESS", "ASSET.CONSTRUCTION_MATERIAL", "ASSET.INTANGIBLE_ASSET", "ASSET.OTHER_NON_CURRENT");
+            case 14 -> DerivedCashFlowCalculator.credit(a, "LIABILITY.SHORT_TERM_BORROWING", "LIABILITY.LONG_TERM_BORROWING");
+            case 15 -> DerivedCashFlowCalculator.credit(a, "EQUITY.PAID_IN_CAPITAL", "EQUITY.CAPITAL_RESERVE");
+            case 16 -> DerivedCashFlowCalculator.debit(a, "LIABILITY.SHORT_TERM_BORROWING", "LIABILITY.LONG_TERM_BORROWING");
+            case 17 -> DerivedCashFlowCalculator.debit(a, "EXPENSE.FINANCE");
+            case 18 -> DerivedCashFlowCalculator.debit(a, "LIABILITY.PROFIT_PAYABLE");
+            case 13 -> derivedLine(8, a).add(derivedLine(9, a)).add(derivedLine(10, a))
+                    .subtract(derivedLine(11, a)).subtract(derivedLine(12, a));
+            case 19 -> derivedLine(14, a).add(derivedLine(15, a)).subtract(derivedLine(16, a)).subtract(derivedLine(17, a)).subtract(derivedLine(18, a));
+            default -> BigDecimal.ZERO;
+        };
+    }
+
+
+    private static StatutoryReportResponses.Line replaceAmounts(StatutoryReportResponses.Line line,
+                                                                  BigDecimal primary, BigDecimal comparative) {
+        return new StatutoryReportResponses.Line(line.key(), line.lineNo(), line.name(), line.indent(),
+                line.rowType(), primary, comparative);
+    }
+
+    private static BigDecimal positive(BigDecimal value) {
+        return value.signum() > 0 ? value : BigDecimal.ZERO;
+    }
+
+    private static BigDecimal negative(BigDecimal value) {
+        return value.signum() < 0 ? value.negate() : BigDecimal.ZERO;
     }
 
     /**

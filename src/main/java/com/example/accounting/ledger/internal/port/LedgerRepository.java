@@ -32,7 +32,7 @@ public interface LedgerRepository {
 
     Optional<LedgerResponses.Ledger> findLedger(UUID ledgerId);
 
-    void updateLedger(UUID ledgerId, String name, String description, UUID actorId);
+    void updateLedger(UUID ledgerId, String name, String description, Boolean cashFlowCheckEnabled, UUID actorId);
 
     List<LedgerResponses.Member> listMembers(UUID ledgerId);
 

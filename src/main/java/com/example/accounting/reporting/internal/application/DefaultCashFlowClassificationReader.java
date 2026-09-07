@@ -44,7 +44,8 @@ public class DefaultCashFlowClassificationReader implements CashFlowClassificati
     @Override
     public Contract contract(UUID ledgerId) {
         ReportResponses.LedgerProfile profile = reports.ledgerProfile(ledgerId);
-        if (!"SME".equalsIgnoreCase(profile.accountingStandardCode())) {
+        if (!"SME".equalsIgnoreCase(profile.accountingStandardCode())
+                || !reports.cashFlowCheckEnabled(ledgerId)) {
             return Contract.none();
         }
         ReportFormulaDefinition definition = publishedDefinition(ledgerId);
@@ -52,6 +53,9 @@ public class DefaultCashFlowClassificationReader implements CashFlowClassificati
             return Contract.none();
         }
         Set<AccountReference> references = new LinkedHashSet<>();
+        references.add(new AccountReference(ReportFormulaDefinition.REF_STANDARD_ACCOUNT_KEY, "ASSET.CASH"));
+        references.add(new AccountReference(ReportFormulaDefinition.REF_STANDARD_ACCOUNT_KEY, "ASSET.BANK_DEPOSIT"));
+        references.add(new AccountReference(ReportFormulaDefinition.REF_STANDARD_ACCOUNT_KEY, "ASSET.OTHER_MONETARY_FUNDS"));
         Set<String> codes = new LinkedHashSet<>();
         for (ReportFormulaDefinition.FormulaGroup group : definition.groups()) {
             for (ReportFormulaDefinition.FormulaLine line : group.lines()) {
@@ -66,7 +70,9 @@ public class DefaultCashFlowClassificationReader implements CashFlowClassificati
         Map<UUID, CashFlowItemState> items = new LinkedHashMap<>();
         accounts.cashFlowItems(ledgerId).forEach(item -> items.put(item.id(),
                 new CashFlowItemState(item.code(), item.status())));
-        return new Contract(true, resolver.expandToLeafIds(ledgerId, List.copyOf(references)),
+        Set<UUID> cashAccounts = new LinkedHashSet<>(reports.cashFlowCashAccountLeafIds(ledgerId));
+        cashAccounts.addAll(resolver.expandToLeafIds(ledgerId, List.copyOf(references)));
+        return new Contract(true, cashAccounts,
                 codes, items);
     }
 

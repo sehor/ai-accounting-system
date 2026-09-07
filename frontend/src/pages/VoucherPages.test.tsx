@@ -918,6 +918,10 @@ describe('cash-flow voucher classification', () => {
   const installCashFlowBackend = (options: { formulaError?: boolean; itemsError?: boolean; postError?: unknown } = {}) => {
     const postedBodies: Record<string, unknown>[] = []
     vi.mocked(apiFetch).mockImplementation((path, _session, init) => {
+      if (path === '/ledgers/ledger-1') return Promise.resolve({
+        id: 'ledger-1', name: '测试账套', description: '', accountingStandardCode: 'SME', accountingStandardVersion: '2011-17',
+        baseCurrency: 'CNY', startDate: '2026-01-01', approvalEnabled: false, cashFlowCheckEnabled: true, status: 'ACTIVE',
+      })
       if (path.endsWith('/periods')) return Promise.resolve([{
         id: 'period-open', ledgerId: 'ledger-1', periodCode: '2026-08', startDate: '2026-08-01', endDate: '2026-08-31', status: 'OPEN', hasVouchers: true,
       }])
@@ -1040,6 +1044,31 @@ describe('cash-flow voucher classification', () => {
         [{ type: 'ACCOUNT_ID', value: parent.id }],
         [parent, child, unrelated],
       )).toEqual(new Set([child.id]))
+    })
+
+    it('always includes the standard cash account keys even when the formula omits them', () => {
+      expect(resolveCashFlowAccountIds([], [cashAccount, bankAccount, expenseAccount]))
+        .toEqual(new Set([cashAccount.id, bankAccount.id]))
+    })
+
+    it('expands a standard cash key on a parent account to its leaf descendants', () => {
+      const parent = { ...cashAccount, id: 'account-standard-parent', isLeaf: false }
+      const child = { ...cashAccount, id: 'account-standard-child', parentId: parent.id, standardAccountKey: null }
+
+      expect(resolveCashFlowAccountIds([], [parent, child, expenseAccount]))
+        .toEqual(new Set([child.id]))
+    })
+
+    it('expands a cash-flow-required parent account to its leaf descendants', () => {
+      const parent = {
+        ...expenseAccount, id: 'account-required-parent', isLeaf: false, cashFlowRequired: true,
+      }
+      const child = {
+        ...expenseAccount, id: 'account-required-child', parentId: parent.id, cashFlowRequired: false,
+      }
+
+      expect(resolveCashFlowAccountIds([], [parent, child]))
+        .toEqual(new Set([child.id]))
     })
   })
 

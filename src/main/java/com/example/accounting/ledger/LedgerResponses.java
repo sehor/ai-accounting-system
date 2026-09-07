@@ -14,15 +14,24 @@ public final class LedgerResponses {
 
     @Schema(name = "LedgerResponse", requiredProperties = {"id", "name", "description",
             "accountingStandardCode", "accountingStandardVersion", "baseCurrency", "startDate",
-            "approvalEnabled", "status"})
+            "approvalEnabled", "cashFlowCheckEnabled", "status"})
     public record Ledger(UUID id, String name, String description,
                          String accountingStandardCode, String accountingStandardVersion,
-                         String baseCurrency, LocalDate startDate, boolean approvalEnabled, String status) {
+                         String baseCurrency, LocalDate startDate, boolean approvalEnabled,
+                         boolean cashFlowCheckEnabled, String status) {
 
         public Ledger(UUID id, String name, String accountingStandardCode, String accountingStandardVersion,
                       String baseCurrency, LocalDate startDate, boolean approvalEnabled, String status) {
             this(id, name, "", accountingStandardCode, accountingStandardVersion, baseCurrency, startDate,
-                    approvalEnabled, status);
+                    approvalEnabled, false, status);
+        }
+
+        /** Compatibility constructor used by existing API tests and integrations. */
+        public Ledger(UUID id, String name, String description, String accountingStandardCode,
+                      String accountingStandardVersion, String baseCurrency, LocalDate startDate,
+                      boolean approvalEnabled, String status) {
+            this(id, name, description, accountingStandardCode, accountingStandardVersion, baseCurrency,
+                    startDate, approvalEnabled, false, status);
         }
     }
 

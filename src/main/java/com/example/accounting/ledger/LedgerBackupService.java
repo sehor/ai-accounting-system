@@ -276,7 +276,8 @@ public class LedgerBackupService {
                     requiredText(source, "accounting_standard_version"),
                     requiredText(source, "base_currency"),
                     LocalDate.parse(requiredText(source, "start_date")),
-                    source.path("approval_enabled").asBoolean(), "ACTIVE");
+                    source.path("approval_enabled").asBoolean(),
+                    source.path("enable_cash_flow_check").asBoolean(false), "ACTIVE");
         } catch (ApiProblemException exception) {
             throw exception;
         } catch (DataAccessException | IllegalArgumentException exception) {
@@ -362,6 +363,7 @@ public class LedgerBackupService {
                 requiredText(source, "accounting_standard_code"),
                 requiredText(source, "accounting_standard_version"), requiredText(source, "base_currency"),
                 LocalDate.parse(requiredText(source, "start_date")), source.path("approval_enabled").asBoolean(),
+                source.path("enable_cash_flow_check").asBoolean(false),
                 "",
                 source.path("account_level2_width").asInt(), source.path("account_level3_width").asInt(),
                 source.path("account_level4_width").asInt());

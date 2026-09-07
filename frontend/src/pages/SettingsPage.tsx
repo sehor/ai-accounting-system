@@ -1,4 +1,4 @@
-import { App as AntApp, Alert, Button, Card, Form, Input, Select, Space, Table, Tabs, Tag, Typography, Upload, message } from 'antd'
+import { App as AntApp, Alert, Button, Card, Form, Input, Select, Space, Switch, Table, Tabs, Tag, Typography, Upload, message } from 'antd'
 import type { FormInstance } from 'antd'
 import { DownloadOutlined, UploadOutlined, PlusOutlined } from '@ant-design/icons'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -48,14 +48,18 @@ export function SettingsPage() {
   const ledgerRole = useQuery({ queryKey: ['ledger-role', ledgerId], queryFn: () => apiData(openApiClient.GET('/v1/ledgers/{ledgerId}/role', { params: { path: { ledgerId } }, headers: apiHeaders(session!) })), enabled: Boolean(session && ledgerId) })
   const dimensionTypes = useQuery({ queryKey: ['dimension-types', ledgerId], queryFn: () => apiData(openApiClient.GET('/v1/ledgers/{ledgerId}/dimension-types', { params: { path: { ledgerId } }, headers: apiHeaders(session!) })), enabled: Boolean(session && ledgerId) })
   const [selectedTypeId, setSelectedTypeId] = useState<string>()
-  const [ledgerForm] = Form.useForm<{ name: string; description: string }>()
+  const [ledgerForm] = Form.useForm<{ name: string; description: string; cashFlowCheckEnabled: boolean }>()
   useEffect(() => {
     if (tab === 'accounts') navigate(`/ledgers/${ledgerId}/accounts`, { replace: true })
   }, [ledgerId, navigate, tab])
-  useEffect(() => { if (ledger.data) ledgerForm.setFieldsValue({ name: ledger.data.name, description: ledger.data.description || '' }) }, [ledger.data, ledgerForm])
+  useEffect(() => { if (ledger.data) ledgerForm.setFieldsValue({ name: ledger.data.name, description: ledger.data.description || '', cashFlowCheckEnabled: ledger.data.cashFlowCheckEnabled }) }, [ledger.data, ledgerForm])
   const ledgerUpdate = useMutation({
-    mutationFn: (value: { name: string; description: string }) => apiData(openApiClient.PATCH('/v1/ledgers/{ledgerId}', { params: { path: { ledgerId } }, headers: apiHeaders(session!), body: value })),
-    onSuccess: (value) => { ledgerForm.setFieldsValue({ name: value.name, description: value.description || '' }); void client.invalidateQueries({ queryKey: ['ledger', ledgerId] }); messageApi.success('账套信息已保存') },
+    mutationFn: (value: { name: string; description: string; cashFlowCheckEnabled: boolean }) => apiData(openApiClient.PATCH('/v1/ledgers/{ledgerId}', { params: { path: { ledgerId } }, headers: apiHeaders(session!), body: value })),
+    onSuccess: (value) => {
+      ledgerForm.setFieldsValue({ name: value.name, description: value.description || '', cashFlowCheckEnabled: value.cashFlowCheckEnabled })
+      ;[['ledgers'], ['ledger', ledgerId], ['voucher', ledgerId], ['vouchers', ledgerId], ['report', ledgerId], ['cash-flow-items', ledgerId], ['report-formula', ledgerId, 'CASH_FLOW']].forEach((queryKey) => void client.invalidateQueries({ queryKey }))
+      messageApi.success('账套信息已保存')
+    },
     onError: (error) => messageApi.error(error instanceof ApiError ? error.message : '账套信息保存失败'),
   })
   const dimensionValues = useQuery({ queryKey: ['dimension-values', ledgerId, selectedTypeId], queryFn: () => apiData(openApiClient.GET('/v1/ledgers/{ledgerId}/dimension-types/{typeId}/values', { params: { path: { ledgerId, typeId: selectedTypeId! } }, headers: apiHeaders(session!) })), enabled: Boolean(session && ledgerId && selectedTypeId) })
@@ -71,7 +75,7 @@ export function SettingsPage() {
     const closeDialog = modal.info({ title: `期末结账 · ${period.periodCode}`, width: 980, icon: null, footer: null, closable: true, content: <PeriodClosingPanel ledgerId={ledgerId} session={session!} period={period} accounts={accounts.data || []} onDismiss={() => closeDialog.destroy()} onConfirmClose={() => { closeDialog.destroy(); periodAction.mutate({ period, operation: 'close' }) }} /> })
   }
   const changeTab = (key: string) => navigate(`/ledgers/${ledgerId}/settings/${key}`)
-  return <>{contextHolder}<Space direction="vertical" size={16} style={{ width: '100%' }}><Typography.Title level={1}>账套设置</Typography.Title><Card title="账套基本信息"><Form form={ledgerForm} layout="vertical" onFinish={(value) => ledgerUpdate.mutate(value)}><Form.Item name="name" label="账套名称" rules={[{ required: true, message: '请输入账套名称' }]}><Input disabled={!['OWNER', 'EDITOR'].includes(ledgerRole.data?.role || '')} /></Form.Item><Form.Item name="description" label="公司主营业务" rules={[{ max: 2000, message: '主营业务描述不能超过 2000 个字符' }]}><Input.TextArea rows={4} maxLength={2000} showCount disabled={!['OWNER', 'EDITOR'].includes(ledgerRole.data?.role || '')} placeholder="例如：研发、生产和销售智能硬件及配套软件" /></Form.Item><Button type="primary" htmlType="submit" loading={ledgerUpdate.isPending} disabled={!['OWNER', 'EDITOR'].includes(ledgerRole.data?.role || '')}>保存</Button></Form></Card><Tabs activeKey={tab} onChange={changeTab} items={[
+  return <>{contextHolder}<Space direction="vertical" size={16} style={{ width: '100%' }}><Typography.Title level={1}>账套设置</Typography.Title><Card title="账套基本信息"><Form form={ledgerForm} layout="vertical" onFinish={(value) => ledgerUpdate.mutate(value)}><Form.Item name="name" label="账套名称" rules={[{ required: true, message: '请输入账套名称' }]}><Input disabled={!['OWNER', 'EDITOR'].includes(ledgerRole.data?.role || '')} /></Form.Item><Form.Item name="description" label="公司主营业务" rules={[{ max: 2000, message: '主营业务描述不能超过 2000 个字符' }]}><Input.TextArea rows={4} maxLength={2000} showCount disabled={!['OWNER', 'EDITOR'].includes(ledgerRole.data?.role || '')} placeholder="例如：研发、生产和销售智能硬件及配套软件" /></Form.Item><Form.Item name="cashFlowCheckEnabled" label="启用凭证现金流量核算" valuePropName="checked"><Switch disabled={!['OWNER', 'EDITOR'].includes(ledgerRole.data?.role || '')} /></Form.Item><Typography.Paragraph type="secondary">开启后，外部现金收支凭证必须选择现金流项目；关闭后凭证不显示该字段，现金流量表默认按公式推导估算。</Typography.Paragraph><Button type="primary" htmlType="submit" loading={ledgerUpdate.isPending} disabled={!['OWNER', 'EDITOR'].includes(ledgerRole.data?.role || '')}>保存</Button></Form></Card><Tabs activeKey={tab} onChange={changeTab} items={[
     { key: 'periods', label: '会计期间', children: <PeriodsTab periods={periods.data || []} onAction={(period, operation) => operation === 'close' ? void openClosePanel(period) : void periodAction.mutate({ period, operation: 'reopen' })} /> },
     { key: 'openings', label: '期初余额', children: <OpeningsTab ledgerId={ledgerId} auth={session!} rows={openings.data || []} accounts={accounts.data || []} periods={periods.data || []} onSave={(lines) => openingSave.mutate(lines)} saving={openingSave.isPending} onImport={(file) => openingImport.mutate(file)} importing={openingImport.isPending} onConfirm={requestConfirmOpening} confirming={confirmOpening.isPending} /> },
     { key: 'dimensions', label: '辅助核算', children: <DimensionsTab ledgerId={ledgerId} session={session!} types={dimensionTypes.data || []} values={dimensionValues.data || []} selectedTypeId={selectedTypeId} onSelect={setSelectedTypeId} onChanged={() => { void client.invalidateQueries({ queryKey: ['dimension-types', ledgerId] }); void client.invalidateQueries({ queryKey: ['dimension-values', ledgerId, selectedTypeId] }) }} /> },

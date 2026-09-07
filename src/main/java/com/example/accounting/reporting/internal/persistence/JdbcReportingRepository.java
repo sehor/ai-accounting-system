@@ -714,6 +714,33 @@ public class JdbcReportingRepository implements ReportingRepository {
     }
 
     @Override
+    public boolean cashFlowCheckEnabled(UUID ledgerId) {
+        return Boolean.TRUE.equals(jdbc.queryForObject(
+                "select enable_cash_flow_check from ledger where id = ? and deleted_at is null",
+                Boolean.class, ledgerId));
+    }
+
+    @Override
+    public Set<UUID> cashFlowCashAccountLeafIds(UUID ledgerId) {
+        return new java.util.HashSet<>(jdbc.query("""
+                with recursive required_tree as (
+                    select id from ledger_account
+                    where ledger_id = ? and status = 'ACTIVE' and cash_flow_required = true
+                    union all
+                    select child.id from ledger_account child join required_tree parent on child.parent_id = parent.id
+                    where child.ledger_id = ? and child.status = 'ACTIVE'
+                )
+                select account.id from ledger_account account
+                where account.ledger_id = ? and account.status = 'ACTIVE'
+                  and (account.id in (select id from required_tree)
+                       or account.standard_account_key in ('ASSET.CASH', 'ASSET.BANK_DEPOSIT',
+                                                           'ASSET.OTHER_MONETARY_FUNDS'))
+                  and not exists (select 1 from ledger_account child where child.ledger_id = account.ledger_id
+                                  and child.parent_id = account.id and child.status = 'ACTIVE')
+                """, (rs, rowNum) -> rs.getObject("id", UUID.class), ledgerId, ledgerId, ledgerId));
+    }
+
+    @Override
     public ReportResponses.LedgerProfile ledgerProfile(UUID ledgerId) {
         return jdbc.queryForObject("""
                 select accounting_standard_code, accounting_standard_version, base_currency
