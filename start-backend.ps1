@@ -44,4 +44,12 @@ Start-Process -FilePath (Join-Path $projectRoot 'mvnw.cmd') -ArgumentList 'sprin
     -RedirectStandardOutput $stdout -RedirectStandardError $stderr | Out-Null
 
 Wait-ForHttpOk "http://127.0.0.1:$Port/actuator/health" $StartupTimeoutSeconds
+$adminName = [Environment]::GetEnvironmentVariable('PLATFORM_ADMIN_USERNAME')
+if ([string]::IsNullOrWhiteSpace($adminName)) { $adminName = 'admin' }
+try {
+    Invoke-WebRequest -UseBasicParsing -Uri "http://127.0.0.1:$Port/v1/admin/ledgers" `
+        -Headers @{ 'X-User-Name' = $adminName } -TimeoutSec 10 | Out-Null
+} catch {
+    throw "Backend is responding but local admin access failed. Check the local profile and platform-admin settings. Logs: $logDirectory"
+}
 Write-Host "Backend is ready at http://127.0.0.1:$Port (logs: $logDirectory)"

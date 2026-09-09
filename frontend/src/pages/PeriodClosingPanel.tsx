@@ -18,10 +18,19 @@ const labels: Record<PeriodClosingStepType, string> = {
 }
 
 export function PeriodClosingPanel({ ledgerId, session, period, accounts, onConfirmClose, onDismiss }: {
-  ledgerId: string; session: ApiAuth; period: Period; accounts: Account[]; onConfirmClose: () => void; onDismiss: () => void
+  ledgerId: string; session: ApiAuth; period: Period; accounts: Account[]; onConfirmClose: () => Promise<unknown>; onDismiss: () => void
 }) {
   const client = useQueryClient(); const [showSettings, setShowSettings] = useState(false); const [activeStep, setActiveStep] = useState<PeriodClosingStepType | null>(null); const generatingRef = useRef(false)
   const [messageApi, contextHolder] = message.useMessage()
+  const closingRef = useRef(false)
+  const close = useMutation({
+    mutationFn: onConfirmClose,
+    onError: () => {
+      void client.invalidateQueries({ queryKey: ['period-closing', ledgerId, period.id] })
+      void client.invalidateQueries({ queryKey: ['periods', ledgerId] })
+    },
+    onSettled: () => { closingRef.current = false },
+  })
   const status = useQuery({ queryKey: ['period-closing', ledgerId, period.id], queryFn: () => apiData(openApiClient.GET('/v1/ledgers/{ledgerId}/period-closings/{periodId}', { params: { path: { ledgerId, periodId: period.id } }, headers: apiHeaders(session) })), retry: false })
   const settings = useQuery({ queryKey: ['period-closing-settings', ledgerId], queryFn: () => apiData(openApiClient.GET('/v1/ledgers/{ledgerId}/period-closing-settings', { params: { path: { ledgerId } }, headers: apiHeaders(session) })), retry: false })
   const generate = useMutation({ mutationFn: (step: PeriodClosingStepType) => apiData(openApiClient.POST('/v1/ledgers/{ledgerId}/period-closings/{periodId}/steps/{step}:generate', { params: { path: { ledgerId, periodId: period.id, step } }, headers: apiHeaders(session) })), onSuccess: () => { void client.invalidateQueries({ queryKey: ['period-closing', ledgerId, period.id] }); void client.invalidateQueries({ queryKey: ['periods', ledgerId] }); void client.invalidateQueries({ queryKey: ['vouchers', ledgerId] }) }, onError: (error) => messageApi.error(error instanceof ApiError ? error.message : '生成结账凭证失败'), onSettled: () => { generatingRef.current = false; setActiveStep(null) } })
@@ -37,16 +46,22 @@ export function PeriodClosingPanel({ ledgerId, session, period, accounts, onConf
   }
   return <Space direction="vertical" style={{ width: '100%' }}>{contextHolder}
     {status.isLoading && <Typography.Text>正在读取结账状态…</Typography.Text>}
+    {status.error && <Alert type="error" showIcon message="读取结账状态失败" description={status.error.message} />}
+    {close.error && <Alert type="error" showIcon message="结账失败" description={close.error instanceof ApiError ? close.error.message : '结账请求失败，请重试'} />}
     {data && <>
       <Space wrap>
         <Typography.Text strong>期间：{period.periodCode}</Typography.Text>
         <Button icon={<SettingOutlined />} onClick={() => setShowSettings((value) => !value)}>结账科目</Button>
       </Space>
       {showSettings && selected && <Card size="small" title="结账科目配置"><Form layout="vertical" initialValues={{ profitAccountId: selected.profitAccountId || selected.defaultProfitAccountId, retainedEarningsAccountId: selected.retainedEarningsAccountId || selected.defaultRetainedEarningsAccountId }} onFinish={(value) => saveSettings.mutate(value)}><Form.Item name="profitAccountId" label="本年利润"><Select allowClear options={equityLeaves.map((account) => ({ value: account.id, label: `${account.code} ${account.name}` }))} /></Form.Item><Form.Item name="retainedEarningsAccountId" label="利润分配—未分配利润"><Select allowClear options={equityLeaves.map((account) => ({ value: account.id, label: `${account.code} ${account.name}` }))} /></Form.Item><Button type="primary" htmlType="submit" loading={saveSettings.isPending}>保存配置</Button></Form></Card>}
-      <Space wrap style={{ width: '100%' }}>{data.steps.map((step) => <StepCard key={step.step} step={step} onGenerate={() => generateStep(step.step)} onVoucher={() => window.location.assign(`/ledgers/${ledgerId}/vouchers/${step.voucherId}`)} loading={activeStep === step.step && generate.isPending} disabled={generate.isPending} />)}</Space>
+      <Space wrap style={{ width: '100%' }}>{data.steps.map((step) => <StepCard key={step.step} step={step} onGenerate={() => generateStep(step.step)} onVoucher={() => window.location.assign(`/ledgers/${ledgerId}/vouchers/${step.voucherId}`)} loading={activeStep === step.step && generate.isPending} disabled={generate.isPending || close.isPending} />)}</Space>
       {data.blockers.length > 0 && <Alert type="warning" showIcon message="存在结账阻塞" description={<ul>{data.blockers.map((blocker) => <li key={`${blocker.code}-${blocker.detail}`}>{blocker.title}：{blocker.detail}</li>)}</ul>} />}
       <Card size="small" title="试算平衡"><Space wrap><Typography.Text>期初差额：{data.trialBalance.openingDifference}</Typography.Text><Typography.Text>本期差额：{data.trialBalance.periodDifference}</Typography.Text><Typography.Text>期末差额：{data.trialBalance.closingDifference}</Typography.Text><Tag color={data.trialBalance.balanced ? 'success' : 'error'}>{data.trialBalance.balanced ? '平衡' : '不平衡'}</Tag></Space></Card>
-      <Space><Button onClick={onDismiss}>关闭</Button><Button type="primary" disabled={!data.canClose} onClick={onConfirmClose}>结账</Button></Space>
+      <Space><Button onClick={onDismiss} disabled={close.isPending}>关闭</Button><Button type="primary" loading={close.isPending} disabled={!data.canClose || generate.isPending} onClick={() => {
+        if (closingRef.current) return
+        closingRef.current = true
+        close.mutate()
+      }}>结账</Button></Space>
     </>}
   </Space>
 }

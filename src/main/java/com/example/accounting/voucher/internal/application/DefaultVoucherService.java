@@ -123,10 +123,10 @@ public class DefaultVoucherService implements VoucherService, GeneratedVoucherCo
         }
         LedgerContext context = createLedgerContext(ledgerId, request.periodId(), request.voucherDate());
         UUID periodId = context.periodId();
-        String voucherType = request.voucherType().trim();
-        String voucherNumber = request.voucherNumber() == null || request.voucherNumber().isBlank()
-                ? vouchers.nextVoucherNumber(ledgerId, periodId, voucherType)
-                : request.voucherNumber().trim();
+        String voucherType = "记";
+        // Business identifiers belong in source fields and idempotency keys, never in the voucher number.
+        String voucherNumber = resolveVoucherNumber(ledgerId, periodId,
+                sourceType == null ? request.voucherNumber() : null);
         if (sourceType == null) {
             vouchers.createVoucher(voucherId, ledgerId, periodId, request.voucherDate(),
                     voucherType, voucherNumber, request.summary(),
@@ -141,6 +141,13 @@ public class DefaultVoucherService implements VoucherService, GeneratedVoucherCo
         return finalizeOnSave(actorId, ledgerId, voucherId, roles);
     }
 
+    private String resolveVoucherNumber(UUID ledgerId, UUID periodId, String requestedNumber) {
+        if (requestedNumber != null && requestedNumber.trim().matches("[0-9]+")) {
+            return requestedNumber.trim();
+        }
+        return vouchers.nextVoucherNumber(ledgerId, periodId, "记");
+    }
+
     @Transactional
     @Override
     public VoucherResponses.Voucher update(UUID actorId, UUID ledgerId, UUID voucherId,
@@ -153,7 +160,7 @@ public class DefaultVoucherService implements VoucherService, GeneratedVoucherCo
         requireOpenPeriods(ledgerId, before.periodId(), request.periodId());
         LedgerContext context = ledgerContext(ledgerId, request.periodId(), request.voucherDate());
         if (!vouchers.updateVoucher(ledgerId, voucherId, request.periodId(), request.voucherDate(),
-                request.voucherType().trim(), request.voucherNumber().trim(), request.summary(),
+                "记", resolveVoucherNumber(ledgerId, request.periodId(), request.voucherNumber()), request.summary(),
                 context.approvalRequired(), actorId, request.expectedVersion())) {
             throw problem(409, "RESOURCE_VERSION_CONFLICT", "Resource version conflict",
                     "The voucher was changed by another request");
@@ -190,7 +197,7 @@ public class DefaultVoucherService implements VoucherService, GeneratedVoucherCo
         requireOpenPeriods(ledgerId, before.periodId(), request.periodId());
         LedgerContext context = ledgerContext(ledgerId, request.periodId(), request.voucherDate());
         if (!vouchers.replaceGeneratedVoucher(ledgerId, voucherId, request.periodId(), request.voucherDate(),
-                request.voucherType().trim(), request.voucherNumber().trim(), request.summary(),
+                "记", resolveVoucherNumber(ledgerId, request.periodId(), before.voucherNumber()), request.summary(),
                 context.approvalRequired(), actorId, request.expectedVersion(), sourceType, expectedSourceId,
                 nextSourceId)) {
             throw problem(409, "RESOURCE_VERSION_CONFLICT", "Resource version conflict",
@@ -685,8 +692,19 @@ public class DefaultVoucherService implements VoucherService, GeneratedVoucherCo
         ensurePeriodUnchanged(before.periodId(), target.periodId());
         requireOpenPeriods(ledgerId, before.periodId(), target.periodId());
         ledgerContext(ledgerId, target.periodId(), target.voucherDate());
-        vouchers.restoreHeader(ledgerId, voucherId, target.periodId(), target.voucherDate(), target.voucherType(),
-                target.voucherNumber(), target.summary(), target.approvalRequired(), actorId);
+        try {
+            vouchers.restoreHeader(ledgerId, voucherId, target.periodId(), target.voucherDate(), "记",
+                    resolveVoucherNumber(ledgerId, target.periodId(),
+                            "记".equals(target.voucherType()) && target.voucherNumber().matches("[0-9]+")
+                                    ? target.voucherNumber() : before.voucherNumber()),
+                    target.summary(), target.approvalRequired(), actorId);
+        } catch (DataIntegrityViolationException exception) {
+            if (String.valueOf(exception.getMostSpecificCause().getMessage()).contains("uk_voucher_business_key")) {
+                throw problem(409, "VOUCHER_NUMBER_CONFLICT", "凭证号冲突",
+                        "历史凭证号已被其他凭证使用，无法恢复此版本");
+            }
+            throw exception;
+        }
         vouchers.deleteLines(ledgerId, voucherId);
         insertSnapshotLines(ledgerId, voucherId, target.lines());
         vouchers.reclassifyAccountingRole(ledgerId, voucherId);

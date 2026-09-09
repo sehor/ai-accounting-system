@@ -1,8 +1,8 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { App, message } from 'antd'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { apiFetch, openApiClient } from '../api/client'
+import { ApiError, apiFetch, openApiClient } from '../api/client'
 import { PeriodClosingPanel } from './PeriodClosingPanel'
 
 vi.mock('../api/client', async (importOriginal) => {
@@ -33,14 +33,39 @@ const status = {
   steps: ['DEPRECIATION', 'EXPENSE_TRANSFER'].map((step) => ({ step, status: 'PENDING', amount: '10', voucherId: null, inputFingerprint: null, blockers: [], updatedAt: '2026-08-01T00:00:00Z' })),
 } as const
 
-function renderPanel() {
+function renderPanel(onConfirmClose = vi.fn<() => Promise<unknown>>().mockResolvedValue(undefined)) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-  render(<QueryClientProvider client={client}><App><PeriodClosingPanel ledgerId="ledger-1" session={{ localUserId: 'user-1' }} period={period} accounts={[]} onDismiss={vi.fn()} onConfirmClose={vi.fn()} /></App></QueryClientProvider>)
+  render(<QueryClientProvider client={client}><App><PeriodClosingPanel ledgerId="ledger-1" session={{ localUserId: 'user-1' }} period={period} accounts={[]} onDismiss={vi.fn()} onConfirmClose={onConfirmClose} /></App></QueryClientProvider>)
 }
 
-afterEach(() => vi.clearAllMocks())
+afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.clearAllMocks() })
 
 describe('PeriodClosingPanel', () => {
+  it('keeps the panel available with the server error after a failed close, and permits retry', async () => {
+    vi.mocked(apiFetch).mockImplementation((path) => Promise.resolve(path.endsWith('/period-closing-settings')
+      ? { ledgerId: 'ledger-1', version: 1 }
+      : { ...status, canClose: true }))
+    let rejectClose!: (reason: unknown) => void
+    const onConfirmClose = vi.fn<() => Promise<unknown>>()
+      .mockImplementationOnce(() => new Promise((_resolve, reject) => { rejectClose = reject }))
+      .mockResolvedValue(undefined)
+    renderPanel(onConfirmClose)
+    const button = await screen.findByRole('button', { name: /^结\s*账$/ })
+    fireEvent.click(button)
+    fireEvent.click(button)
+    await waitFor(() => expect(onConfirmClose).toHaveBeenCalledTimes(1))
+    expect(button).toHaveClass('ant-btn-loading')
+    expect(screen.getAllByRole('button', { name: '生成凭证' })[0]).toBeDisabled()
+    await act(async () => rejectClose(new ApiError(409, {
+      code: 'BALANCE_RECONCILIATION_FAILED', detail: '科目余额与辅助核算明细不一致',
+    })))
+    expect(await screen.findByText('科目余额与辅助核算明细不一致')).toBeVisible()
+    expect(button).not.toHaveClass('ant-btn-loading')
+    expect(button).toBeEnabled()
+    fireEvent.click(button)
+    await waitFor(() => expect(onConfirmClose).toHaveBeenCalledTimes(2))
+  })
+
   it('provides a dismiss button', async () => {
     vi.spyOn(message, 'useMessage').mockReturnValue([{ error: vi.fn() }, null] as never)
     vi.mocked(apiFetch).mockImplementation((path) => {

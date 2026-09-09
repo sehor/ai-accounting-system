@@ -9,6 +9,7 @@ import { useAuth } from '../auth/AuthProvider'
 import { PeriodRangeSelector, usePeriodRangeFilter } from '../components/PeriodSelector'
 import { useWorkspaceSearchParams } from '../components/workspaceSearch'
 import { useWorkspaceTabs } from '../components/workspaceTabs'
+import { VoucherRenumberModal } from './VoucherRenumberModal'
 
 type Account = components['schemas']['Account']
 type KingdeeImportResult = components['schemas']['KingdeeImportResult']
@@ -50,6 +51,7 @@ export function VoucherListPage() {
   const [bulkAction, setBulkAction] = useState<'approve' | 'delete' | null>(null)
   const [bulkComment, setBulkComment] = useState('')
   const [exportOpen, setExportOpen] = useState(false)
+  const [renumberOpen, setRenumberOpen] = useState(false)
   const [mergeEntries, setMergeEntries] = useState(false)
   const periodStartDate = periods.data?.find((period) => period.periodCode === periodFrom)?.startDate
   const periodEndDate = periods.data?.find((period) => period.periodCode === periodTo)?.endDate
@@ -73,6 +75,13 @@ export function VoucherListPage() {
   const accounts = useQuery({
     queryKey: ['accounts', ledgerId],
     queryFn: () => apiData(openApiClient.GET('/v1/ledgers/{ledgerId}/accounts', { headers: apiHeaders(session!), params: { path: { ledgerId } } })),
+    enabled: Boolean(session && ledgerId),
+  })
+  const role = useQuery({
+    queryKey: ['ledger-role', ledgerId],
+    queryFn: () => apiData(openApiClient.GET('/v1/ledgers/{ledgerId}/role', {
+      headers: apiHeaders(session!), params: { path: { ledgerId } },
+    })),
     enabled: Boolean(session && ledgerId),
   })
   const accountById = useMemo(
@@ -254,6 +263,7 @@ export function VoucherListPage() {
         }}><Button icon={<UploadOutlined />} loading={importKingdee.isPending}>导入金蝶凭证</Button></Upload>
         <Button icon={<DownloadOutlined />} loading={exportKingdee.isPending}
           disabled={!effectiveStartDate || !effectiveEndDate} onClick={() => setExportOpen(true)}>导出金蝶凭证</Button>
+        {['OWNER', 'EDITOR'].includes(role.data?.role || '') && <Button onClick={() => setRenumberOpen(true)}>整理凭证号</Button>}
         {reviewable.length > 0 && <Button onClick={() => setBulkAction('approve')}>批量审核</Button>}
         {postable.length > 0 && <Button loading={batch.isPending} onClick={() => batch.mutate({ action: 'post', selectedVouchers: postable })}>批量记账</Button>}
         {deletable.length > 0 && <Button danger loading={batch.isPending} onClick={() => setBulkAction('delete')}>批量删除</Button>}
@@ -317,6 +327,21 @@ export function VoucherListPage() {
         仅所属会计期间为 OPEN 的凭证可以删除；已结账或其他非 OPEN 期间的凭证不会被删除。
       </Typography.Paragraph>
     </Modal>
+    {renumberOpen && <VoucherRenumberModal ledgerId={ledgerId} periods={periods.data || []}
+      initialPeriodId={periodFrom === periodTo ? periods.data?.find((item) => item.periodCode === periodFrom)?.id : undefined}
+      onCancel={() => setRenumberOpen(false)} onComplete={(periodId) => {
+        setRenumberOpen(false)
+        setSelectedKeys([])
+        const periodCode = periods.data?.find((item) => item.id === periodId)?.periodCode
+        const next = new URLSearchParams(search)
+        for (const key of ['keyword', 'startDate', 'endDate', 'offset', 'page']) next.delete(key)
+        if (periodCode) { next.set('periodFrom', periodCode); next.set('periodTo', periodCode) }
+        setSearch(next)
+        void client.invalidateQueries({ predicate: ({ queryKey }) => queryKey[1] === ledgerId && (
+          ['vouchers', 'voucher', 'voucher-revisions', 'audit'].includes(String(queryKey[0]))
+          || (queryKey[0] === 'book' && ['sub-ledger', 'dimension-ledger'].includes(String(queryKey[2])))
+        ) })
+      }} />}
     <Modal open={exportOpen} title="导出金蝶凭证" okText="导出" cancelText="取消"
       confirmLoading={exportKingdee.isPending} onCancel={() => setExportOpen(false)} onOk={() => exportKingdee.mutate(mergeEntries)}>
       <Space direction="vertical" size={4}>

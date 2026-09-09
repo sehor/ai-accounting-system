@@ -207,6 +207,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/ledgers/{ledgerId}/vouchers/renumber:preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["previewVoucherRenumbering"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/ledgers/{ledgerId}/vouchers/renumber:execute": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["executeVoucherRenumbering"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/ledgers/{ledgerId}/report-formulas/{code}:publish": {
         parameters: {
             query?: never;
@@ -1873,6 +1905,62 @@ export interface components {
         };
         Comment: {
             comment: string;
+        };
+        /** @default null */
+        VoucherRenumberRequest: {
+            /** Format: uuid */
+            periodId: string;
+            /** @enum {string} */
+            mode: "NUMBER_ORDER" | "DATE_ORDER";
+            startNumber: string;
+        };
+        /** @default null */
+        VoucherRenumberChange: {
+            /** Format: uuid */
+            voucherId: string;
+            /** Format: date */
+            voucherDate: string;
+            /** @default  */
+            summary: string | null;
+            oldNumber: string;
+            newNumber: string;
+        };
+        /** @default null */
+        VoucherRenumberPreview: {
+            /** Format: uuid */
+            periodId: string;
+            /** Format: int32 */
+            totalCount: number;
+            /** Format: int32 */
+            changedCount: number;
+            /** @default  */
+            firstNumber: string | null;
+            /** @default  */
+            lastNumber: string | null;
+            previewFingerprint: string;
+            changes: components["schemas"]["VoucherRenumberChange"][];
+        };
+        /** @default null */
+        VoucherRenumberExecuteRequest: {
+            /** Format: uuid */
+            periodId: string;
+            /** @enum {string} */
+            mode: "NUMBER_ORDER" | "DATE_ORDER";
+            startNumber: string;
+            previewFingerprint: string;
+        };
+        /** @default null */
+        VoucherRenumberResult: {
+            /** Format: uuid */
+            operationId: string;
+            /** Format: uuid */
+            periodId: string;
+            /** Format: int32 */
+            changedCount: number;
+            /** @default  */
+            firstNumber: string | null;
+            /** @default  */
+            lastNumber: string | null;
         };
         /** @default null */
         ReportFormulaPublishRequest: {
@@ -3784,6 +3872,58 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["Voucher"];
+                };
+            };
+        };
+    };
+    previewVoucherRenumbering: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ledgerId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VoucherRenumberRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["VoucherRenumberPreview"];
+                };
+            };
+        };
+    };
+    executeVoucherRenumbering: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ledgerId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VoucherRenumberExecuteRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["VoucherRenumberResult"];
                 };
             };
         };

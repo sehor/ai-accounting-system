@@ -4,7 +4,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$Port = 5173
+$Port = 5174
 $projectRoot = $PSScriptRoot
 $frontendRoot = Join-Path $projectRoot 'frontend'
 $logDirectory = Join-Path $projectRoot 'artifacts\dev-logs'

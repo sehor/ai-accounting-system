@@ -185,6 +185,9 @@ public class BalanceSnapshotRebuilder {
     }
 
     public RebuildResult rebuildFromWithStats(UUID ledgerId, UUID sourcePeriodId, UUID throughPeriodId) {
+        // A historical upgrade/restore may leave only one of the two projections populated.
+        // Never seed a rolling rebuild from that incomplete pair: rebuild both from the facts.
+        sourcePeriodId = consistentSourcePeriod(ledgerId, sourcePeriodId);
         jdbc.update("""
                 delete from account_period_balance b
                 using accounting_period target, accounting_period source
@@ -197,6 +200,39 @@ public class BalanceSnapshotRebuilder {
         int rebuilt = jdbc.update(REBUILD_SQL, ledgerId, sourcePeriodId, throughPeriodId);
         int dimensionRows = dimensionSnapshots.rebuildFrom(ledgerId, sourcePeriodId, throughPeriodId);
         return new RebuildResult(rebuilt, dimensionRows);
+    }
+
+    private UUID consistentSourcePeriod(UUID ledgerId, UUID sourcePeriodId) {
+        return jdbc.queryForObject("""
+                with input as (
+                    select cast(? as uuid) ledger_id, cast(? as uuid) source_period_id
+                ), previous_period as (
+                    select p.id from accounting_period p join input i on i.ledger_id = p.ledger_id
+                    where p.period_code < (select period_code from accounting_period where id = i.source_period_id
+                                           and ledger_id = i.ledger_id)
+                    order by p.period_code desc limit 1
+                ), leaves as (
+                    select a.id from ledger_account a join input i on i.ledger_id = a.ledger_id
+                    where not exists (select 1 from ledger_account child
+                                      where child.ledger_id = a.ledger_id and child.parent_id = a.id)
+                ), accounts as (
+                    select b.account_id, b.closing_debit_base debit, b.closing_credit_base credit
+                    from account_period_balance b join input i on i.ledger_id = b.ledger_id
+                    where b.period_id = (select id from previous_period) and b.account_id in (select id from leaves)
+                ), details as (
+                    select b.account_id, sum(b.closing_debit_base) debit, sum(b.closing_credit_base) credit
+                    from dimension_period_balance b join input i on i.ledger_id = b.ledger_id
+                    where b.period_id = (select id from previous_period) and b.account_id in (select id from leaves)
+                    group by b.account_id
+                )
+                select case when exists (
+                    select 1 from accounts a full join details d on d.account_id = a.account_id
+                    where coalesce(a.debit, 0) <> coalesce(d.debit, 0)
+                       or coalesce(a.credit, 0) <> coalesce(d.credit, 0)
+                ) then (select p.id from accounting_period p join input i on i.ledger_id = p.ledger_id
+                        order by p.period_code limit 1)
+                  else (select source_period_id from input) end
+                """, UUID.class, ledgerId, sourcePeriodId);
     }
 
     public record RebuildResult(int accountRows, int dimensionRows) {
