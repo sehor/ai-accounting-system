@@ -376,6 +376,15 @@
                       },
                       {
                         "key": "COST.MANUFACTURING_OVERHEAD"
+                      },
+                      {
+                        "key": "COST.CONSTRUCTION"
+                      },
+                      {
+                        "key": "COST.MECHANICAL_OPERATION"
+                      },
+                      {
+                        "key": "COST.LABOR"
                       }
                     ]
                   }
@@ -457,6 +466,9 @@
                     "accounts": [
                       {
                         "key": "ASSET.CONSUMABLE_BIOLOGICAL_ASSET"
+                      },
+                      {
+                        "key": "ASSET.PENDING_PROPERTY_LOSS_SURPLUS"
                       }
                     ]
                   }
@@ -628,6 +640,9 @@
                     "accounts": [
                       {
                         "key": "ASSET.PRODUCTIVE_BIOLOGICAL_ASSET"
+                      },
+                      {
+                        "key": "ASSET.PRODUCTIVE_BIOLOGICAL_ACCUMULATED_DEPRECIATION"
                       }
                     ]
                   }
@@ -2437,7 +2452,8 @@
     {
       "key": "ASSET.CONSUMABLE_BIOLOGICAL_ASSET",
       "legacyCodes": [
-        "1441"
+        "1441",
+        "1421"
       ]
     },
     {
@@ -2473,13 +2489,15 @@
     {
       "key": "ASSET.CONSTRUCTION_IN_PROGRESS",
       "legacyCodes": [
-        "1603"
+        "1603",
+        "1604"
       ]
     },
     {
       "key": "ASSET.CONSTRUCTION_MATERIAL",
       "legacyCodes": [
-        "1604"
+        "1604",
+        "1605"
       ]
     },
     {
@@ -2509,7 +2527,8 @@
     {
       "key": "ASSET.LONG_TERM_DEFERRED_EXPENSE",
       "legacyCodes": [
-        "1901"
+        "1901",
+        "1801"
       ]
     },
     {
@@ -2641,7 +2660,8 @@
     {
       "key": "COST.MANUFACTURING_OVERHEAD",
       "legacyCodes": [
-        "4403"
+        "4403",
+        "4101"
       ]
     },
     {
@@ -2684,7 +2704,8 @@
     {
       "key": "EXPENSE.OTHER_BUSINESS_COST",
       "legacyCodes": [
-        "5405"
+        "5405",
+        "5402"
       ]
     },
     {
@@ -2752,6 +2773,42 @@
       "key": "EXPENSE.INCOME_TAX",
       "legacyCodes": [
         "5801"
+      ]
+    },
+    {
+      "key": "ASSET.PRODUCTIVE_BIOLOGICAL_ACCUMULATED_DEPRECIATION",
+      "legacyCodes": [
+        "1622"
+      ]
+    },
+    {
+      "key": "ASSET.PENDING_PROPERTY_LOSS_SURPLUS",
+      "legacyCodes": [
+        "1901"
+      ]
+    },
+    {
+      "key": "COST.CONSTRUCTION",
+      "legacyCodes": [
+        "4401"
+      ]
+    },
+    {
+      "key": "COST.MECHANICAL_OPERATION",
+      "legacyCodes": [
+        "4403"
+      ]
+    },
+    {
+      "key": "COST.LABOR",
+      "legacyCodes": [
+        "4404"
+      ]
+    },
+    {
+      "key": "EXPENSE.PRIOR_YEAR_ADJUSTMENT",
+      "legacyCodes": [
+        "6000"
       ]
     }
   ]

@@ -62,6 +62,21 @@ public class AccountExchangeService {
     private static final List<String> NATIVE_KINGDEE_HEADERS = List.of(
             "编码", "名称", "类别", "余额方向");
 
+    // Native Kingdee SME names disambiguate code aliases shared with older exports.
+    private static final Map<String, String> KINGDEE_SME_KEYS_BY_NAME = Map.ofEntries(
+            Map.entry("消耗性生物资产", "ASSET.CONSUMABLE_BIOLOGICAL_ASSET"),
+            Map.entry("在建工程", "ASSET.CONSTRUCTION_IN_PROGRESS"),
+            Map.entry("工程物资", "ASSET.CONSTRUCTION_MATERIAL"),
+            Map.entry("生产性生物资产累计折旧", "ASSET.PRODUCTIVE_BIOLOGICAL_ACCUMULATED_DEPRECIATION"),
+            Map.entry("长期待摊费用", "ASSET.LONG_TERM_DEFERRED_EXPENSE"),
+            Map.entry("待处理财产损溢", "ASSET.PENDING_PROPERTY_LOSS_SURPLUS"),
+            Map.entry("制造费用", "COST.MANUFACTURING_OVERHEAD"),
+            Map.entry("工程施工", "COST.CONSTRUCTION"),
+            Map.entry("机械作业", "COST.MECHANICAL_OPERATION"),
+            Map.entry("劳务成本", "COST.LABOR"),
+            Map.entry("其他业务成本", "EXPENSE.OTHER_BUSINESS_COST"),
+            Map.entry("以前年度损益调整", "EXPENSE.PRIOR_YEAR_ADJUSTMENT"));
+
     private final LedgerService ledgers;
     private final LedgerAccessService access;
     private final AccountManagementRepository accounts;
@@ -149,7 +164,7 @@ public class AccountExchangeService {
         }
         String sha256 = sha256(content);
         UUID existing = imports.findByHash(ledgerId, sha256);
-        if (existing != null) {
+        if (existing != null && "COMMITTED".equals(importHeader(ledgerId, existing).status())) {
             return get(actorId, ledgerId, existing);
         }
 
@@ -183,12 +198,18 @@ public class AccountExchangeService {
                         ParsedAccount::code, Collectors.counting())).entrySet().stream()
                 .filter(entry -> !entry.getKey().isBlank() && entry.getValue() > 1)
                 .map(Map.Entry::getKey).collect(Collectors.toSet());
-        UUID importId = UUID.randomUUID();
+        UUID importId = existing == null ? UUID.randomUUID() : existing;
         long ledgerVersion = accounts.ledgerVersion(ledgerId);
         try {
-            imports.create(importId, ledgerId, format.name(), ledgerVersion,
-                    filename.substring(Math.max(0, filename.length() - 255)),
-                    sha256, parsed.size(), ai.status(), actorId);
+            String storedFilename = filename.substring(Math.max(0, filename.length() - 255));
+            if (existing == null) {
+                imports.create(importId, ledgerId, format.name(), ledgerVersion,
+                        storedFilename, sha256, parsed.size(), ai.status(), actorId);
+            } else {
+                // Re-uploading a preview must use the current code rule and standard mappings.
+                imports.refreshPreview(importId, ledgerId, format.name(), ledgerVersion,
+                        storedFilename, parsed.size(), ai.status());
+            }
             int errorCount = 0;
             int rowNo = 1;
             for (ParsedAccount account : parsed) {
@@ -353,7 +374,6 @@ public class AccountExchangeService {
         AccountCodeRule rule = accounts.codeRule(ledgerId);
         Map<String, LedgerResponses.Account> existingByCode = existingAccountsByCode(actorId, ledgerId);
         validateOverwriteRules(ledgerId, rows, existingByCode);
-        validateImportNames(actorId, ledgerId, rows);
         Map<String, UUID> dimensionIds = ledgers.listDimensionTypes(actorId, ledgerId).stream()
                 .collect(Collectors.toMap(LedgerResponses.DimensionType::code, LedgerResponses.DimensionType::id));
         for (CommitRow row : rows) {
@@ -678,6 +698,14 @@ public class AccountExchangeService {
                         ledger.accountingStandardCode(), ledger.accountingStandardVersion(), importedKey)) {
                     account.issues().add("ERROR:STANDARD_ACCOUNT_KEY_INVALID");
                 }
+                continue;
+            }
+            String namedKey = "SME".equalsIgnoreCase(ledger.accountingStandardCode())
+                    && rule.levelOf(account.code()) == 1
+                    ? KINGDEE_SME_KEYS_BY_NAME.get(account.cleaned().get("name")) : null;
+            if (namedKey != null && standards.containsStandardAccountKey(
+                    ledger.accountingStandardCode(), ledger.accountingStandardVersion(), namedKey)) {
+                account.cleaned().put("standardAccountKey", namedKey);
                 continue;
             }
             List<String> matches = standards.legacyCodeMatches(
@@ -1018,50 +1046,6 @@ public class AccountExchangeService {
                     || (!sameCode.isLeaf() && accounts.hasNonZeroBalance(ledgerId, sameCode.id()))) {
                 throw problem(409, "ACCOUNT_OVERWRITE_FORBIDDEN", "Account cannot be overwritten",
                         "Account " + code + " has business usage or a non-zero balance");
-            }
-        }
-    }
-
-    private void validateImportNames(
-            UUID actorId, UUID ledgerId, List<CommitRow> rows) {
-        List<LedgerResponses.Account> existing = ledgers.listAccounts(actorId, ledgerId);
-        Map<UUID, String> codeById = existing.stream()
-                .collect(Collectors.toMap(LedgerResponses.Account::id, LedgerResponses.Account::code));
-        Map<String, String> nameByCode = new LinkedHashMap<>();
-        Map<String, String> parentByCode = new LinkedHashMap<>();
-        for (LedgerResponses.Account account : existing) {
-            String parentCode = account.parentId() == null
-                    ? "" : codeById.getOrDefault(account.parentId(), "");
-            nameByCode.put(account.code(), account.name());
-            parentByCode.put(account.code(), parentCode);
-        }
-        for (CommitRow row : rows) {
-            String code = row.account().values().get("code");
-            if ("CREATE".equals(row.action())) {
-                nameByCode.put(code, row.account().values().get("name"));
-                parentByCode.put(code, row.account().values().getOrDefault("parentCode", ""));
-            } else if ("UPDATE".equals(row.action())) {
-                if (row.targetAccountId() != null) {
-                    String oldCode = codeById.get(row.targetAccountId());
-                    if (oldCode != null && !oldCode.equals(code)) {
-                        nameByCode.remove(oldCode);
-                        parentByCode.remove(oldCode);
-                    }
-                }
-                nameByCode.put(code, row.account().values().get("name"));
-                parentByCode.put(code, row.account().values().getOrDefault("parentCode", ""));
-            }
-        }
-        Map<String, String> firstByKey = new HashMap<>();
-        for (Map.Entry<String, String> entry : nameByCode.entrySet()) {
-            String code = entry.getKey();
-            String parentCode = parentByCode.getOrDefault(code, "");
-            String key = parentCode + "\u0000" + entry.getValue();
-            String previous = firstByKey.putIfAbsent(key, code);
-            if (previous != null) {
-                throw problem(409, "ACCOUNT_NAME_CONFLICT", "Account name conflict",
-                        "Accounts with the same parent must have unique names: "
-                                + previous + " and " + code);
             }
         }
     }

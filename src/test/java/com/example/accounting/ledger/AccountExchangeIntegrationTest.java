@@ -134,7 +134,7 @@ class AccountExchangeIntegrationTest {
     }
 
     @Test
-    void rejectsDuplicateNamesWithinTheSameParentAndRollsBack() throws Exception {
+    void importsSameNameAccountsWithDifferentCodesWithinTheSameParent() throws Exception {
         UUID owner = UUID.randomUUID();
         UUID ledgerId = ledgers.create(user(owner), new LedgerRequests.Create(
                 "account-name-unique", "SME", "2011-17", "CNY",
@@ -147,12 +147,12 @@ class AccountExchangeIntegrationTest {
                     .forEach(value -> header.createCell(header.getLastCellNum() < 0 ? 0 : header.getLastCellNum())
                             .setCellValue(value));
             var first = sheet.createRow(1);
-            first.createCell(0).setCellValue("1998");
+            first.createCell(0).setCellValue("100201");
             first.createCell(1).setCellValue("重复名称");
             first.createCell(2).setCellValue("流动资产");
             first.createCell(3).setCellValue("借");
             var second = sheet.createRow(2);
-            second.createCell(0).setCellValue("1999");
+            second.createCell(0).setCellValue("100202");
             second.createCell(1).setCellValue("重复名称");
             second.createCell(2).setCellValue("流动资产");
             second.createCell(3).setCellValue("借");
@@ -168,9 +168,11 @@ class AccountExchangeIntegrationTest {
                         new AccountExchangeService.Decision("CREATE", null, null)))
                 .toList());
 
-        assertThatThrownBy(() -> exchange.commit(owner, ledgerId, preview.id()))
-                .isInstanceOfSatisfying(ApiProblemException.class,
-                        exception -> assertThat(exception.code()).isEqualTo("ACCOUNT_NAME_CONFLICT"));
+        assertThat(exchange.commit(owner, ledgerId, preview.id()).status()).isEqualTo("COMMITTED");
+        assertThat(ledgers.listAccounts(owner, ledgerId))
+                .filteredOn(account -> account.name().equals("重复名称"))
+                .extracting(LedgerResponses.Account::code)
+                .containsExactlyInAnyOrder("100201", "100202");
     }
 
     @Test

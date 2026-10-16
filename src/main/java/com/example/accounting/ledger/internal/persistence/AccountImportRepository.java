@@ -30,6 +30,20 @@ public class AccountImportRepository {
                 """, id, ledgerId, format, ledgerVersion, filename, sha256, rowCount, aiStatus, actorId);
     }
 
+    public void refreshPreview(UUID importId, UUID ledgerId, String format, long ledgerVersion,
+                               String filename, int rowCount, String aiStatus) {
+        int changed = jdbc.update("""
+                update account_import
+                set format = ?, ledger_version = ?, original_filename = ?, row_count = ?,
+                    ai_status = ?, error_count = 0, updated_at = now()
+                where id = ? and ledger_id = ? and status = 'PREVIEW'
+                """, format, ledgerVersion, filename, rowCount, aiStatus, importId, ledgerId);
+        if (changed != 1) {
+            throw new IllegalStateException("Only a preview import can be refreshed");
+        }
+        jdbc.update("delete from account_import_row where import_id = ?", importId);
+    }
+
     public void addRow(UUID importId, int rowNo, String rawJson, String cleanedJson, String accountCode,
                        UUID targetId, Long targetVersion, String action,
                        BigDecimal confidence, String issuesJson) {
