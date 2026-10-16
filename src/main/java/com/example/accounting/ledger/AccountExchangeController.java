@@ -90,8 +90,14 @@ public class AccountExchangeController {
 
     @PostMapping("/account-imports/{importId}:commit")
     public AccountExchangeService.Preview commit(
-            HttpServletRequest request, @PathVariable UUID ledgerId, @PathVariable UUID importId) {
-        return exchange.commit(user(request), ledgerId, importId);
+            HttpServletRequest request, @PathVariable UUID ledgerId, @PathVariable UUID importId,
+            @RequestParam(required = false) AccountExchangeService.ImportMode expectedMode,
+            @RequestBody(required = false) AccountExchangeService.CommitRequest commitRequest) {
+        AccountExchangeService.ImportMode mode = commitRequest != null && commitRequest.expectedMode() != null
+                ? commitRequest.expectedMode()
+                : expectedMode;
+        return exchange.commit(user(request), ledgerId, importId,
+                mode == null ? null : new AccountExchangeService.CommitRequest(mode));
     }
 
     private ResponseEntity<byte[]> download(byte[] body, String filename) {

@@ -5,6 +5,7 @@ import com.example.accounting.identity.CurrentUserResolver;
 import com.example.accounting.identity.IdentityService;
 import com.example.accounting.ledger.LedgerResponses;
 import com.example.accounting.ledger.LedgerRequests;
+import com.example.accounting.ledger.AccountCodeRule;
 import com.example.accounting.ledger.AccountExchangeService;
 import com.example.accounting.ledger.AccountingStandard;
 import com.example.accounting.ledger.AccountingStandardCatalog;
@@ -557,17 +558,34 @@ public class FinanceMcpTools {
                         XLSX_CONTENT_TYPE, accountExchange.template(actorId, ledgerId, format)));
     }
 
+    @McpTool(name = "check_account_reconstruction_eligibility", description = "Check overwrite import eligibility")
+    @PreAuthorize("isAuthenticated()")
+    public AccountExchangeService.ReconstructionEligibilityResponse checkAccountReconstructionEligibility(
+            @McpToolParam UUID ledgerId) {
+        UUID actorId = actor();
+        return audited(actorId, "check_account_reconstruction_eligibility", ledgerId, "",
+                () -> accountExchange.checkReconstructionEligibility(actorId, ledgerId));
+    }
+
     @McpTool(name = "preview_account_import", description = "Preview account import")
     @PreAuthorize("isAuthenticated()")
     public AccountExchangeService.Preview previewAccountImport(
             @McpToolParam UUID ledgerId,
             @McpToolParam(description = "Import format: STANDARD or KINGDEE") AccountExchangeService.Format format,
             @McpToolParam(description = "Original workbook file name") String fileName,
-            @McpToolParam(description = "Base64 encoded workbook content") String base64Content) {
+            @McpToolParam(description = "Base64 encoded workbook content") String base64Content,
+            @McpToolParam(description = "Import mode: APPEND (default) or OVERWRITE", required = false) AccountExchangeService.ImportMode mode,
+            @McpToolParam(description = "Level 2 code width, optional override", required = false) Integer ruleLevel2Width,
+            @McpToolParam(description = "Level 3 code width, optional override", required = false) Integer ruleLevel3Width,
+            @McpToolParam(description = "Level 4 code width, optional override", required = false) Integer ruleLevel4Width) {
         UUID actorId = actor();
         byte[] content = decode(base64Content, "ACCOUNT_IMPORT_CONTENT_INVALID");
-        return audited(actorId, "preview_account_import", ledgerId, format + ":" + fileName + ":" + hash(base64Content),
-                () -> accountExchange.preview(actorId, ledgerId, format, fileName, content.length,
+        AccountExchangeService.ImportMode effectiveMode = mode != null ? mode : AccountExchangeService.ImportMode.APPEND;
+        AccountCodeRule customRule = (ruleLevel2Width != null && ruleLevel3Width != null && ruleLevel4Width != null)
+                ? new AccountCodeRule(ruleLevel2Width, ruleLevel3Width, ruleLevel4Width) : null;
+        return audited(actorId, "preview_account_import", ledgerId,
+                format + ":" + effectiveMode + ":" + fileName + ":" + hash(base64Content),
+                () -> accountExchange.preview(actorId, ledgerId, format, effectiveMode, customRule, fileName, content.length,
                         new ByteArrayInputStream(content)));
     }
 
@@ -597,7 +615,7 @@ public class FinanceMcpTools {
                 () -> accountExchange.decide(actorId, ledgerId, importId, rowNo, decision));
     }
 
-    @McpTool(name = "decide_account_import_rows", description = "Set import decisions in batch")
+    @Deprecated(since = "0.2", forRemoval = false)
     @PreAuthorize("isAuthenticated()")
     public AccountExchangeService.Preview decideAccountImportRows(
             @McpToolParam UUID ledgerId,
@@ -612,10 +630,12 @@ public class FinanceMcpTools {
     @PreAuthorize("isAuthenticated()")
     public AccountExchangeService.Preview commitAccountImport(
             @McpToolParam UUID ledgerId,
-            @McpToolParam UUID importId) {
+            @McpToolParam UUID importId,
+            @McpToolParam(description = "Expected import mode (APPEND or OVERWRITE) for verification", required = false) AccountExchangeService.ImportMode expectedMode) {
         UUID actorId = actor();
-        return audited(actorId, "commit_account_import", ledgerId, importId.toString(),
-                () -> accountExchange.commit(actorId, ledgerId, importId));
+        return audited(actorId, "commit_account_import", ledgerId, importId + ":" + expectedMode,
+                () -> accountExchange.commit(actorId, ledgerId, importId,
+                        expectedMode == null ? null : new AccountExchangeService.CommitRequest(expectedMode)));
     }
 
     @McpTool(name = "export_kingdee_vouchers", description = "Export Kingdee vouchers")

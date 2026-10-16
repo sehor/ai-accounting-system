@@ -26,7 +26,7 @@ class FinanceMcpToolsTest {
                 "create_dimension_value", "create_accounting_experience", "create_ledger",
                 "create_voucher", "create_voucher_draft",
                 "create_voucher_draft_from_document", "create_voucher_draft_from_document_standard",
-                "decide_account_import_rows", "delete_account", "delete_voucher", "download_document",
+                "check_account_reconstruction_eligibility", "delete_account", "delete_voucher", "download_document",
                 "ensure_account", "export_account_template", "export_accounts", "export_kingdee_vouchers",
                 "export_report", "export_report_range", "extract_document", "finance_query", "finance_query_advanced",
                 "get_account", "get_account_import", "get_accounting_standard", "get_current_user",
@@ -46,7 +46,7 @@ class FinanceMcpToolsTest {
                 "update_account", "update_account_code_rule", "update_accounting_experience", "update_voucher",
                 "upload_document",
                 "validate_voucher", "validate_voucher_standard");
-        assertThat(names).doesNotContain("decide_account_import_row");
+        assertThat(names).doesNotContain("decide_account_import_row", "decide_account_import_rows");
         assertThat(names).noneMatch(name -> name.matches(".*(audit|member).*")
                 || name.equals("list_members") || name.equals("update_member") || name.equals("remove_member"));
     }

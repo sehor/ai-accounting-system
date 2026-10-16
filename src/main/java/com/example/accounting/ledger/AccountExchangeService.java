@@ -24,9 +24,11 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.HexFormat;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -185,7 +187,8 @@ public class AccountExchangeService {
         }
 
         String sha256 = sha256(content);
-        UUID existing = imports.findByHash(ledgerId, sha256);
+        // Each preview task is an immutable snapshot with a unique ID to prevent cross-tab / cross-mode corruption.
+        UUID importId = UUID.randomUUID();
 
         // Raw parsing without rule binding
         List<ParsedAccount> parsed = parseRaw(content, format);
@@ -260,6 +263,10 @@ public class AccountExchangeService {
             if (!Set.of("DEBIT", "CREDIT").contains(account.cleaned().get("normalBalance"))) {
                 account.issues().add("ERROR:INVALID_NORMAL_BALANCE");
             }
+            String rowStatus = account.cleaned().get("status");
+            if (rowStatus != null && !rowStatus.isBlank() && !Set.of("ACTIVE", "INACTIVE").contains(rowStatus)) {
+                account.issues().add("ERROR:INVALID_STATUS");
+            }
             if (bool(account.cleaned().get("quantityEnabled"))
                     && (account.cleaned().get("unitName") == null || account.cleaned().get("unitName").isBlank())) {
                 account.issues().add("ERROR:UNIT_REQUIRED");
@@ -323,7 +330,6 @@ public class AccountExchangeService {
             warnings.add("金蝶格式未包含现金流和辅助核算配置，导入后将采用默认设置");
         }
 
-        UUID importId = existing == null ? UUID.randomUUID() : existing;
         long ledgerVersion = accounts.ledgerVersion(ledgerId);
         int insertCount = parsed.size();
         int deleteCount = effectiveMode == ImportMode.OVERWRITE ? existingAccountsList.size() : 0;
@@ -335,15 +341,9 @@ public class AccountExchangeService {
             String codeRuleSourcesJson = json(ruleSources);
             String blockersJson = json(blockers);
 
-            if (existing == null) {
-                imports.create(importId, ledgerId, format.name(), effectiveMode.name(), ledgerVersion,
-                        storedFilename, sha256, parsed.size(), errorCount, insertCount, deleteCount,
-                        targetRule, codeRuleSourcesJson, blockersJson, "NOT_CONFIGURED", actorId);
-            } else {
-                imports.refreshPreview(importId, ledgerId, format.name(), effectiveMode.name(), ledgerVersion,
-                        storedFilename, parsed.size(), errorCount, insertCount, deleteCount,
-                        targetRule, codeRuleSourcesJson, blockersJson, "NOT_CONFIGURED");
-            }
+            imports.create(importId, ledgerId, format.name(), effectiveMode.name(), ledgerVersion,
+                    storedFilename, sha256, parsed.size(), errorCount, insertCount, deleteCount,
+                    targetRule, codeRuleSourcesJson, blockersJson, "NOT_CONFIGURED", actorId);
 
             int rowNo = 1;
             for (ParsedAccount account : parsed) {
@@ -506,9 +506,13 @@ public class AccountExchangeService {
                     "Every import row decision needs an action");
         }
         String action = decision.action() == null ? "CREATE" : decision.action().toUpperCase(Locale.ROOT);
-        UUID target = Set.of("UPDATE", "MAP").contains(action) ? decision.targetAccountId() : null;
+        if ("UPDATE".equals(action)) {
+            throw problem(422, "ACCOUNT_IMPORT_DECISION_UNSUPPORTED", "Unsupported import decision",
+                    "当前导入模式不支持 UPDATE 决策，如需更新科目请在科目管理页面修改或使用 OVERWRITE 全量重构");
+        }
+        UUID target = "MAP".equals(action) ? decision.targetAccountId() : null;
         Long targetVersion = null;
-        if (Set.of("UPDATE", "MAP").contains(action) && target != null) {
+        if ("MAP".equals(action) && target != null) {
             LedgerResponses.Account account = ledgers.findAccount(actorId, ledgerId, target);
             targetVersion = account.version();
         }
@@ -521,6 +525,11 @@ public class AccountExchangeService {
 
     @Transactional
     public Preview commit(UUID actorId, UUID ledgerId, UUID importId) {
+        return commit(actorId, ledgerId, importId, null);
+    }
+
+    @Transactional
+    public Preview commit(UUID actorId, UUID ledgerId, UUID importId, CommitRequest commitRequest) {
         requireWrite(actorId, ledgerId);
         ImportHeader header = importHeader(ledgerId, importId);
         if ("COMMITTED".equals(header.status())) {
@@ -529,6 +538,19 @@ public class AccountExchangeService {
 
         // 1. Acquire ledger-level exclusive lock
         accounts.lockLedger(ledgerId);
+
+        // Re-read header inside the lock to handle concurrent submissions idempotently
+        header = importHeader(ledgerId, importId);
+        if ("COMMITTED".equals(header.status())) {
+            return get(actorId, ledgerId, importId);
+        }
+
+        // Validate expectedMode if client provided it
+        if (commitRequest != null && commitRequest.expectedMode() != null
+                && commitRequest.expectedMode() != header.mode()) {
+            throw problem(409, "ACCOUNT_IMPORT_MODE_MISMATCH", "Account import mode mismatch",
+                    "提交的导入模式 (" + commitRequest.expectedMode() + ") 与预检模式 (" + header.mode() + ") 不一致");
+        }
 
         // 2. Optimistic version check against preview
         if (accounts.ledgerVersion(ledgerId) != header.ledgerVersion()) {
@@ -548,6 +570,13 @@ public class AccountExchangeService {
                 .toList();
 
         for (CommitRow row : rows) {
+            if ("SKIP".equalsIgnoreCase(row.action()) || "MAP".equalsIgnoreCase(row.action())) {
+                continue;
+            }
+            if ("UPDATE".equalsIgnoreCase(row.action())) {
+                throw problem(422, "ACCOUNT_IMPORT_DECISION_UNSUPPORTED", "Unsupported import decision",
+                        "当前导入模式不支持 UPDATE 决策");
+            }
             if (row.issues().stream().anyMatch(issue -> issue.startsWith("ERROR:"))) {
                 throw problem(422, "ACCOUNT_IMPORT_UNRESOLVED", "Account import has unresolved rows",
                         "Every row must be valid before commit");
@@ -558,10 +587,37 @@ public class AccountExchangeService {
                 ? new AccountCodeRule(header.targetRuleLevel2Width(), header.targetRuleLevel3Width(), header.targetRuleLevel4Width())
                 : accounts.codeRule(ledgerId);
 
+        Map<String, LedgerResponses.Account> existingByCode = existingAccountsByCode(actorId, ledgerId);
+        Set<String> willExistCodes = header.mode() == ImportMode.APPEND
+                ? new HashSet<>(existingByCode.keySet())
+                : new HashSet<>();
+        for (CommitRow row : rows) {
+            if (!"SKIP".equalsIgnoreCase(row.action()) && !"MAP".equalsIgnoreCase(row.action())) {
+                willExistCodes.add(row.account().values().get("code"));
+            }
+        }
+        for (CommitRow row : rows) {
+            if ("SKIP".equalsIgnoreCase(row.action()) || "MAP".equalsIgnoreCase(row.action())) {
+                continue;
+            }
+            String code = row.account().values().get("code");
+            int level = targetRule.levelOf(code);
+            if (level > 1) {
+                String parentCode = targetRule.parentCode(code).orElse("");
+                if (!willExistCodes.contains(parentCode)) {
+                    throw problem(422, "ACCOUNT_IMPORT_PARENT_SKIPPED", "Parent account skipped or missing",
+                            "科目 " + code + " 的上级科目 " + parentCode + " 被跳过或不存在");
+                }
+            }
+        }
+
         // Prepare dimension types
         Map<String, UUID> dimensionIds = ledgers.listDimensionTypes(actorId, ledgerId).stream()
                 .collect(Collectors.toMap(LedgerResponses.DimensionType::code, LedgerResponses.DimensionType::id));
         for (CommitRow row : rows) {
+            if ("SKIP".equalsIgnoreCase(row.action()) || "MAP".equalsIgnoreCase(row.action())) {
+                continue;
+            }
             for (DimensionTypeSeed seed : row.account().dimensionTypes()) {
                 if (!dimensionIds.containsKey(seed.code())) {
                     LedgerResponses.DimensionType created = ledgers.createDimensionType(actorId, ledgerId,
@@ -578,12 +634,19 @@ public class AccountExchangeService {
         List<AccountManagementRepository.AccountDimensionRequirementSeed> dimSeeds = new ArrayList<>();
 
         for (CommitRow row : rows) {
+            if ("SKIP".equalsIgnoreCase(row.action()) || "MAP".equalsIgnoreCase(row.action())) {
+                continue;
+            }
             Map<String, String> v = row.account().values();
             String code = v.get("code");
             String name = v.get("name");
             String parentCode = targetRule.parentCode(code).orElse(null);
             String category = v.get("category");
             String normalBalance = v.get("normalBalance");
+            String status = v.get("status");
+            if (status == null || status.isBlank()) {
+                status = "ACTIVE";
+            }
             String standardAccountKey = emptyToNull(v.get("standardAccountKey"));
             boolean cashFlowRequired = Boolean.parseBoolean(v.get("cashFlowRequired"));
             UUID defaultCashFlowItemId = cashFlowIds.get(v.get("defaultCashFlowItemCode"));
@@ -591,7 +654,7 @@ public class AccountExchangeService {
             String unitName = emptyToNull(v.get("unitName"));
 
             accountSeeds.add(new AccountManagementRepository.ReconstructAccountSeed(
-                    code, name, parentCode, category, normalBalance, standardAccountKey,
+                    code, name, parentCode, category, normalBalance, status, standardAccountKey,
                     false, cashFlowRequired, defaultCashFlowItemId, quantityEnabled, unitName));
 
             for (DimensionRequirementSeed req : row.account().dimensionRequirements()) {
@@ -617,8 +680,10 @@ public class AccountExchangeService {
             insertedCount = result.insertedCount();
             deletedCount = result.deletedCount();
         } else {
-            Map<String, LedgerResponses.Account> existingByCode = existingAccountsByCode(actorId, ledgerId);
             for (CommitRow row : rows) {
+                if ("SKIP".equalsIgnoreCase(row.action()) || "MAP".equalsIgnoreCase(row.action())) {
+                    continue;
+                }
                 String code = row.account().values().get("code");
                 if (existingByCode.containsKey(code)) {
                     throw problem(409, "ACCOUNT_IMPORT_CODE_CONFLICT", "Account code already exists",
@@ -662,26 +727,34 @@ public class AccountExchangeService {
         Integer w4 = null;
 
         if (hasExplicitParent) {
-            Set<Integer> l2Widths = new HashSet<>();
-            Set<Integer> l3Widths = new HashSet<>();
-            Set<Integer> l4Widths = new HashSet<>();
+            Set<Integer> l2Widths = new LinkedHashSet<>();
+            Set<Integer> l3Widths = new LinkedHashSet<>();
+            Set<Integer> l4Widths = new LinkedHashSet<>();
 
-            for (ParsedAccount account : parsed) {
+            // Sort accounts by parent code length ascending so Level 2 is processed before Level 3, and Level 3 before Level 4
+            List<ParsedAccount> accountsWithParent = parsed.stream()
+                    .filter(p -> p.cleaned().get("parentCode") != null && !p.cleaned().get("parentCode").isBlank())
+                    .sorted(Comparator.comparingInt(p -> p.cleaned().get("parentCode").length()))
+                    .toList();
+
+            for (ParsedAccount account : accountsWithParent) {
                 String parent = account.cleaned().get("parentCode");
                 String code = account.code();
-                if (parent != null && !parent.isBlank()) {
-                    int width = code.length() - parent.length();
-                    if (width <= 0 || width > 8) {
-                        throw problem(422, "ACCOUNT_CODE_RULE_INVALID", "Invalid code rule",
-                                "科目 " + code + " 与其上级 " + parent + " 的级长差非法：" + width);
-                    }
-                    if (parent.length() == 4) {
-                        l2Widths.add(width);
-                    } else if (l2Widths.size() == 1 && parent.length() == 4 + l2Widths.iterator().next()) {
-                        l3Widths.add(width);
-                    } else {
-                        l4Widths.add(width);
-                    }
+                int width = code.length() - parent.length();
+                if (width <= 0 || width > 8) {
+                    throw problem(422, "ACCOUNT_CODE_RULE_INVALID", "Invalid code rule",
+                            "科目 " + code + " 与其上级 " + parent + " 的级长差非法：" + width);
+                }
+                if (parent.length() == 4) {
+                    l2Widths.add(width);
+                } else if (l2Widths.size() == 1 && parent.length() == 4 + l2Widths.iterator().next()) {
+                    l3Widths.add(width);
+                } else if (l2Widths.size() == 1 && l3Widths.size() == 1
+                        && parent.length() == 4 + l2Widths.iterator().next() + l3Widths.iterator().next()) {
+                    l4Widths.add(width);
+                } else {
+                    throw problem(422, "ACCOUNT_CODE_RULE_INVALID", "Invalid code rule",
+                            "科目 " + code + " 的上级编码长度 " + parent.length() + " 不符合层级规则");
                 }
             }
 
@@ -1059,6 +1132,14 @@ public class AccountExchangeService {
                     ledger.accountingStandardCode(), ledger.accountingStandardVersion(), namedKey)) {
                 account.cleaned().put("standardAccountKey", namedKey);
                 resolvedKeys.put(code, namedKey);
+                continue;
+            }
+            Optional<String> packageKey = level == 1
+                    ? standards.packageAccountKey(ledger.accountingStandardCode(), ledger.accountingStandardVersion(), code)
+                    : Optional.empty();
+            if (packageKey.isPresent()) {
+                account.cleaned().put("standardAccountKey", packageKey.get());
+                resolvedKeys.put(code, packageKey.get());
                 continue;
             }
             List<String> matches = standards.legacyCodeMatches(
@@ -1451,6 +1532,11 @@ public class AccountExchangeService {
     public record ReconstructionEligibilityResponse(
             @Schema(requiredMode = Schema.RequiredMode.REQUIRED) boolean eligible,
             @Schema(requiredMode = Schema.RequiredMode.REQUIRED) List<ImportBlocker> blockers) {
+    }
+
+    @Schema(name = "AccountImportCommitRequest")
+    public record CommitRequest(
+            @Schema(description = "预期导入模式，提供时将进行一致性校验", nullable = true) ImportMode expectedMode) {
     }
 
     @Schema(name = "AccountImportDecision")

@@ -100,7 +100,7 @@ class McpStatelessHttpIntegrationTest {
                 .containsExactlyInAnyOrder("expectedVersion", "periodId", "voucherDate", "voucherType",
                         "voucherNumber", "lines");
         assertThat(lineSchema.path("required")).extracting(JsonNode::asText)
-                .containsExactlyInAnyOrder("accountId", "side", "currency", "originalAmount", "exchangeRate");
+                .containsExactlyInAnyOrder("side", "currency", "exchangeRate");
     }
 
     @Test
@@ -162,7 +162,7 @@ class McpStatelessHttpIntegrationTest {
     }
 
     @Test
-    void accountImportExposesOnlyTheAtomicBatchDecisionTool() throws Exception {
+    void accountImportExposesPreviewAndCommitWithoutLegacyRowDecisions() throws Exception {
         HttpResponse<String> tools = post("""
                 {"jsonrpc":"2.0","id":6,"method":"tools/list","params":{}}
                 """);
@@ -171,8 +171,8 @@ class McpStatelessHttpIntegrationTest {
                 .map(tool -> tool.path("name").asText())
                 .toList();
 
-        assertThat(names).contains("decide_account_import_rows")
-                .doesNotContain("decide_account_import_row");
+        assertThat(names).contains("check_account_reconstruction_eligibility", "preview_account_import", "commit_account_import")
+                .doesNotContain("decide_account_import_rows", "decide_account_import_row");
     }
 
     @Test

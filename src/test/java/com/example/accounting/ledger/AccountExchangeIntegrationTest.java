@@ -14,12 +14,20 @@ import java.util.List;
 import java.util.UUID;
 import com.example.accounting.voucher.VoucherRequests;
 import com.example.accounting.voucher.VoucherService;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
+import com.example.accounting.ledger.internal.persistence.AccountManagementRepository;
 import org.apache.poi.ss.usermodel.WorkbookFactory;
 import org.apache.poi.hssf.usermodel.HSSFWorkbook;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.transaction.support.TransactionTemplate;
 
 @SpringBootTest
 class AccountExchangeIntegrationTest {
@@ -32,6 +40,12 @@ class AccountExchangeIntegrationTest {
 
     @Autowired
     private VoucherService vouchers;
+
+    @Autowired
+    private AccountManagementRepository accounts;
+
+    @Autowired
+    private TransactionTemplate txTemplate;
 
     @Autowired
     private JdbcTemplate jdbc;
@@ -435,13 +449,13 @@ class AccountExchangeIntegrationTest {
             List.of("编码", "名称", "类别", "余额方向").forEach(value ->
                     header.createCell(header.getLastCellNum() < 0 ? 0 : header.getLastCellNum()).setCellValue(value));
             var childRow = sheet.createRow(1);
-            childRow.createCell(0).setCellValue("199901");
+            childRow.createCell(0).setCellValue("140501");
             childRow.createCell(1).setCellValue("乱序子科目");
             childRow.createCell(2).setCellValue("流动资产");
             childRow.createCell(3).setCellValue("借");
             var parentRow = sheet.createRow(2);
-            parentRow.createCell(0).setCellValue("1999");
-            parentRow.createCell(1).setCellValue("乱序父科目");
+            parentRow.createCell(0).setCellValue("1405");
+            parentRow.createCell(1).setCellValue("库存商品");
             parentRow.createCell(2).setCellValue("流动资产");
             parentRow.createCell(3).setCellValue("借");
             source.write(output);
@@ -455,7 +469,7 @@ class AccountExchangeIntegrationTest {
         exchange.commit(owner, ledgerId, preview.id());
         assertThat(ledgers.listAccounts(owner, ledgerId))
                 .extracting(LedgerResponses.Account::code)
-                .contains("1999", "199901");
+                .contains("1405", "140501");
 
         // 2. Used parent with voucher cannot become parent for new child
         UUID periodId = ledgers.listPeriods(owner, ledgerId).getFirst().id();
@@ -590,6 +604,369 @@ class AccountExchangeIntegrationTest {
         assertThat(preview.codeRuleSources()).containsEntry("level3", "OBSERVED");
         assertThat(preview.codeRuleSources()).containsEntry("level4", "LEDGER_DEFAULT");
         assertThat(preview.warnings()).anySatisfy(w -> assertThat(w).contains("第四级级长使用默认值"));
+    }
+
+    @Test
+    void infersCodeRuleCorrectlyRegardlessOfRowOrder() throws Exception {
+        UUID owner = UUID.randomUUID();
+        UUID ledgerId = ledgers.create(user(owner), new LedgerRequests.Create(
+                "order-independent-inference", "SME", "2011-17", "CNY",
+                LocalDate.of(2026, 1, 1), false)).id();
+
+        // 4-3-3 structure where Level 3 (10 digits) row comes BEFORE Level 2 (7 digits) row
+        byte[] template = exchange.template(owner, ledgerId, AccountExchangeService.Format.STANDARD);
+        byte[] workbook;
+        try (var source = WorkbookFactory.create(new ByteArrayInputStream(template));
+             var output = new ByteArrayOutputStream()) {
+            var sheet = source.getSheet("Accounts");
+
+            // Row 1: Level 3 (Child) first!
+            var r1 = sheet.createRow(1);
+            r1.createCell(0).setCellValue("1002001001");
+            r1.createCell(1).setCellValue("人民币基本户");
+            r1.createCell(2).setCellValue("1002001");
+            r1.createCell(3).setCellValue("CURRENT_ASSET");
+            r1.createCell(4).setCellValue("DEBIT");
+            r1.createCell(5).setCellValue("ACTIVE");
+            r1.createCell(6).setCellValue("false");
+            r1.createCell(7).setCellValue("");
+            r1.createCell(8).setCellValue("false");
+            r1.createCell(9).setCellValue("");
+            r1.createCell(10).setCellValue("ASSET.BANK_DEPOSIT");
+
+            // Row 2: Level 2 (Parent) second!
+            var r2 = sheet.createRow(2);
+            r2.createCell(0).setCellValue("1002001");
+            r2.createCell(1).setCellValue("工行存款");
+            r2.createCell(2).setCellValue("1002");
+            r2.createCell(3).setCellValue("CURRENT_ASSET");
+            r2.createCell(4).setCellValue("DEBIT");
+            r2.createCell(5).setCellValue("ACTIVE");
+            r2.createCell(6).setCellValue("false");
+            r2.createCell(7).setCellValue("");
+            r2.createCell(8).setCellValue("false");
+            r2.createCell(9).setCellValue("");
+            r2.createCell(10).setCellValue("ASSET.BANK_DEPOSIT");
+
+            // Row 3: Level 1 (Root) third!
+            var r3 = sheet.createRow(3);
+            r3.createCell(0).setCellValue("1002");
+            r3.createCell(1).setCellValue("银行存款");
+            r3.createCell(2).setCellValue("");
+            r3.createCell(3).setCellValue("CURRENT_ASSET");
+            r3.createCell(4).setCellValue("DEBIT");
+            r3.createCell(5).setCellValue("ACTIVE");
+            r3.createCell(6).setCellValue("false");
+            r3.createCell(7).setCellValue("");
+            r3.createCell(8).setCellValue("false");
+            r3.createCell(9).setCellValue("");
+            r3.createCell(10).setCellValue("ASSET.BANK_DEPOSIT");
+
+            source.write(output);
+            workbook = output.toByteArray();
+        }
+
+        AccountExchangeService.Preview preview = exchange.preview(owner, ledgerId,
+                AccountExchangeService.Format.STANDARD, AccountExchangeService.ImportMode.OVERWRITE, null,
+                "reverse-order.xlsx", workbook.length, new ByteArrayInputStream(workbook));
+
+        assertThat(preview.targetCodeRule().level2Width()).isEqualTo(3);
+        assertThat(preview.targetCodeRule().level3Width()).isEqualTo(3);
+        assertThat(preview.errorCount()).isEqualTo(0);
+        assertThat(preview.rows()).noneMatch(row -> row.issues().stream().anyMatch(i -> i.startsWith("ERROR:")));
+
+        exchange.commit(owner, ledgerId, preview.id());
+        List<LedgerResponses.Account> accounts = ledgers.listAccounts(owner, ledgerId);
+        assertThat(accounts).extracting(LedgerResponses.Account::code)
+                .contains("1002", "1002001", "1002001001");
+    }
+
+    @Test
+    void preservesInactiveAccountStatusAfterCommit() throws Exception {
+        UUID owner = UUID.randomUUID();
+        UUID ledgerId = ledgers.create(user(owner), new LedgerRequests.Create(
+                "preserve-status", "SME", "2011-17", "CNY",
+                LocalDate.of(2026, 1, 1), false)).id();
+
+        byte[] template = exchange.template(owner, ledgerId, AccountExchangeService.Format.STANDARD);
+        byte[] workbook;
+        try (var source = WorkbookFactory.create(new ByteArrayInputStream(template));
+             var output = new ByteArrayOutputStream()) {
+            var sheet = source.getSheet("Accounts");
+
+            var r1 = sheet.createRow(1);
+            r1.createCell(0).setCellValue("100209");
+            r1.createCell(1).setCellValue("待清理旧账户");
+            r1.createCell(2).setCellValue("1002");
+            r1.createCell(3).setCellValue("CURRENT_ASSET");
+            r1.createCell(4).setCellValue("DEBIT");
+            r1.createCell(5).setCellValue("INACTIVE");
+            r1.createCell(6).setCellValue("false");
+            r1.createCell(7).setCellValue("");
+            r1.createCell(8).setCellValue("false");
+            r1.createCell(9).setCellValue("");
+            r1.createCell(10).setCellValue("ASSET.BANK_DEPOSIT");
+
+            source.write(output);
+            workbook = output.toByteArray();
+        }
+
+        AccountExchangeService.Preview preview = exchange.preview(owner, ledgerId,
+                AccountExchangeService.Format.STANDARD, AccountExchangeService.ImportMode.APPEND, null,
+                "inactive-account.xlsx", workbook.length, new ByteArrayInputStream(workbook));
+
+        assertThat(preview.rows()).singleElement().satisfies(r -> {
+            assertThat(r.cleanedData()).containsEntry("status", "INACTIVE");
+            assertThat(r.issues()).isEmpty();
+        });
+
+        exchange.commit(owner, ledgerId, preview.id());
+
+        LedgerResponses.Account saved = ledgers.listAccounts(owner, ledgerId).stream()
+                .filter(a -> a.code().equals("100209")).findFirst().orElseThrow();
+        assertThat(saved.status()).isEqualTo("INACTIVE");
+    }
+
+    @Test
+    void previewsAreImmutableAndRejectsMismatchedExpectedMode() throws Exception {
+        UUID owner = UUID.randomUUID();
+        UUID ledgerId = ledgers.create(user(owner), new LedgerRequests.Create(
+                "immutable-previews", "SME", "2011-17", "CNY",
+                LocalDate.of(2026, 1, 1), false)).id();
+
+        byte[] workbook;
+        try (var source = new HSSFWorkbook(); var output = new ByteArrayOutputStream()) {
+            var sheet = source.createSheet("科目列表");
+            var header = sheet.createRow(0);
+            List.of("编码", "名称", "类别", "余额方向")
+                    .forEach(value -> header.createCell(header.getLastCellNum() < 0 ? 0 : header.getLastCellNum()).setCellValue(value));
+            var r0 = sheet.createRow(1);
+            r0.createCell(0).setCellValue("1002");
+            r0.createCell(1).setCellValue("银行存款");
+            r0.createCell(2).setCellValue("流动资产");
+            r0.createCell(3).setCellValue("借");
+
+            var r1 = sheet.createRow(2);
+            r1.createCell(0).setCellValue("100201");
+            r1.createCell(1).setCellValue("一般户");
+            r1.createCell(2).setCellValue("流动资产");
+            r1.createCell(3).setCellValue("借");
+            source.write(output);
+            workbook = output.toByteArray();
+        }
+
+        AccountExchangeService.Preview appendPreview = exchange.preview(owner, ledgerId,
+                AccountExchangeService.Format.KINGDEE, AccountExchangeService.ImportMode.APPEND, null,
+                "same.xls", workbook.length, new ByteArrayInputStream(workbook));
+
+        AccountExchangeService.Preview overwritePreview = exchange.preview(owner, ledgerId,
+                AccountExchangeService.Format.KINGDEE, AccountExchangeService.ImportMode.OVERWRITE, null,
+                "same.xls", workbook.length, new ByteArrayInputStream(workbook));
+
+        assertThat(appendPreview.id()).isNotEqualTo(overwritePreview.id());
+
+        AccountExchangeService.Preview fetchedAppend = exchange.get(owner, ledgerId, appendPreview.id());
+        assertThat(fetchedAppend.mode()).isEqualTo(AccountExchangeService.ImportMode.APPEND);
+
+        assertThatThrownBy(() -> exchange.commit(owner, ledgerId, appendPreview.id(),
+                new AccountExchangeService.CommitRequest(AccountExchangeService.ImportMode.OVERWRITE)))
+                .isInstanceOfSatisfying(ApiProblemException.class,
+                        ex -> assertThat(ex.code()).isEqualTo("ACCOUNT_IMPORT_MODE_MISMATCH"));
+    }
+
+    @Test
+    void handlesConcurrentCommitsIdempotently() throws Exception {
+        UUID owner = UUID.randomUUID();
+        UUID ledgerId = ledgers.create(user(owner), new LedgerRequests.Create(
+                "concurrent-commits", "SME", "2011-17", "CNY",
+                LocalDate.of(2026, 1, 1), false)).id();
+
+        byte[] workbook;
+        try (var source = new HSSFWorkbook(); var output = new ByteArrayOutputStream()) {
+            var sheet = source.createSheet("科目列表");
+            var header = sheet.createRow(0);
+            List.of("编码", "名称", "类别", "余额方向")
+                    .forEach(value -> header.createCell(header.getLastCellNum() < 0 ? 0 : header.getLastCellNum()).setCellValue(value));
+            var r1 = sheet.createRow(1);
+            r1.createCell(0).setCellValue("100201");
+            r1.createCell(1).setCellValue("并发测试户");
+            r1.createCell(2).setCellValue("流动资产");
+            r1.createCell(3).setCellValue("借");
+            source.write(output);
+            workbook = output.toByteArray();
+        }
+
+        AccountExchangeService.Preview preview = exchange.preview(owner, ledgerId,
+                AccountExchangeService.Format.KINGDEE, AccountExchangeService.ImportMode.APPEND, null,
+                "concurrent.xls", workbook.length, new ByteArrayInputStream(workbook));
+
+        int threads = 4;
+        ExecutorService executor = Executors.newFixedThreadPool(threads);
+        CountDownLatch startLatch = new CountDownLatch(1);
+        AtomicInteger successCount = new AtomicInteger();
+        AtomicReference<Throwable> failureRef = new AtomicReference<>();
+
+        for (int i = 0; i < threads; i++) {
+            executor.submit(() -> {
+                try {
+                    startLatch.await();
+                    AccountExchangeService.Preview res = exchange.commit(owner, ledgerId, preview.id());
+                    if ("COMMITTED".equals(res.status())) {
+                        successCount.incrementAndGet();
+                    }
+                } catch (Throwable t) {
+                    failureRef.set(t);
+                }
+            });
+        }
+
+        startLatch.countDown();
+        executor.shutdown();
+        assertThat(executor.awaitTermination(10, TimeUnit.SECONDS)).isTrue();
+
+        assertThat(failureRef.get()).isNull();
+        assertThat(successCount.get()).isEqualTo(threads);
+
+        List<LedgerResponses.Account> accounts = ledgers.listAccounts(owner, ledgerId);
+        assertThat(accounts).filteredOn(a -> a.code().equals("100201")).hasSize(1);
+    }
+
+    @Test
+    void respectsSkipDecisionAndRejectsUpdate() throws Exception {
+        UUID owner = UUID.randomUUID();
+        UUID ledgerId = ledgers.create(user(owner), new LedgerRequests.Create(
+                "skip-decision-test", "SME", "2011-17", "CNY",
+                LocalDate.of(2026, 1, 1), false)).id();
+
+        byte[] workbook;
+        try (var source = new HSSFWorkbook(); var output = new ByteArrayOutputStream()) {
+            var sheet = source.createSheet("科目列表");
+            var header = sheet.createRow(0);
+            List.of("编码", "名称", "类别", "余额方向")
+                    .forEach(value -> header.createCell(header.getLastCellNum() < 0 ? 0 : header.getLastCellNum()).setCellValue(value));
+            var r1 = sheet.createRow(1);
+            r1.createCell(0).setCellValue("100201");
+            r1.createCell(1).setCellValue("要导入的科目");
+            r1.createCell(2).setCellValue("流动资产");
+            r1.createCell(3).setCellValue("借");
+
+            var r2 = sheet.createRow(2);
+            r2.createCell(0).setCellValue("100202");
+            r2.createCell(1).setCellValue("要跳过的科目");
+            r2.createCell(2).setCellValue("流动资产");
+            r2.createCell(3).setCellValue("借");
+            source.write(output);
+            workbook = output.toByteArray();
+        }
+
+        AccountExchangeService.Preview preview = exchange.preview(owner, ledgerId,
+                AccountExchangeService.Format.KINGDEE, AccountExchangeService.ImportMode.APPEND, null,
+                "skip-test.xls", workbook.length, new ByteArrayInputStream(workbook));
+
+        exchange.decide(owner, ledgerId, preview.id(), 2, new AccountExchangeService.Decision("SKIP", null, null));
+
+        assertThatThrownBy(() -> exchange.decide(owner, ledgerId, preview.id(), 1,
+                new AccountExchangeService.Decision("UPDATE", UUID.randomUUID(), null)))
+                .isInstanceOfSatisfying(ApiProblemException.class,
+                        ex -> assertThat(ex.code()).isEqualTo("ACCOUNT_IMPORT_DECISION_UNSUPPORTED"));
+
+        exchange.commit(owner, ledgerId, preview.id());
+
+        List<LedgerResponses.Account> accounts = ledgers.listAccounts(owner, ledgerId);
+        assertThat(accounts).filteredOn(a -> a.code().equals("100201")).hasSize(1);
+        assertThat(accounts).filteredOn(a -> a.code().equals("100202")).isEmpty();
+    }
+
+    @Test
+    void rollsBackEntirelyOnReconstructionFailureAndIsolatesOtherLedgers() throws Exception {
+        UUID owner = UUID.randomUUID();
+        UUID ledgerA = ledgers.create(user(owner), new LedgerRequests.Create(
+                "ledger-a-reconstruct", "SME", "2011-17", "CNY",
+                LocalDate.of(2026, 1, 1), false, new AccountCodeRule(4, 2, 2))).id();
+
+        UUID ledgerB = ledgers.create(user(owner), new LedgerRequests.Create(
+                "ledger-b-isolated", "SME", "2011-17", "CNY",
+                LocalDate.of(2026, 1, 1), false, new AccountCodeRule(3, 3, 2))).id();
+
+        List<LedgerResponses.Account> originalAccountsA = ledgers.listAccounts(owner, ledgerA);
+        List<LedgerResponses.Account> originalAccountsB = ledgers.listAccounts(owner, ledgerB);
+
+        byte[] workbook;
+        try (var source = new HSSFWorkbook(); var output = new ByteArrayOutputStream()) {
+            var sheet = source.createSheet("科目列表");
+            var header = sheet.createRow(0);
+            List.of("编码", "名称", "类别", "余额方向")
+                    .forEach(value -> header.createCell(header.getLastCellNum() < 0 ? 0 : header.getLastCellNum()).setCellValue(value));
+            var r1 = sheet.createRow(1);
+            r1.createCell(0).setCellValue("1002");
+            r1.createCell(1).setCellValue("新银行存款");
+            r1.createCell(2).setCellValue("流动资产");
+            r1.createCell(3).setCellValue("借");
+            source.write(output);
+            workbook = output.toByteArray();
+        }
+
+        AccountExchangeService.Preview previewA = exchange.preview(owner, ledgerA,
+                AccountExchangeService.Format.KINGDEE, AccountExchangeService.ImportMode.OVERWRITE, null,
+                "reconstruct.xls", workbook.length, new ByteArrayInputStream(workbook));
+
+        UUID periodA = ledgers.listPeriods(owner, ledgerA).getFirst().id();
+        UUID cashA = ledgers.listAccounts(owner, ledgerA).stream()
+                .filter(a -> a.code().equals("1001")).findFirst().orElseThrow().id();
+        UUID expenseA = ledgers.listAccounts(owner, ledgerA).stream()
+                .filter(a -> a.code().equals("5601")).findFirst().orElseThrow().id();
+        vouchers.create(owner, ledgerA, new VoucherRequests.Create(periodA, LocalDate.of(2026, 1, 15),
+                "GENERAL", "1", "blocking voucher", List.of(
+                new VoucherRequests.Line(expenseA, "DEBIT", "CNY", new java.math.BigDecimal("10.00"), java.math.BigDecimal.ONE, "test"),
+                new VoucherRequests.Line(cashA, "CREDIT", "CNY", new java.math.BigDecimal("10.00"), java.math.BigDecimal.ONE, "test")
+        )));
+
+        assertThatThrownBy(() -> exchange.commit(owner, ledgerA, previewA.id()))
+                .isInstanceOf(ApiProblemException.class);
+
+        // Ledger A accounts must remain intact with original SME template accounts
+        List<LedgerResponses.Account> accountsAAfter = ledgers.listAccounts(owner, ledgerA);
+        assertThat(accountsAAfter).hasSameSizeAs(originalAccountsA);
+
+        // Ledger B accounts and rule must be completely unchanged
+        List<LedgerResponses.Account> accountsBAfter = ledgers.listAccounts(owner, ledgerB);
+        assertThat(accountsBAfter).hasSameSizeAs(originalAccountsB);
+        assertThat(accountsBAfter.stream().map(LedgerResponses.Account::code).toList())
+                .containsExactlyElementsOf(originalAccountsB.stream().map(LedgerResponses.Account::code).toList());
+
+        Integer w2 = jdbc.queryForObject("select account_level2_width from ledger where id = ?", Integer.class, ledgerB);
+        Integer w3 = jdbc.queryForObject("select account_level3_width from ledger where id = ?", Integer.class, ledgerB);
+        assertThat(w2).isEqualTo(3);
+        assertThat(w3).isEqualTo(3);
+    }
+
+    @Test
+    void rollsBackDeletedAccountsWhenInsertFailsDuringReconstruction() {
+        UUID owner = UUID.randomUUID();
+        UUID ledgerId = ledgers.create(user(owner), new LedgerRequests.Create(
+                "rollback-after-delete", "SME", "2011-17", "CNY",
+                LocalDate.of(2026, 1, 1), false, new AccountCodeRule(4, 2, 2))).id();
+
+        List<LedgerResponses.Account> originalAccounts = ledgers.listAccounts(owner, ledgerId);
+        assertThat(originalAccounts).isNotEmpty();
+
+        var seed1 = new AccountManagementRepository.ReconstructAccountSeed(
+                "1002", "银行存款", null, "CURRENT_ASSET", "DEBIT", "ACTIVE",
+                "ASSET.BANK_DEPOSIT", false, false, null, false, null);
+        var seed2 = new AccountManagementRepository.ReconstructAccountSeed(
+                "1002", "重复银行存款", null, "CURRENT_ASSET", "DEBIT", "ACTIVE",
+                "ASSET.BANK_DEPOSIT", false, false, null, false, null);
+
+        assertThatThrownBy(() -> txTemplate.execute(status -> {
+            accounts.reconstructAccounts(ledgerId, new AccountCodeRule(4, 2, 2), List.of(seed1, seed2), List.of(), UUID.randomUUID());
+            return null;
+        })).isInstanceOf(Exception.class);
+
+        // Verification: all original accounts were restored by rollback despite deletion step executing first
+        List<LedgerResponses.Account> restoredAccounts = ledgers.listAccounts(owner, ledgerId);
+        assertThat(restoredAccounts).hasSameSizeAs(originalAccounts);
+        assertThat(restoredAccounts.stream().map(LedgerResponses.Account::code).toList())
+                .containsExactlyElementsOf(originalAccounts.stream().map(LedgerResponses.Account::code).toList());
     }
 
     private CurrentUserResolver.ResolvedUser user(UUID id) {

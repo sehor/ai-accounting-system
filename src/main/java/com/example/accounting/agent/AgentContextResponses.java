@@ -21,7 +21,7 @@ public final class AgentContextResponses {
                     "get_account",
                     "create_account", "ensure_account", "update_account", "delete_account",
                     "update_account_code_rule", "preview_account_import", "get_account_import",
-                    "decide_account_import_rows", "commit_account_import", "export_account_template",
+                    "commit_account_import", "check_account_reconstruction_eligibility", "export_account_template",
                     "export_accounts")),
             new ToolGroup("dimensions_opening", List.of(
                     "list_cash_flow_items", "list_dimension_types", "list_dimension_values",

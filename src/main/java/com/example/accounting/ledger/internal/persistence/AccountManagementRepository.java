@@ -799,12 +799,12 @@ public class AccountManagementRepository {
 
             jdbc.update("""
                     insert into ledger_account (
-                        id, ledger_id, code, name, category, normal_balance, parent_id, level,
+                        id, ledger_id, code, name, category, normal_balance, status, parent_id, level,
                         standard_account_key, is_template, cash_flow_required, default_cash_flow_item_id,
                         quantity_enabled, unit_name)
-                    values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    values (?, ?, ?, ?, ?, ?, coalesce(?, 'ACTIVE'), ?, ?, ?, ?, ?, ?, ?, ?)
                     """, accountId, ledgerId, seed.code(), seed.name(), seed.category(), seed.normalBalance(),
-                    parentId, level, seed.standardAccountKey(), seed.template(), seed.cashFlowRequired(),
+                    seed.status(), parentId, level, seed.standardAccountKey(), seed.template(), seed.cashFlowRequired(),
                     seed.defaultCashFlowItemId(), seed.quantityEnabled(), seed.unitName());
         }
 
@@ -848,12 +848,12 @@ public class AccountManagementRepository {
 
             jdbc.update("""
                     insert into ledger_account (
-                        id, ledger_id, code, name, category, normal_balance, parent_id, level,
+                        id, ledger_id, code, name, category, normal_balance, status, parent_id, level,
                         standard_account_key, is_template, cash_flow_required, default_cash_flow_item_id,
                         quantity_enabled, unit_name)
-                    values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    values (?, ?, ?, ?, ?, ?, coalesce(?, 'ACTIVE'), ?, ?, ?, ?, ?, ?, ?, ?)
                     """, accountId, ledgerId, seed.code(), seed.name(), seed.category(), seed.normalBalance(),
-                    parentId, level, seed.standardAccountKey(), seed.template(), seed.cashFlowRequired(),
+                    seed.status(), parentId, level, seed.standardAccountKey(), seed.template(), seed.cashFlowRequired(),
                     seed.defaultCashFlowItemId(), seed.quantityEnabled(), seed.unitName());
         }
 
@@ -876,6 +876,7 @@ public class AccountManagementRepository {
 
     public record ReconstructAccountSeed(
             String code, String name, String parentCode, String category, String normalBalance,
+            String status,
             String standardAccountKey, boolean template, boolean cashFlowRequired,
             UUID defaultCashFlowItemId, boolean quantityEnabled, String unitName) {
     }
