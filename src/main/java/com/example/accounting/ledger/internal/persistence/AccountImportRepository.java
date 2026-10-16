@@ -122,17 +122,13 @@ public class AccountImportRepository {
     }
 
     public int decide(UUID importId, int rowNo, String action, UUID targetId,
-                      Long targetVersion, String accountCode) {
+                      Long targetVersion) {
         return jdbc.update("""
                 update account_import_row
                 set action = ?, target_account_id = ?, expected_account_version = ?,
-                    account_code = coalesce(cast(? as varchar), account_code),
-                    cleaned_data = case when cast(? as text) is null then cleaned_data
-                        else jsonb_set(cleaned_data, '{code}', to_jsonb(?::text), true) end,
                     confirmed = true
                 where import_id = ? and row_no = ?
-                """, action, targetId, targetVersion, accountCode,
-                accountCode, accountCode, importId, rowNo);
+                """, action, targetId, targetVersion, importId, rowNo);
     }
 
     public List<CommitRow> commitRows(UUID importId) {

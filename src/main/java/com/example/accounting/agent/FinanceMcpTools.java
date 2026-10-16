@@ -581,6 +581,11 @@ public class FinanceMcpTools {
         UUID actorId = actor();
         byte[] content = decode(base64Content, "ACCOUNT_IMPORT_CONTENT_INVALID");
         AccountExchangeService.ImportMode effectiveMode = mode != null ? mode : AccountExchangeService.ImportMode.APPEND;
+        if ((ruleLevel2Width != null || ruleLevel3Width != null || ruleLevel4Width != null)
+                && (ruleLevel2Width == null || ruleLevel3Width == null || ruleLevel4Width == null)) {
+            throw new ApiProblemException(422, "ACCOUNT_CODE_RULE_INCOMPLETE", "Incomplete code rule",
+                    "自定义编码规则必须同时提供二、三、四级级长，或全部留空以自动推断", false);
+        }
         AccountCodeRule customRule = (ruleLevel2Width != null && ruleLevel3Width != null && ruleLevel4Width != null)
                 ? new AccountCodeRule(ruleLevel2Width, ruleLevel3Width, ruleLevel4Width) : null;
         return audited(actorId, "preview_account_import", ledgerId,

@@ -1,6 +1,7 @@
 package com.example.accounting.ledger;
 
 import com.example.accounting.identity.CurrentUserResolver;
+import com.example.accounting.shared.web.ApiProblemException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import java.io.IOException;
@@ -62,6 +63,11 @@ public class AccountExchangeController {
             @RequestParam(required = false) Integer ruleLevel3Width,
             @RequestParam(required = false) Integer ruleLevel4Width,
             @RequestPart("file") MultipartFile file) throws IOException {
+        if ((ruleLevel2Width != null || ruleLevel3Width != null || ruleLevel4Width != null)
+                && (ruleLevel2Width == null || ruleLevel3Width == null || ruleLevel4Width == null)) {
+            throw new ApiProblemException(422, "ACCOUNT_CODE_RULE_INCOMPLETE", "Incomplete code rule",
+                    "自定义编码规则必须同时提供二、三、四级级长，或全部留空以自动推断", false);
+        }
         AccountCodeRule customRule = (ruleLevel2Width != null && ruleLevel3Width != null && ruleLevel4Width != null)
                 ? new AccountCodeRule(ruleLevel2Width, ruleLevel3Width, ruleLevel4Width) : null;
         return exchange.preview(user(request), ledgerId, format, mode, customRule,

@@ -116,6 +116,29 @@ public class LedgerBackupService {
             throw problem(403, "INSUFFICIENT_LEDGER_ROLE", "Insufficient ledger role",
                     "Only a ledger owner can create a backup");
         }
+        return archive(ledgerId);
+    }
+
+    @Transactional(readOnly = true)
+    public Path backupBeforeAccountOverwrite(UUID actorId, UUID ledgerId, UUID importId) {
+        if (!Set.of(LedgerRole.OWNER, LedgerRole.EDITOR).contains(access.requireMembership(actorId, ledgerId))) {
+            throw problem(403, "INSUFFICIENT_LEDGER_ROLE", "Insufficient ledger role",
+                    "Only a ledger owner or editor can overwrite accounts");
+        }
+        byte[] content = archive(ledgerId);
+        Path directory = storageRoot.resolve("ledger-backups").resolve(ledgerId.toString());
+        Path file = directory.resolve("before-account-import-" + importId + ".aibackup");
+        try {
+            Files.createDirectories(directory);
+            Files.write(file, content);
+            return file;
+        } catch (IOException exception) {
+            throw problem(500, "LEDGER_BACKUP_FAILED", "Ledger backup failed",
+                    "自动备份保存失败，已停止科目全量重构");
+        }
+    }
+
+    private byte[] archive(UUID ledgerId) {
         try {
             ObjectNode data = objectMapper.createObjectNode();
             data.set("ledger", ledger(ledgerId));

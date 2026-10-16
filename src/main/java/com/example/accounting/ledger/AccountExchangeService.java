@@ -85,25 +85,27 @@ public class AccountExchangeService {
     private final AccountImportRepository imports;
     private final AccountAiMapper aiMapper;
     private final AccountingStandardCatalog standards;
+    private final LedgerBackupService backups;
     private final ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
 
     @Autowired
     public AccountExchangeService(
             LedgerService ledgers, LedgerAccessService access,
             AccountManagementRepository accounts, AccountImportRepository imports, AccountAiMapper aiMapper,
-            AccountingStandardCatalog standards) {
+            AccountingStandardCatalog standards, LedgerBackupService backups) {
         this.ledgers = ledgers;
         this.access = access;
         this.accounts = accounts;
         this.imports = imports;
         this.aiMapper = aiMapper;
         this.standards = standards;
+        this.backups = backups;
     }
 
     public AccountExchangeService(
             LedgerService ledgers, LedgerAccessService access,
             AccountManagementRepository accounts, AccountImportRepository imports, AccountAiMapper aiMapper) {
-        this(ledgers, access, accounts, imports, aiMapper, new AccountingStandardCatalog());
+        this(ledgers, access, accounts, imports, aiMapper, new AccountingStandardCatalog(), null);
     }
 
     @Transactional(readOnly = true)
@@ -516,7 +518,17 @@ public class AccountExchangeService {
             LedgerResponses.Account account = ledgers.findAccount(actorId, ledgerId, target);
             targetVersion = account.version();
         }
-        int updated = imports.decide(importId, rowNo, action, target, targetVersion, decision.accountCode());
+        if (decision.accountCode() != null) {
+            String originalCode = imports.previewRows(importId).stream()
+                    .filter(row -> row.rowNo() == rowNo)
+                    .map(AccountImportRepository.PreviewRow::accountCode)
+                    .findFirst().orElse(null);
+            if (!decision.accountCode().equals(originalCode)) {
+                throw problem(422, "ACCOUNT_IMPORT_CODE_IMMUTABLE", "Import account code cannot be changed",
+                        "预检后不能修改科目编码，请修改文件并重新上传");
+            }
+        }
+        int updated = imports.decide(importId, rowNo, action, target, targetVersion);
         if (updated != 1) {
             throw problem(404, "ACCOUNT_IMPORT_ROW_NOT_FOUND", "Import row not found",
                     "The import row does not exist");
@@ -611,6 +623,15 @@ public class AccountExchangeService {
             }
         }
 
+        if (header.mode() == ImportMode.OVERWRITE) {
+            List<ImportBlocker> blockers = accounts.checkReconstructionEligibility(ledgerId);
+            if (!blockers.isEmpty()) {
+                throw problem(409, "ACCOUNT_IMPORT_DISQUALIFIED", "Ledger is not eligible for overwrite",
+                        blockers.getFirst().message());
+            }
+            backups.backupBeforeAccountOverwrite(actorId, ledgerId, importId);
+        }
+
         // Prepare dimension types
         Map<String, UUID> dimensionIds = ledgers.listDimensionTypes(actorId, ledgerId).stream()
                 .collect(Collectors.toMap(LedgerResponses.DimensionType::code, LedgerResponses.DimensionType::id));
@@ -670,11 +691,6 @@ public class AccountExchangeService {
         int deletedCount;
 
         if (header.mode() == ImportMode.OVERWRITE) {
-            List<ImportBlocker> blockers = accounts.checkReconstructionEligibility(ledgerId);
-            if (!blockers.isEmpty()) {
-                throw problem(409, "ACCOUNT_IMPORT_DISQUALIFIED", "Ledger is not eligible for overwrite",
-                        blockers.getFirst().message());
-            }
             AccountManagementRepository.ReconstructResult result = accounts.reconstructAccounts(
                     ledgerId, targetRule, accountSeeds, dimSeeds, importId);
             insertedCount = result.insertedCount();
