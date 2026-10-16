@@ -57,9 +57,21 @@ public class AccountExchangeController {
     public AccountExchangeService.Preview preview(
             HttpServletRequest request, @PathVariable UUID ledgerId,
             @RequestParam AccountExchangeService.Format format,
+            @RequestParam(required = false, defaultValue = "APPEND") AccountExchangeService.ImportMode mode,
+            @RequestParam(required = false) Integer ruleLevel2Width,
+            @RequestParam(required = false) Integer ruleLevel3Width,
+            @RequestParam(required = false) Integer ruleLevel4Width,
             @RequestPart("file") MultipartFile file) throws IOException {
-        return exchange.preview(user(request), ledgerId, format, file.getOriginalFilename(),
-                file.getSize(), file.getInputStream());
+        AccountCodeRule customRule = (ruleLevel2Width != null && ruleLevel3Width != null && ruleLevel4Width != null)
+                ? new AccountCodeRule(ruleLevel2Width, ruleLevel3Width, ruleLevel4Width) : null;
+        return exchange.preview(user(request), ledgerId, format, mode, customRule,
+                file.getOriginalFilename(), file.getSize(), file.getInputStream());
+    }
+
+    @GetMapping("/account-imports/reconstruction-eligibility")
+    public AccountExchangeService.ReconstructionEligibilityResponse checkEligibility(
+            HttpServletRequest request, @PathVariable UUID ledgerId) {
+        return exchange.checkReconstructionEligibility(user(request), ledgerId);
     }
 
     @GetMapping("/account-imports/{importId}")

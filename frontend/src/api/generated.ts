@@ -1439,6 +1439,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/ledgers/{ledgerId}/account-imports/reconstruction-eligibility": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["checkEligibility"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/ledgers/{ledgerId}/account-import-template": {
         parameters: {
             query?: never;
@@ -1772,6 +1788,52 @@ export interface components {
             accountCode: string | null;
         };
         /** @default null */
+        AccountCodeRule: {
+            /** Format: int32 */
+            level2Width: number;
+            /** Format: int32 */
+            level3Width: number;
+            /** Format: int32 */
+            level4Width: number;
+        };
+        /** @default null */
+        AccountImportBlocker: {
+            /**
+             * @description 阻断类型
+             * @default
+             */
+            type: string;
+            /**
+             * @description 阻断原因说明
+             * @default
+             */
+            message: string;
+        };
+        /** @default null */
+        AccountImportError: {
+            /**
+             * Format: int32
+             * @description 行号，账套级错误为 null
+             * @default
+             */
+            rowNo: number | null;
+            /**
+             * @description 科目编码，账套级错误为 null
+             * @default
+             */
+            accountCode: string | null;
+            /**
+             * @description 错误类型代码
+             * @default
+             */
+            code: string;
+            /**
+             * @description 可操作的错误说明
+             * @default
+             */
+            message: string;
+        };
+        /** @default null */
         AccountImportPreview: {
             /**
              * Format: uuid
@@ -1788,6 +1850,11 @@ export interface components {
              * @enum {string}
              */
             format: "STANDARD" | "KINGDEE";
+            /**
+             * @default
+             * @enum {string}
+             */
+            mode: "APPEND" | "OVERWRITE";
             /** @default  */
             status: string;
             /**
@@ -1797,6 +1864,8 @@ export interface components {
             ledgerVersion: number;
             /** @default  */
             filename: string;
+            /** @default  */
+            contentSha256: string;
             /**
              * Format: int32
              * @default
@@ -1807,10 +1876,34 @@ export interface components {
              * @default
              */
             errorCount: number;
+            /**
+             * Format: int32
+             * @default
+             */
+            insertCount: number;
+            /**
+             * Format: int32
+             * @default
+             */
+            deleteCount: number;
+            /** @default  */
+            currentCodeRule: components["schemas"]["AccountCodeRule"];
+            /** @default  */
+            targetCodeRule: components["schemas"]["AccountCodeRule"];
+            /** @default  */
+            codeRuleSources: {
+                [key: string]: string;
+            };
             /** @default  */
             aiStatus: string;
             /** @default  */
+            blockers: components["schemas"]["AccountImportBlocker"][];
+            /** @default  */
+            warnings: string[];
+            /** @default  */
             rows: components["schemas"]["AccountImportPreviewRow"][];
+            /** @default  */
+            errors: components["schemas"]["AccountImportError"][];
         };
         /** @default null */
         AccountImportPreviewRow: {
@@ -1849,15 +1942,6 @@ export interface components {
             issues: string[];
         };
         AccountCodeRuleUpdate: {
-            /** Format: int32 */
-            level2Width: number;
-            /** Format: int32 */
-            level3Width: number;
-            /** Format: int32 */
-            level4Width: number;
-        };
-        /** @default null */
-        AccountCodeRule: {
             /** Format: int32 */
             level2Width: number;
             /** Format: int32 */
@@ -2660,8 +2744,6 @@ export interface components {
         };
         /** @default null */
         Account: {
-            /** @description 科目列表中的全路径名称，以 - 分隔各级科目 */
-            fullName?: string | null;
             /** Format: uuid */
             id: string;
             /** Format: uuid */
@@ -2702,6 +2784,11 @@ export interface components {
              * @default
              */
             createdAt: string | null;
+            /**
+             * @description 科目列表中的全路径名称，以 - 分隔各级科目
+             * @default
+             */
+            fullName: string | null;
         };
         /** @default null */
         AccountDimensionRequirementResponse: {
@@ -2742,7 +2829,7 @@ export interface components {
             deleted: boolean;
         };
         Rename: {
-            name: string;
+            name?: string;
             description?: string;
             cashFlowCheckEnabled?: boolean;
         };
@@ -3000,9 +3087,11 @@ export interface components {
              * @default
              */
             formulaVersion: number | null;
-            cashFlowSource: "VOUCHER" | "FORMULA" | null;
-            calculationVersion: string | null;
             dataQuality: components["schemas"]["DataQuality"];
+            /** @default  */
+            cashFlowSource: string | null;
+            /** @default  */
+            calculationVersion: string | null;
         };
         /** @default null */
         StatutoryStatementLine: {
@@ -3303,6 +3392,13 @@ export interface components {
             code: string;
             name: string;
             status: string;
+        };
+        /** @default null */
+        AccountReconstructionEligibilityResponse: {
+            /** @default false */
+            eligible: boolean;
+            /** @default  */
+            blockers: components["schemas"]["AccountImportBlocker"][];
         };
         /** @default null */
         AccountingStandardAccount: {
@@ -4896,6 +4992,10 @@ export interface operations {
         parameters: {
             query: {
                 format: "STANDARD" | "KINGDEE";
+                mode?: "APPEND" | "OVERWRITE";
+                ruleLevel2Width?: number;
+                ruleLevel3Width?: number;
+                ruleLevel4Width?: number;
             };
             header?: never;
             path: {
@@ -5536,7 +5636,7 @@ export interface operations {
         parameters: {
             query: {
                 periodCode: string;
-                cashFlowSource?: "VOUCHER" | "FORMULA";
+                cashFlowSource?: string;
             };
             header?: never;
             path: {
@@ -6183,6 +6283,28 @@ export interface operations {
                 };
                 content: {
                     "*/*": components["schemas"]["AccountImportPreview"];
+                };
+            };
+        };
+    };
+    checkEligibility: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ledgerId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": components["schemas"]["AccountReconstructionEligibilityResponse"];
                 };
             };
         };

@@ -9,7 +9,38 @@ type Account = components['schemas']['Account']
 type AccountImportPreview = components['schemas']['AccountImportPreview']
 type DimensionType = components['schemas']['DimensionType']
 type Period = Omit<components['schemas']['Period'], 'hasVouchers'> & { hasVouchers?: boolean }
-type AccountImportAction = 'CREATE' | 'UPDATE' | 'MAP' | 'SKIP'
+
+const ISSUE_LABELS: Record<string, string> = {
+  'ERROR:DUPLICATE_CODE': '文件内编码重复',
+  'ERROR:CODE_EXISTS': '科目编码已存在',
+  'ERROR:NAME_REQUIRED': '科目名称必填',
+  'ERROR:INVALID_NAME': '名称格式非法',
+  'ERROR:SAME_NAME_EXISTS': '同级已存在同名科目',
+  'ERROR:INVALID_CATEGORY': '科目类别非法',
+  'ERROR:INVALID_NORMAL_BALANCE': '余额方向非法',
+  'ERROR:UNIT_REQUIRED': '数量核算必须指定单位',
+  'ERROR:INVALID_CODE': '编码与规则不符或超层级',
+  'ERROR:PARENT_CODE_MISMATCH': '显式父编码与编码推断不一致',
+  'ERROR:PARENT_NOT_FOUND': '找不到父级科目',
+  'ERROR:USED_ACCOUNT_CANNOT_BECOME_PARENT': '已有业务的科目不能新增子级',
+  'ERROR:CATEGORY_PARENT_MISMATCH': '类别与父级不一致',
+  'ERROR:NORMAL_BALANCE_PARENT_MISMATCH': '余额方向与父级不一致',
+  'ERROR:STANDARD_ACCOUNT_KEY_CONFLICT': '法定准则归类与现有科目冲突',
+  'ERROR:STANDARD_ACCOUNT_KEY_INVALID': '法定准则归类无效',
+}
+
+function formatRuleSource(src?: string): string {
+  switch (src) {
+    case 'OBSERVED':
+      return '样本观察推断'
+    case 'LEDGER_DEFAULT':
+      return '账套默认值'
+    case 'USER_SPECIFIED':
+      return '用户指定'
+    default:
+      return src || '推断'
+  }
+}
 
 type AccountTree = Account & { children?: AccountTree[] }
 export type AccountCategoryTab =
@@ -69,6 +100,8 @@ export function AccountsTab({ ledgerId, session, accounts, dimensionTypes, perio
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState<string>()
   const [format, setFormat] = useState<'STANDARD' | 'KINGDEE'>('STANDARD')
+  const [importMode, setImportMode] = useState<'APPEND' | 'OVERWRITE'>('APPEND')
+  const [showOnlyErrors, setShowOnlyErrors] = useState(false)
   const [createdInPeriodId, setCreatedInPeriodId] = useState<string>()
   const [preview, setPreview] = useState<AccountImportPreview | null>(null)
   const [expandedRowKeys, setExpandedRowKeys] = useState<string[]>([])
@@ -86,6 +119,14 @@ export function AccountsTab({ ledgerId, session, accounts, dimensionTypes, perio
       label: `${key} · ${account.code} ${account.name}`,
     }))
   }, [accounts, selectedCategory])
+  const eligibilityQuery = useQuery({
+    queryKey: ['account-reconstruction-eligibility', ledgerId],
+    queryFn: () => apiData(openApiClient.GET('/v1/ledgers/{ledgerId}/account-imports/reconstruction-eligibility', {
+      params: { path: { ledgerId } },
+      headers: apiHeaders(session),
+    })),
+    enabled: Boolean(session && ledgerId && writable),
+  })
   const codeRuleQuery = useQuery({
     queryKey: ['account-code-rule', ledgerId],
     queryFn: () => apiData(openApiClient.GET('/v1/ledgers/{ledgerId}/account-code-rule', { params: { path: { ledgerId } }, headers: apiHeaders(session) })),
@@ -213,24 +254,14 @@ export function AccountsTab({ ledgerId, session, accounts, dimensionTypes, perio
       const body = new FormData()
       body.append('file', file)
       return apiData(openApiClient.POST('/v1/ledgers/{ledgerId}/account-imports', {
-        params: { path: { ledgerId }, query: { format } }, headers: apiHeaders(session),
+        params: { path: { ledgerId }, query: { format, mode: importMode } }, headers: apiHeaders(session),
         body: { file: file as unknown as string }, bodySerializer: () => body,
       }))
     },
-    onSuccess: setPreview,
-    onError: (error) => message.error(errorText(error)),
-  })
-
-  const decide = useMutation({
-    mutationFn: ({ rowNo, action, targetAccountId }: {
-      rowNo: number
-      action: 'CREATE' | 'UPDATE' | 'MAP' | 'SKIP'
-      targetAccountId: string | null
-    }) => apiData(openApiClient.PUT('/v1/ledgers/{ledgerId}/account-imports/{importId}/rows/{rowNo}', {
-      params: { path: { ledgerId, importId: preview!.id, rowNo } }, headers: apiHeaders(session),
-      body: { action, targetAccountId, accountCode: null },
-    })),
-    onSuccess: setPreview,
+    onSuccess: (res) => {
+      setPreview(res)
+      setShowOnlyErrors(Boolean(res.errorCount && res.errorCount > 0))
+    },
     onError: (error) => message.error(errorText(error)),
   })
 
@@ -284,6 +315,21 @@ export function AccountsTab({ ledgerId, session, accounts, dimensionTypes, perio
         {writable && <Button type="primary" icon={<PlusOutlined />} onClick={() => openCreate(null)}>新增一级科目</Button>}
         <Select value={format} onChange={setFormat} style={{ width: 120 }}
           options={[{ value: 'STANDARD', label: '标准格式' }, { value: 'KINGDEE', label: '金蝶格式' }]} />
+        <Select value={importMode} onChange={setImportMode} style={{ width: 160 }}
+          options={[
+            { value: 'APPEND', label: '增量追加' },
+            {
+              value: 'OVERWRITE',
+              label: eligibilityQuery.data && !eligibilityQuery.data.eligible
+                ? '全量重构（不可用）'
+                : '全量重构（空账套）',
+            },
+          ]} />
+        {importMode === 'OVERWRITE' && eligibilityQuery.data && !eligibilityQuery.data.eligible && (
+          <Tooltip title={`账套不满足全量重构条件：${eligibilityQuery.data.blockers.map((b) => b.message).join('；')}`}>
+            <Tag color="error">不可重构</Tag>
+          </Tooltip>
+        )}
         <Tooltip title="仅导出在所选会计期间创建的科目">
           <span>Created at</span>
         </Tooltip>
@@ -419,33 +465,207 @@ export function AccountsTab({ ledgerId, session, accounts, dimensionTypes, perio
         </Form.Item>
       </Form>
     </Modal>
-    <Modal title={`科目导入预检：${preview?.filename || ''}`} width={1000}
+    <Modal title={`科目导入预检：${preview?.filename || ''}（${preview?.mode === 'OVERWRITE' ? '全量重构' : '增量追加'}）`} width={1000}
       open={Boolean(preview)} onCancel={() => setPreview(null)}
       footer={<Space>
         <Button onClick={() => setPreview(null)}>关闭</Button>
-        <Button type="primary" loading={commit.isPending}
-          disabled={!preview || preview.status === 'COMMITTED' || preview.rows.some((row) => !row.confirmed)}
-          onClick={() => commit.mutate()}>原子提交</Button>
+        {preview?.status === 'COMMITTED' ? (
+          <Tag color="success">已提交</Tag>
+        ) : (
+          <Button
+            type="primary"
+            danger={preview?.mode === 'OVERWRITE'}
+            loading={commit.isPending}
+            disabled={!preview || preview.errorCount > 0}
+            onClick={() => {
+              if (!preview) return
+              if (preview.mode === 'OVERWRITE') {
+                const targetRuleStr = `4-${preview.targetCodeRule.level2Width}-${preview.targetCodeRule.level3Width}-${preview.targetCodeRule.level4Width}`
+                modal.confirm({
+                  title: '确认进行全量重构？',
+                  content: `此操作将清空账套现有全部 ${preview.deleteCount} 个科目，并将编码规则设置为 ${targetRuleStr}，然后写入 ${preview.insertCount} 个新科目。此操作不可逆！`,
+                  okText: '确认全量替换',
+                  okType: 'danger',
+                  onOk: () => commit.mutate(),
+                })
+              } else {
+                modal.confirm({
+                  title: '确认追加导入科目？',
+                  content: `将新增 ${preview.insertCount} 个科目。`,
+                  okText: '确认追加',
+                  onOk: () => commit.mutate(),
+                })
+              }
+            }}
+          >
+            {preview?.mode === 'OVERWRITE' ? '一次确认并全量替换' : '一次确认并追加提交'}
+          </Button>
+        )}
       </Space>}>
-      {preview && <><Alert showIcon type={preview.errorCount ? 'error' : 'info'}
-        message={`${preview.rowCount} 行，${preview.errorCount} 个阻断错误；AI：${preview.aiStatus}`} />
-      <Table rowKey="rowNo" size="small" pagination={{ pageSize: 20 }} dataSource={preview.rows} columns={[
-        { title: '行', dataIndex: 'rowNo', width: 60 },
-        { title: '编码', dataIndex: 'accountCode' },
-        { title: '名称', render: (_, row) => row.cleanedData.name },
-        { title: '置信度', dataIndex: 'confidence' },
-        { title: '问题', render: (_, row) => row.issues.map((issue) => <Tag color="red" key={issue}>{issue}</Tag>) },
-        { title: '处理', render: (_, row) => <Select value={row.confirmed ? row.action as AccountImportAction | null : undefined}
-          placeholder={`建议：${row.action}`} style={{ width: 130 }}
-          onChange={(action: AccountImportAction) => decide.mutate({
-            rowNo: row.rowNo,
-            action,
-            targetAccountId: ['MAP', 'UPDATE'].includes(action) ? row.targetAccountId : null,
-          })}
-          options={(row.targetAccountId
-            ? ['UPDATE', 'MAP', 'SKIP']
-            : ['CREATE', 'SKIP']).map((value) => ({ value, label: value }))} /> },
-      ]} /></>}
+      {preview && (
+        <Space direction="vertical" size={12} style={{ width: '100%' }}>
+          {preview.mode === 'OVERWRITE' ? (
+            <Alert
+              showIcon
+              type={preview.errorCount > 0 ? 'error' : 'warning'}
+              message={
+                <span>
+                  <b>全量重构模式</b>：将删除账套现有全部 <b>{preview.deleteCount}</b> 个科目，新建 <b>{preview.insertCount}</b> 个科目。
+                </span>
+              }
+            />
+          ) : (
+            <Alert
+              showIcon
+              type={preview.errorCount > 0 ? 'error' : 'info'}
+              message={
+                <span>
+                  <b>增量追加模式</b>：将新增 <b>{preview.insertCount}</b> 个科目，现有科目保持不变。
+                </span>
+              }
+            />
+          )}
+
+          {preview.currentCodeRule && preview.targetCodeRule && (
+            <Card size="small" style={{ background: '#fafafa' }}>
+              <Space direction="vertical" size={4}>
+                <div>
+                  <b>编码规则：</b>
+                  {`4-${preview.currentCodeRule.level2Width}-${preview.currentCodeRule.level3Width}-${preview.currentCodeRule.level4Width}`}
+                  {preview.mode === 'OVERWRITE' &&
+                    (preview.currentCodeRule.level2Width !== preview.targetCodeRule.level2Width ||
+                      preview.currentCodeRule.level3Width !== preview.targetCodeRule.level3Width ||
+                      preview.currentCodeRule.level4Width !== preview.targetCodeRule.level4Width) && (
+                      <span style={{ color: '#fa8c16', marginLeft: 8 }}>
+                        → 变更后目标规则：
+                        <b>{`4-${preview.targetCodeRule.level2Width}-${preview.targetCodeRule.level3Width}-${preview.targetCodeRule.level4Width}`}</b>
+                      </span>
+                    )}
+                </div>
+                {preview.mode === 'OVERWRITE' && preview.codeRuleSources && (
+                  <div style={{ color: '#8c8c8c', fontSize: 12 }}>
+                    规则来源：
+                    二级 [{formatRuleSource(preview.codeRuleSources.level2)}] ·
+                    三级 [{formatRuleSource(preview.codeRuleSources.level3)}] ·
+                    四级 [{formatRuleSource(preview.codeRuleSources.level4)}]
+                  </div>
+                )}
+              </Space>
+            </Card>
+          )}
+
+          {preview.warnings && preview.warnings.length > 0 && (
+            <Alert
+              showIcon
+              type="warning"
+              message={
+                <ul style={{ margin: 0, paddingLeft: 18 }}>
+                  {preview.warnings.map((w, idx) => (
+                    <li key={idx}>{w}</li>
+                  ))}
+                </ul>
+              }
+            />
+          )}
+
+          {preview.blockers && preview.blockers.length > 0 && (
+            <Alert
+              showIcon
+              type="error"
+              message={
+                <div>
+                  <b>账套不满足重构条件（阻断）：</b>
+                  <ul style={{ margin: 0, paddingLeft: 18 }}>
+                    {preview.blockers.map((b, idx) => (
+                      <li key={idx}>{b.message}</li>
+                    ))}
+                  </ul>
+                </div>
+              }
+            />
+          )}
+
+          {preview.errorCount > 0 && (
+            <Alert
+              showIcon
+              type="error"
+              message={`共发现 ${preview.errorCount} 个阻断问题，请修正文件或账套状态后再试。`}
+            />
+          )}
+
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span>共 {preview.rowCount} 行科目数据</span>
+            {preview.errorCount > 0 && (
+              <Checkbox
+                checked={showOnlyErrors}
+                onChange={(e) => setShowOnlyErrors(e.target.checked)}
+              >
+                仅显示有问题的行 ({preview.errors ? preview.errors.filter((e) => e.rowNo !== null).length : preview.errorCount})
+              </Checkbox>
+            )}
+          </div>
+
+          <Table
+            rowKey="rowNo"
+            size="small"
+            pagination={{ pageSize: 20 }}
+            dataSource={
+              showOnlyErrors
+                ? preview.rows.filter((row) => row.issues.some((i) => i.startsWith('ERROR:')))
+                : preview.rows
+            }
+            columns={[
+              { title: '行号', dataIndex: 'rowNo', width: 65 },
+              { title: '科目编码', dataIndex: 'accountCode', width: 120 },
+              { title: '科目名称', render: (_, row) => row.cleanedData.name },
+              {
+                title: '类别 / 方向',
+                width: 160,
+                render: (_, row) =>
+                  `${ACCOUNT_CATEGORY_LABELS[row.cleanedData.category as AccountCategoryTab] || row.cleanedData.category || '-'} / ${
+                    row.cleanedData.normalBalance === 'CREDIT' ? '贷' : '借'
+                  }`,
+              },
+              {
+                title: '控制项',
+                width: 140,
+                render: (_, row) => (
+                  <Space wrap size={2}>
+                    {row.cleanedData.cashFlowRequired === 'true' && <Tag>现金流</Tag>}
+                    {row.cleanedData.quantityEnabled === 'true' && (
+                      <Tag>数量:{row.cleanedData.unitName || ''}</Tag>
+                    )}
+                  </Space>
+                ),
+              },
+              {
+                title: '预检结果',
+                render: (_, row) => {
+                  const errors = row.issues.filter((i) => i.startsWith('ERROR:'))
+                  const otherIssues = row.issues.filter((i) => !i.startsWith('ERROR:'))
+                  if (errors.length === 0 && otherIssues.length === 0) {
+                    return <Tag color="success">通过</Tag>
+                  }
+                  return (
+                    <Space wrap size={4}>
+                      {errors.map((issue) => (
+                        <Tag color="error" key={issue}>
+                          {ISSUE_LABELS[issue] || issue}
+                        </Tag>
+                      ))}
+                      {otherIssues.map((issue) => (
+                        <Tag color="warning" key={issue}>
+                          {ISSUE_LABELS[issue] || issue}
+                        </Tag>
+                      ))}
+                    </Space>
+                  )
+                },
+              },
+            ]}
+          />
+        </Space>
+      )}
     </Modal>
   </Space>
 }

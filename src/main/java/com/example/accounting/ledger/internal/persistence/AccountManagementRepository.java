@@ -1,6 +1,7 @@
 package com.example.accounting.ledger.internal.persistence;
 
 import com.example.accounting.ledger.AccountCodeRule;
+import com.example.accounting.ledger.AccountExchangeService;
 import com.example.accounting.ledger.LedgerRequests;
 import com.example.accounting.ledger.LedgerResponses;
 import java.sql.ResultSet;
@@ -8,6 +9,8 @@ import java.sql.SQLException;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Comparator;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -656,5 +659,230 @@ public class AccountManagementRepository {
 
     private void bumpLedgerVersion(UUID ledgerId) {
         jdbc.update("update ledger set version = version + 1, updated_at = now() where id = ?", ledgerId);
+    }
+
+    public void lockLedger(UUID ledgerId) {
+        jdbc.queryForObject("select id from ledger where id = ? for update", UUID.class, ledgerId);
+    }
+
+    public List<AccountExchangeService.ImportBlocker> checkReconstructionEligibility(UUID ledgerId) {
+        List<AccountExchangeService.ImportBlocker> blockers = new ArrayList<>();
+
+        Integer voucherCount = jdbc.queryForObject(
+                "select count(*) from voucher where ledger_id = ?", Integer.class, ledgerId);
+        if (voucherCount != null && voucherCount > 0) {
+            blockers.add(new AccountExchangeService.ImportBlocker(
+                    "VOUCHER", "账套存在凭证记录（共 " + voucherCount + " 张，包括草稿凭证），禁止全量重构科目树"));
+        }
+
+        Integer obCount = jdbc.queryForObject(
+                "select count(*) from opening_balance where ledger_id = ?", Integer.class, ledgerId);
+        if (obCount != null && obCount > 0) {
+            blockers.add(new AccountExchangeService.ImportBlocker(
+                    "OPENING_BALANCE", "账套存在期初余额记录（共 " + obCount + " 条），禁止全量重构科目树"));
+        }
+
+        Integer apbCount = jdbc.queryForObject(
+                "select count(*) from account_period_balance where ledger_id = ?", Integer.class, ledgerId);
+        Integer dpbCount = jdbc.queryForObject(
+                "select count(*) from dimension_period_balance where ledger_id = ?", Integer.class, ledgerId);
+        Integer bpelCount = jdbc.queryForObject(
+                "select count(*) from balance_projection_event_line where ledger_id = ?", Integer.class, ledgerId);
+        int totalProjection = (apbCount != null ? apbCount : 0) + (dpbCount != null ? dpbCount : 0)
+                + (bpelCount != null ? bpelCount : 0);
+        if (totalProjection > 0) {
+            blockers.add(new AccountExchangeService.ImportBlocker(
+                    "BALANCE_PROJECTION", "账套存在科目余额或发生额投影记录，禁止全量重构科目树"));
+        }
+
+        Integer facCount = jdbc.queryForObject(
+                "select count(*) from fixed_asset_category where ledger_id = ?", Integer.class, ledgerId);
+        if (facCount != null && facCount > 0) {
+            blockers.add(new AccountExchangeService.ImportBlocker(
+                    "FIXED_ASSET_CATEGORY", "账套存在固定资产类别配置（共 " + facCount + " 条），禁止全量重构科目树"));
+        }
+
+        Integer cardCount = jdbc.queryForObject(
+                "select count(*) from fixed_asset where ledger_id = ?", Integer.class, ledgerId);
+        if (cardCount != null && cardCount > 0) {
+            blockers.add(new AccountExchangeService.ImportBlocker(
+                    "FIXED_ASSET_CARD", "账套存在固定资产卡片（共 " + cardCount + " 条），禁止全量重构科目树"));
+        }
+
+        Integer faRunCount = jdbc.queryForObject(
+                "select count(*) from fixed_asset_depreciation_run where ledger_id = ?", Integer.class, ledgerId);
+        Integer faDisposalCount = jdbc.queryForObject(
+                "select count(*) from fixed_asset_disposal where ledger_id = ?", Integer.class, ledgerId);
+        if ((faRunCount != null && faRunCount > 0) || (faDisposalCount != null && faDisposalCount > 0)) {
+            blockers.add(new AccountExchangeService.ImportBlocker(
+                    "FIXED_ASSET_OPERATION", "账套存在固定资产折旧或处置记录，禁止全量重构科目树"));
+        }
+
+        Integer pcsCount = jdbc.queryForObject("""
+                select count(*) from period_closing_setting
+                where ledger_id = ? and (profit_account_id is not null or retained_earnings_account_id is not null)
+                """, Integer.class, ledgerId);
+        if (pcsCount != null && pcsCount > 0) {
+            blockers.add(new AccountExchangeService.ImportBlocker(
+                    "PERIOD_CLOSING_SETTING", "账套存在期末结账科目配置，禁止全量重构科目树"));
+        }
+
+        Integer stepCount = jdbc.queryForObject(
+                "select count(*) from period_closing_step where ledger_id = ?", Integer.class, ledgerId);
+        if (stepCount != null && stepCount > 0) {
+            blockers.add(new AccountExchangeService.ImportBlocker(
+                    "PERIOD_CLOSING_STEP", "账套存在期末结账记录，禁止全量重构科目树"));
+        }
+
+        Integer rfCount = jdbc.queryForObject(
+                "select count(*) from report_formula_account_reference where ledger_id = ?", Integer.class, ledgerId);
+        if (rfCount != null && rfCount > 0) {
+            blockers.add(new AccountExchangeService.ImportBlocker(
+                    "REPORT_FORMULA", "账套存在报表公式科目引用，禁止全量重构科目树"));
+        }
+
+        return blockers;
+    }
+
+    public ReconstructResult reconstructAccounts(
+            UUID ledgerId, AccountCodeRule newRule, List<ReconstructAccountSeed> accountsToCreate,
+            List<AccountDimensionRequirementSeed> dimensions, UUID currentImportId) {
+        lockLedger(ledgerId);
+        List<AccountExchangeService.ImportBlocker> blockers = checkReconstructionEligibility(ledgerId);
+        if (!blockers.isEmpty()) {
+            throw new IllegalStateException("Ledger " + ledgerId + " is not eligible for reconstruction: "
+                    + blockers.getFirst().message());
+        }
+
+        jdbc.execute("set local accounting.allow_account_reconstruction = 'on'");
+
+        jdbc.update("delete from ledger_account_dimension where ledger_id = ?", ledgerId);
+
+        int d4 = jdbc.update("delete from ledger_account where ledger_id = ? and level = 4", ledgerId);
+        int d3 = jdbc.update("delete from ledger_account where ledger_id = ? and level = 3", ledgerId);
+        int d2 = jdbc.update("delete from ledger_account where ledger_id = ? and level = 2", ledgerId);
+        int d1 = jdbc.update("delete from ledger_account where ledger_id = ? and level = 1", ledgerId);
+        int totalDeleted = d4 + d3 + d2 + d1;
+
+        Integer remaining = jdbc.queryForObject(
+                "select count(*) from ledger_account where ledger_id = ?", Integer.class, ledgerId);
+        if (remaining != null && remaining > 0) {
+            throw new IllegalStateException("Failed to clear all accounts: " + remaining + " remaining");
+        }
+
+        jdbc.update("""
+                update ledger
+                set account_level2_width = ?, account_level3_width = ?, account_level4_width = ?,
+                    version = version + 1, updated_at = now()
+                where id = ?
+                """, newRule.level2Width(), newRule.level3Width(), newRule.level4Width(), ledgerId);
+
+        jdbc.update("""
+                update account_import
+                set error_count = error_count + 1,
+                    blockers_json = jsonb_build_array(jsonb_build_object('type', 'LEDGER_RECONSTRUCTED', 'message', '账套科目已被全量重构，此预检任务已失效')),
+                    updated_at = now()
+                where ledger_id = ? and id <> ? and status = 'PREVIEW'
+                """, ledgerId, currentImportId);
+
+        Map<String, UUID> codeToId = new HashMap<>();
+        List<ReconstructAccountSeed> sorted = accountsToCreate.stream()
+                .sorted(Comparator.comparingInt(seed -> newRule.levelOf(seed.code())))
+                .toList();
+
+        for (ReconstructAccountSeed seed : sorted) {
+            UUID accountId = UUID.randomUUID();
+            codeToId.put(seed.code(), accountId);
+            int level = newRule.levelOf(seed.code());
+            UUID parentId = seed.parentCode() != null && !seed.parentCode().isBlank()
+                    ? codeToId.get(seed.parentCode()) : null;
+
+            jdbc.update("""
+                    insert into ledger_account (
+                        id, ledger_id, code, name, category, normal_balance, parent_id, level,
+                        standard_account_key, is_template, cash_flow_required, default_cash_flow_item_id,
+                        quantity_enabled, unit_name)
+                    values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """, accountId, ledgerId, seed.code(), seed.name(), seed.category(), seed.normalBalance(),
+                    parentId, level, seed.standardAccountKey(), seed.template(), seed.cashFlowRequired(),
+                    seed.defaultCashFlowItemId(), seed.quantityEnabled(), seed.unitName());
+        }
+
+        if (dimensions != null) {
+            for (AccountDimensionRequirementSeed dim : dimensions) {
+                UUID accountId = codeToId.get(dim.accountCode());
+                if (accountId != null && dim.dimensionTypeId() != null) {
+                    jdbc.update("""
+                            insert into ledger_account_dimension (account_id, ledger_id, dimension_type_id, required)
+                            values (?, ?, ?, ?)
+                            on conflict do nothing
+                            """, accountId, ledgerId, dim.dimensionTypeId(), dim.required());
+                }
+            }
+        }
+
+        bumpLedgerVersion(ledgerId);
+        return new ReconstructResult(totalDeleted, sorted.size());
+    }
+
+    public int appendAccounts(
+            UUID ledgerId, AccountCodeRule currentRule, List<ReconstructAccountSeed> accountsToCreate,
+            List<AccountDimensionRequirementSeed> dimensions) {
+        lockLedger(ledgerId);
+
+        Map<String, UUID> codeToId = new HashMap<>();
+        jdbc.query("select id, code from ledger_account where ledger_id = ?", rs -> {
+            codeToId.put(rs.getString("code"), rs.getObject("id", UUID.class));
+        }, ledgerId);
+
+        List<ReconstructAccountSeed> sorted = accountsToCreate.stream()
+                .sorted(Comparator.comparingInt(seed -> currentRule.levelOf(seed.code())))
+                .toList();
+
+        for (ReconstructAccountSeed seed : sorted) {
+            UUID accountId = UUID.randomUUID();
+            codeToId.put(seed.code(), accountId);
+            int level = currentRule.levelOf(seed.code());
+            UUID parentId = seed.parentCode() != null && !seed.parentCode().isBlank()
+                    ? codeToId.get(seed.parentCode()) : null;
+
+            jdbc.update("""
+                    insert into ledger_account (
+                        id, ledger_id, code, name, category, normal_balance, parent_id, level,
+                        standard_account_key, is_template, cash_flow_required, default_cash_flow_item_id,
+                        quantity_enabled, unit_name)
+                    values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """, accountId, ledgerId, seed.code(), seed.name(), seed.category(), seed.normalBalance(),
+                    parentId, level, seed.standardAccountKey(), seed.template(), seed.cashFlowRequired(),
+                    seed.defaultCashFlowItemId(), seed.quantityEnabled(), seed.unitName());
+        }
+
+        if (dimensions != null) {
+            for (AccountDimensionRequirementSeed dim : dimensions) {
+                UUID accountId = codeToId.get(dim.accountCode());
+                if (accountId != null && dim.dimensionTypeId() != null) {
+                    jdbc.update("""
+                            insert into ledger_account_dimension (account_id, ledger_id, dimension_type_id, required)
+                            values (?, ?, ?, ?)
+                            on conflict do nothing
+                            """, accountId, ledgerId, dim.dimensionTypeId(), dim.required());
+                }
+            }
+        }
+
+        bumpLedgerVersion(ledgerId);
+        return sorted.size();
+    }
+
+    public record ReconstructAccountSeed(
+            String code, String name, String parentCode, String category, String normalBalance,
+            String standardAccountKey, boolean template, boolean cashFlowRequired,
+            UUID defaultCashFlowItemId, boolean quantityEnabled, String unitName) {
+    }
+
+    public record AccountDimensionRequirementSeed(String accountCode, UUID dimensionTypeId, boolean required) {
+    }
+
+    public record ReconstructResult(int deletedCount, int insertedCount) {
     }
 }

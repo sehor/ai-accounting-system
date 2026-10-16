@@ -18,6 +18,7 @@ import java.text.Normalizer;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -62,7 +63,6 @@ public class AccountExchangeService {
     private static final List<String> NATIVE_KINGDEE_HEADERS = List.of(
             "编码", "名称", "类别", "余额方向");
 
-    // Native Kingdee SME names disambiguate code aliases shared with older exports.
     private static final Map<String, String> KINGDEE_SME_KEYS_BY_NAME = Map.ofEntries(
             Map.entry("消耗性生物资产", "ASSET.CONSUMABLE_BIOLOGICAL_ASSET"),
             Map.entry("在建工程", "ASSET.CONSTRUCTION_IN_PROGRESS"),
@@ -137,10 +137,25 @@ public class AccountExchangeService {
                 exportedAccounts, ledgers.listDimensionTypes(actorId, ledgerId));
     }
 
+    @Transactional(readOnly = true)
+    public ReconstructionEligibilityResponse checkReconstructionEligibility(UUID actorId, UUID ledgerId) {
+        ledgers.findLedger(actorId, ledgerId);
+        List<ImportBlocker> blockers = accounts.checkReconstructionEligibility(ledgerId);
+        return new ReconstructionEligibilityResponse(blockers.isEmpty(), blockers);
+    }
+
     @Transactional
     public Preview preview(UUID actorId, UUID ledgerId, Format format, String filename,
                            long declaredSize, InputStream input) {
+        return preview(actorId, ledgerId, format, ImportMode.APPEND, null, filename, declaredSize, input);
+    }
+
+    @Transactional
+    public Preview preview(UUID actorId, UUID ledgerId, Format format, ImportMode mode,
+                           AccountCodeRule customRule, String filename,
+                           long declaredSize, InputStream input) {
         requireWrite(actorId, ledgerId);
+        ImportMode effectiveMode = mode != null ? mode : ImportMode.APPEND;
         String lowerName = filename == null ? "" : filename.toLowerCase(Locale.ROOT);
         if (!lowerName.endsWith(".xlsx") && (format != Format.KINGDEE || !lowerName.endsWith(".xls"))) {
             throw problem(422, "ACCOUNT_IMPORT_FILE_INVALID", "Invalid account workbook",
@@ -162,89 +177,179 @@ public class AccountExchangeService {
         if (!xlsx && (format != Format.KINGDEE || !xls)) {
             throw workbookProblem("The uploaded file is not a supported Excel workbook");
         }
-        String sha256 = sha256(content);
-        UUID existing = imports.findByHash(ledgerId, sha256);
-        if (existing != null && "COMMITTED".equals(importHeader(ledgerId, existing).status())) {
-            return get(actorId, ledgerId, existing);
+
+        AccountCodeRule currentRule = accounts.codeRule(ledgerId);
+        if (effectiveMode == ImportMode.APPEND && customRule != null && !customRule.equals(currentRule)) {
+            throw problem(422, "APPEND_CODE_RULE_IMMUTABLE", "Cannot alter code rule in APPEND mode",
+                    "增量追加模式必须使用账套现有编码规则，不可修改编码规则");
         }
 
-        AccountCodeRule rule = accounts.codeRule(ledgerId);
-        List<ParsedAccount> parsed = parse(content, format, rule);
-        LedgerResponses.Ledger ledger = ledgers.findLedger(actorId, ledgerId);
-        Map<String, LedgerResponses.Account> existingAccounts = ledgers.listAccounts(actorId, ledgerId).stream()
-                .collect(Collectors.toMap(LedgerResponses.Account::code, account -> account));
-        applyStandardMappings(format, ledger, rule, parsed, existingAccounts);
-        Set<String> availableCodes = new HashSet<>(existingAccounts.keySet());
-        parsed.forEach(row -> availableCodes.add(row.code()));
-        parsed.stream().filter(row -> rule.levelOf(row.code()) > 1).forEach(row ->
-                rule.parentCode(row.code()).filter(parent -> !availableCodes.contains(parent))
-                        .ifPresent(ignored -> row.issues().add("ERROR:PARENT_NOT_FOUND")));
-        Map<UUID, LedgerResponses.Account> existingById = existingAccounts.values().stream()
-                .collect(Collectors.toMap(LedgerResponses.Account::id, account -> account));
-        List<AccountAiMapper.Source> aiSources = new ArrayList<>();
-        for (int index = 0; index < parsed.size(); index++) {
-            ParsedAccount row = parsed.get(index);
-            // ponytail: cap optional AI work; batch/chunk only if mapping throughput becomes a measured need.
-            if (aiSources.size() < 500 && !existingAccounts.containsKey(row.code())
-                    && row.issues().stream().noneMatch(issue -> issue.startsWith("ERROR:"))) {
-                aiSources.add(new AccountAiMapper.Source(
-                        index + 1, row.code(), row.cleaned().get("name")));
-            }
+        String sha256 = sha256(content);
+        UUID existing = imports.findByHash(ledgerId, sha256);
+
+        // Raw parsing without rule binding
+        List<ParsedAccount> parsed = parseRaw(content, format);
+        if (parsed.isEmpty()) {
+            throw workbookProblem("The uploaded workbook contains no account rows");
         }
-        AccountAiMapper.Result ai = aiMapper.suggest(aiSources, existingAccounts.values().stream()
-                .map(account -> new AccountAiMapper.Target(account.id(), account.code(), account.name()))
-                .toList());
+
+        AccountCodeRule targetRule;
+        Map<String, String> ruleSources;
+        List<String> warnings = new ArrayList<>();
+        if (effectiveMode == ImportMode.OVERWRITE) {
+            RuleInference inference = inferCodeRule(parsed, currentRule, customRule, format);
+            targetRule = inference.rule();
+            ruleSources = inference.sources();
+            warnings.addAll(inference.warnings());
+        } else {
+            targetRule = currentRule;
+            ruleSources = Map.of("level2", "CURRENT_RULE", "level3", "CURRENT_RULE", "level4", "CURRENT_RULE");
+        }
+
+        LedgerResponses.Ledger ledger = ledgers.findLedger(actorId, ledgerId);
+        List<LedgerResponses.Account> existingAccountsList = ledgers.listAccounts(actorId, ledgerId);
+        Map<String, LedgerResponses.Account> existingAccounts = existingAccountsList.stream()
+                .collect(Collectors.toMap(LedgerResponses.Account::code, account -> account));
+
+        // Kingdee 4-column category/direction inheritance
+        Map<String, ParsedAccount> byCode = parsed.stream()
+                .collect(Collectors.toMap(ParsedAccount::code, row -> row, (a, b) -> a));
+        parsed.stream().sorted(Comparator.comparingInt(row -> row.code().length())).forEach(row -> {
+            String inferredParent = targetRule.parentCode(row.code()).orElse("");
+            ParsedAccount parent = byCode.get(inferredParent);
+            if (parent != null) {
+                if (row.cleaned().get("category").isBlank() || !AccountCategory.isValid(row.cleaned().get("category"))) {
+                    row.cleaned().put("category", parent.cleaned().get("category"));
+                    row.issues().remove("ERROR:INVALID_CATEGORY");
+                }
+                if (row.cleaned().get("normalBalance").isBlank() || !Set.of("DEBIT", "CREDIT").contains(row.cleaned().get("normalBalance"))) {
+                    row.cleaned().put("normalBalance", parent.cleaned().get("normalBalance"));
+                    row.issues().remove("ERROR:INVALID_NORMAL_BALANCE");
+                }
+            }
+        });
+
+        // Duplicate code detection inside file
         Set<String> duplicateCodes = parsed.stream().collect(Collectors.groupingBy(
                         ParsedAccount::code, Collectors.counting())).entrySet().stream()
                 .filter(entry -> !entry.getKey().isBlank() && entry.getValue() > 1)
                 .map(Map.Entry::getKey).collect(Collectors.toSet());
+
+        Set<String> availableParentCodes = effectiveMode == ImportMode.APPEND
+                ? new HashSet<>(existingAccounts.keySet())
+                : new HashSet<>();
+        parsed.forEach(row -> availableParentCodes.add(row.code()));
+
+        // Validate each row against targetRule and mode
+        for (ParsedAccount account : parsed) {
+            String code = account.code();
+            String name = account.cleaned().get("name");
+            int level = targetRule.levelOf(code);
+
+            if (duplicateCodes.contains(code)) {
+                account.issues().add("ERROR:DUPLICATE_CODE");
+            }
+            if (name == null || name.isBlank()) {
+                account.issues().add("ERROR:NAME_REQUIRED");
+            } else if (name.contains("-")) {
+                account.issues().add("ERROR:INVALID_NAME");
+            }
+            if (!AccountCategory.isValid(account.cleaned().get("category"))) {
+                account.issues().add("ERROR:INVALID_CATEGORY");
+            }
+            if (!Set.of("DEBIT", "CREDIT").contains(account.cleaned().get("normalBalance"))) {
+                account.issues().add("ERROR:INVALID_NORMAL_BALANCE");
+            }
+            if (bool(account.cleaned().get("quantityEnabled"))
+                    && (account.cleaned().get("unitName") == null || account.cleaned().get("unitName").isBlank())) {
+                account.issues().add("ERROR:UNIT_REQUIRED");
+            }
+
+            if (level == 0) {
+                account.issues().add("ERROR:INVALID_CODE");
+            } else if (level > 1) {
+                String inferredParent = targetRule.parentCode(code).orElse("");
+                String explicitParent = account.cleaned().get("parentCode");
+                if (explicitParent != null && !explicitParent.isBlank() && !explicitParent.equals(inferredParent)) {
+                    account.issues().add("ERROR:PARENT_CODE_MISMATCH");
+                }
+                if (!availableParentCodes.contains(inferredParent)) {
+                    account.issues().add("ERROR:PARENT_NOT_FOUND");
+                } else if (effectiveMode == ImportMode.APPEND) {
+                    LedgerResponses.Account existingParent = existingAccounts.get(inferredParent);
+                    if (existingParent != null && existingParent.hasBusinessUsage()) {
+                        account.issues().add("ERROR:USED_ACCOUNT_CANNOT_BECOME_PARENT");
+                    }
+                }
+
+                // Check hierarchy attribute inheritance with parent
+                ParsedAccount fileParent = byCode.get(inferredParent);
+                String parentCategory = fileParent != null ? fileParent.cleaned().get("category")
+                        : existingAccounts.containsKey(inferredParent) ? existingAccounts.get(inferredParent).category() : null;
+                String parentNormalBalance = fileParent != null ? fileParent.cleaned().get("normalBalance")
+                        : existingAccounts.containsKey(inferredParent) ? existingAccounts.get(inferredParent).normalBalance() : null;
+
+                if (parentCategory != null && !account.cleaned().get("category").isBlank()
+                        && !parentCategory.equals(account.cleaned().get("category"))) {
+                    account.issues().add("ERROR:CATEGORY_PARENT_MISMATCH");
+                }
+                if (parentNormalBalance != null && !account.cleaned().get("normalBalance").isBlank()
+                        && !parentNormalBalance.equals(account.cleaned().get("normalBalance"))) {
+                    account.issues().add("ERROR:NORMAL_BALANCE_PARENT_MISMATCH");
+                }
+            }
+
+            if (effectiveMode == ImportMode.APPEND && existingAccounts.containsKey(code)) {
+                account.issues().add("ERROR:CODE_EXISTS");
+            }
+        }
+
+        // Same-parent name uniqueness check
+        validateNameUniqueness(parsed, targetRule, effectiveMode, existingAccounts);
+
+        // Standard account keys mapping
+        if (effectiveMode == ImportMode.OVERWRITE) {
+            applyStandardMappings(format, ledger, targetRule, parsed, Map.of());
+        } else {
+            applyStandardMappings(format, ledger, targetRule, parsed, existingAccounts);
+        }
+
+        // Ledger-level qualification check
+        List<ImportBlocker> blockers = effectiveMode == ImportMode.OVERWRITE
+                ? accounts.checkReconstructionEligibility(ledgerId)
+                : List.of();
+
+        if (format == Format.KINGDEE) {
+            warnings.add("金蝶格式未包含现金流和辅助核算配置，导入后将采用默认设置");
+        }
+
         UUID importId = existing == null ? UUID.randomUUID() : existing;
         long ledgerVersion = accounts.ledgerVersion(ledgerId);
+        int insertCount = parsed.size();
+        int deleteCount = effectiveMode == ImportMode.OVERWRITE ? existingAccountsList.size() : 0;
+        int errorCount = blockers.size() + (int) parsed.stream()
+                .filter(row -> row.issues().stream().anyMatch(i -> i.startsWith("ERROR:"))).count();
+
         try {
             String storedFilename = filename.substring(Math.max(0, filename.length() - 255));
+            String codeRuleSourcesJson = json(ruleSources);
+            String blockersJson = json(blockers);
+
             if (existing == null) {
-                imports.create(importId, ledgerId, format.name(), ledgerVersion,
-                        storedFilename, sha256, parsed.size(), ai.status(), actorId);
+                imports.create(importId, ledgerId, format.name(), effectiveMode.name(), ledgerVersion,
+                        storedFilename, sha256, parsed.size(), errorCount, insertCount, deleteCount,
+                        targetRule, codeRuleSourcesJson, blockersJson, "NOT_CONFIGURED", actorId);
             } else {
-                // Re-uploading a preview must use the current code rule and standard mappings.
-                imports.refreshPreview(importId, ledgerId, format.name(), ledgerVersion,
-                        storedFilename, parsed.size(), ai.status());
+                imports.refreshPreview(importId, ledgerId, format.name(), effectiveMode.name(), ledgerVersion,
+                        storedFilename, parsed.size(), errorCount, insertCount, deleteCount,
+                        targetRule, codeRuleSourcesJson, blockersJson, "NOT_CONFIGURED");
             }
-            int errorCount = 0;
+
             int rowNo = 1;
             for (ParsedAccount account : parsed) {
-                List<String> issues = new ArrayList<>(account.issues());
-                if (duplicateCodes.contains(account.code())) {
-                    issues.add("ERROR:DUPLICATE_CODE");
-                }
-                LedgerResponses.Account sameCodeTarget = existingAccounts.get(account.code());
-                AccountAiMapper.Suggestion aiSuggestion = ai.suggestions().get(rowNo);
-                LedgerResponses.Account target = sameCodeTarget;
-                String suggestedAction;
-                if (target != null) {
-                    suggestedAction = "UPDATE";
-                    if (target.hasBusinessUsage()
-                            || (!target.isLeaf() && accounts.hasNonZeroBalance(ledgerId, target.id()))) {
-                        issues.add("ERROR:ACCOUNT_OVERWRITE_FORBIDDEN");
-                    }
-                } else if (aiSuggestion != null) {
-                    target = existingById.get(aiSuggestion.targetAccountId());
-                    issues.add("AI:SUGGESTED:" + aiSuggestion.reason());
-                    suggestedAction = "MAP";
-                } else {
-                    suggestedAction = "CREATE";
-                }
-                BigDecimal confidence = aiSuggestion != null
-                        ? aiSuggestion.confidence()
-                        : target == null ? new BigDecimal("0.9000") : BigDecimal.ONE;
-                if (issues.stream().anyMatch(issue -> issue.startsWith("ERROR:"))) {
-                    errorCount++;
-                }
                 imports.addRow(importId, rowNo++, json(account.raw()), json(account.cleaned()), account.code(),
-                        target == null ? null : target.id(), target == null ? null : target.version(),
-                        suggestedAction, confidence, json(issues));
+                        null, null, "CREATE", BigDecimal.ONE, json(account.issues()));
             }
-            imports.setErrorCount(importId, errorCount);
         } catch (DataIntegrityViolationException exception) {
             throw problem(409, "ACCOUNT_IMPORT_CONFLICT", "Account import conflict",
                     "The workbook is already being imported or contains invalid references");
@@ -252,18 +357,95 @@ public class AccountExchangeService {
         return get(actorId, ledgerId, importId);
     }
 
+    private void validateNameUniqueness(
+            List<ParsedAccount> parsed, AccountCodeRule rule, ImportMode mode,
+            Map<String, LedgerResponses.Account> existingAccounts) {
+        // Group existing accounts by parent code
+        Map<String, Set<String>> existingNamesByParent = new HashMap<>();
+        if (mode == ImportMode.APPEND) {
+            for (LedgerResponses.Account account : existingAccounts.values()) {
+                String parentCode = account.parentId() == null ? ""
+                        : existingAccounts.values().stream()
+                        .filter(candidate -> candidate.id().equals(account.parentId()))
+                        .map(LedgerResponses.Account::code).findFirst().orElse("");
+                existingNamesByParent.computeIfAbsent(parentCode, k -> new HashSet<>())
+                        .add(clean(account.name()));
+            }
+        }
+
+        // Group file accounts by parent code
+        Map<String, Set<String>> fileNamesByParent = new HashMap<>();
+        for (ParsedAccount account : parsed) {
+            String code = account.code();
+            String name = clean(account.cleaned().get("name"));
+            if (name.isBlank()) continue;
+
+            String parentCode = rule.levelOf(code) > 1 ? rule.parentCode(code).orElse("") : "";
+            Set<String> existingNames = existingNamesByParent.getOrDefault(parentCode, Set.of());
+            Set<String> fileNames = fileNamesByParent.computeIfAbsent(parentCode, k -> new HashSet<>());
+
+            if (existingNames.contains(name) || !fileNames.add(name)) {
+                account.issues().add("ERROR:SAME_NAME_EXISTS");
+            }
+        }
+    }
+
     @Transactional(readOnly = true)
     public Preview get(UUID actorId, UUID ledgerId, UUID importId) {
         ledgers.findLedger(actorId, ledgerId);
         ImportHeader header = importHeader(ledgerId, importId);
+        AccountCodeRule currentRule = accounts.codeRule(ledgerId);
+        AccountCodeRule targetRule = header.targetRuleLevel2Width() != null
+                ? new AccountCodeRule(header.targetRuleLevel2Width(), header.targetRuleLevel3Width(), header.targetRuleLevel4Width())
+                : currentRule;
+        Map<String, String> sources = map(header.codeRuleSourcesJson());
+        List<ImportBlocker> blockers = typedList(header.blockersJson(), new TypeReference<>() {});
+
         List<PreviewRow> rows = imports.previewRows(importId).stream()
                 .map(row -> new PreviewRow(row.rowNo(), map(row.rawJson()), map(row.cleanedJson()),
                         row.accountCode(), row.targetId(), row.targetVersion(), row.action(),
                         row.confirmed(), row.confidence(), strings(row.issuesJson())))
                 .toList();
-        return new Preview(header.id(), header.ledgerId(), header.format(), header.status(),
-                header.ledgerVersion(), header.filename(), header.rowCount(), header.errorCount(),
-                header.aiStatus(), rows);
+
+        List<String> warnings = new ArrayList<>();
+        if (header.mode() == ImportMode.OVERWRITE) {
+            if ("LEDGER_DEFAULT".equals(sources.get("level2"))) {
+                warnings.add("文件未包含二级科目，第二级级长使用默认值 " + targetRule.level2Width() + "，请确认");
+            }
+            if ("LEDGER_DEFAULT".equals(sources.get("level3"))) {
+                warnings.add("文件未包含三级科目，第三级级长使用默认值 " + targetRule.level3Width() + "，请确认");
+            }
+            if ("LEDGER_DEFAULT".equals(sources.get("level4"))) {
+                warnings.add("文件未包含四级科目，第四级级长使用默认值 " + targetRule.level4Width() + "，请确认");
+            }
+        }
+        if (header.format() == Format.KINGDEE) {
+            warnings.add("金蝶格式未包含现金流和辅助核算配置，导入后将采用默认设置");
+        }
+
+        int insertCount = "COMMITTED".equals(header.status()) ? header.insertedCount() : header.rowCount();
+        int deleteCount = header.deletedCount();
+        if (!"COMMITTED".equals(header.status()) && header.mode() == ImportMode.OVERWRITE) {
+            deleteCount = ledgers.listAccounts(actorId, ledgerId).size();
+        }
+
+        List<ImportError> errors = new ArrayList<>();
+        for (ImportBlocker b : blockers) {
+            errors.add(new ImportError(null, null, b.type(), b.message()));
+        }
+        for (PreviewRow r : rows) {
+            for (String issue : r.issues()) {
+                if (issue.startsWith("ERROR:")) {
+                    errors.add(new ImportError(r.rowNo(), r.accountCode(), issue,
+                            issueDescription(issue, r.accountCode(), r.cleanedData().get("name"))));
+                }
+            }
+        }
+
+        return new Preview(header.id(), header.ledgerId(), header.format(), header.mode(), header.status(),
+                header.ledgerVersion(), header.filename(), header.contentSha256(), header.rowCount(),
+                header.errorCount(), insertCount, deleteCount, currentRule, targetRule, sources,
+                header.aiStatus(), blockers, warnings, rows, errors);
     }
 
     @Transactional
@@ -323,23 +505,11 @@ public class AccountExchangeService {
             throw problem(422, "ACCOUNT_IMPORT_DECISION_INVALID", "Invalid import decision",
                     "Every import row decision needs an action");
         }
-        String action = decision.action() == null ? "" : decision.action().toUpperCase(Locale.ROOT);
-        if (!Set.of("CREATE", "UPDATE", "MAP", "SKIP").contains(action)) {
-            throw problem(422, "ACCOUNT_IMPORT_DECISION_INVALID", "Invalid import decision",
-                    "Action must be CREATE, UPDATE, MAP, or SKIP");
-        }
+        String action = decision.action() == null ? "CREATE" : decision.action().toUpperCase(Locale.ROOT);
         UUID target = Set.of("UPDATE", "MAP").contains(action) ? decision.targetAccountId() : null;
         Long targetVersion = null;
-        if (Set.of("UPDATE", "MAP").contains(action)) {
-            if (target == null) {
-                throw problem(422, "ACCOUNT_IMPORT_TARGET_REQUIRED", "Import target is required",
-                        "UPDATE and MAP require an account in this ledger");
-            }
+        if (Set.of("UPDATE", "MAP").contains(action) && target != null) {
             LedgerResponses.Account account = ledgers.findAccount(actorId, ledgerId, target);
-            if ("UPDATE".equals(action) && account.coreLocked()) {
-                throw problem(409, "ACCOUNT_CORE_LOCKED", "Account core fields are locked",
-                        "Map the row to this account or update only an unlocked account");
-            }
             targetVersion = account.version();
         }
         int updated = imports.decide(importId, rowNo, action, target, targetVersion, decision.accountCode());
@@ -356,30 +526,42 @@ public class AccountExchangeService {
         if ("COMMITTED".equals(header.status())) {
             return get(actorId, ledgerId, importId);
         }
+
+        // 1. Acquire ledger-level exclusive lock
+        accounts.lockLedger(ledgerId);
+
+        // 2. Optimistic version check against preview
         if (accounts.ledgerVersion(ledgerId) != header.ledgerVersion()) {
             throw problem(409, "ACCOUNT_IMPORT_STALE", "Account import is stale",
                     "Ledger accounts changed after preview; upload the workbook again");
         }
+
+        // 3. Error count check
+        if (header.errorCount() > 0) {
+            throw problem(422, "ACCOUNT_IMPORT_BLOCKED", "Account import has unresolved errors",
+                    "Resolve all blocking errors before committing the import");
+        }
+
         List<CommitRow> rows = imports.commitRows(importId).stream()
                 .map(row -> new CommitRow(row.rowNo(), imported(row.cleanedJson()), row.targetId(),
                         row.targetVersion(), row.action(), row.confirmed(), strings(row.issuesJson())))
                 .toList();
+
         for (CommitRow row : rows) {
-            if (!row.confirmed() || row.action() == null
-                    || row.issues().stream().anyMatch(issue -> issue.startsWith("ERROR:"))) {
+            if (row.issues().stream().anyMatch(issue -> issue.startsWith("ERROR:"))) {
                 throw problem(422, "ACCOUNT_IMPORT_UNRESOLVED", "Account import has unresolved rows",
-                        "Every row must be valid and explicitly confirmed before commit");
+                        "Every row must be valid before commit");
             }
         }
-        AccountCodeRule rule = accounts.codeRule(ledgerId);
-        Map<String, LedgerResponses.Account> existingByCode = existingAccountsByCode(actorId, ledgerId);
-        validateOverwriteRules(ledgerId, rows, existingByCode);
+
+        AccountCodeRule targetRule = header.targetRuleLevel2Width() != null
+                ? new AccountCodeRule(header.targetRuleLevel2Width(), header.targetRuleLevel3Width(), header.targetRuleLevel4Width())
+                : accounts.codeRule(ledgerId);
+
+        // Prepare dimension types
         Map<String, UUID> dimensionIds = ledgers.listDimensionTypes(actorId, ledgerId).stream()
                 .collect(Collectors.toMap(LedgerResponses.DimensionType::code, LedgerResponses.DimensionType::id));
         for (CommitRow row : rows) {
-            if (!Set.of("CREATE", "UPDATE").contains(row.action())) {
-                continue;
-            }
             for (DimensionTypeSeed seed : row.account().dimensionTypes()) {
                 if (!dimensionIds.containsKey(seed.code())) {
                     LedgerResponses.DimensionType created = ledgers.createDimensionType(actorId, ledgerId,
@@ -388,39 +570,208 @@ public class AccountExchangeService {
                 }
             }
         }
+
         Map<String, UUID> cashFlowIds = accounts.cashFlowItems(ledgerId).stream()
                 .collect(Collectors.toMap(LedgerResponses.CashFlowItem::code, LedgerResponses.CashFlowItem::id));
-        List<CommitRow> orderedRows = rows.stream()
-                .sorted(java.util.Comparator.comparingInt(row ->
-                        Math.max(0, rule.levelOf(row.account().values().get("code")))))
-                .toList();
-        for (CommitRow row : orderedRows) {
-            switch (row.action()) {
-                case "CREATE" -> ledgers.createAccount(actorId, ledgerId,
-                        row.account().createRequest(dimensionIds, cashFlowIds));
-                case "UPDATE" -> {
-                    LedgerResponses.Account target = ledgers.findAccount(actorId, ledgerId, row.targetAccountId());
-                    if (!java.util.Objects.equals(target.version(), row.expectedVersion())) {
-                        throw problem(409, "ACCOUNT_IMPORT_STALE", "Account import is stale",
-                                "A target account changed after preview");
-                    }
-                    if (java.util.Objects.equals(target.code(), row.account().values().get("code"))) {
-                        ledgers.overwriteAccount(actorId, ledgerId, target.id(),
-                                row.account().patchRequest(target.version(), dimensionIds, cashFlowIds));
-                    } else {
-                        ledgers.updateAccount(actorId, ledgerId, target.id(),
-                                row.account().patchRequest(target.version(), dimensionIds, cashFlowIds));
-                    }
+
+        List<AccountManagementRepository.ReconstructAccountSeed> accountSeeds = new ArrayList<>();
+        List<AccountManagementRepository.AccountDimensionRequirementSeed> dimSeeds = new ArrayList<>();
+
+        for (CommitRow row : rows) {
+            Map<String, String> v = row.account().values();
+            String code = v.get("code");
+            String name = v.get("name");
+            String parentCode = targetRule.parentCode(code).orElse(null);
+            String category = v.get("category");
+            String normalBalance = v.get("normalBalance");
+            String standardAccountKey = emptyToNull(v.get("standardAccountKey"));
+            boolean cashFlowRequired = Boolean.parseBoolean(v.get("cashFlowRequired"));
+            UUID defaultCashFlowItemId = cashFlowIds.get(v.get("defaultCashFlowItemCode"));
+            boolean quantityEnabled = Boolean.parseBoolean(v.get("quantityEnabled"));
+            String unitName = emptyToNull(v.get("unitName"));
+
+            accountSeeds.add(new AccountManagementRepository.ReconstructAccountSeed(
+                    code, name, parentCode, category, normalBalance, standardAccountKey,
+                    false, cashFlowRequired, defaultCashFlowItemId, quantityEnabled, unitName));
+
+            for (DimensionRequirementSeed req : row.account().dimensionRequirements()) {
+                UUID dimTypeId = dimensionIds.get(req.code());
+                if (dimTypeId != null) {
+                    dimSeeds.add(new AccountManagementRepository.AccountDimensionRequirementSeed(
+                            code, dimTypeId, req.required()));
                 }
-                case "MAP", "SKIP" -> {
-                    // Explicitly resolved without mutating master data.
-                }
-                default -> throw problem(422, "ACCOUNT_IMPORT_DECISION_INVALID",
-                        "Invalid import decision", "The saved import action is invalid");
             }
         }
-        imports.markCommitted(importId, ledgerId);
+
+        int insertedCount;
+        int deletedCount;
+
+        if (header.mode() == ImportMode.OVERWRITE) {
+            List<ImportBlocker> blockers = accounts.checkReconstructionEligibility(ledgerId);
+            if (!blockers.isEmpty()) {
+                throw problem(409, "ACCOUNT_IMPORT_DISQUALIFIED", "Ledger is not eligible for overwrite",
+                        blockers.getFirst().message());
+            }
+            AccountManagementRepository.ReconstructResult result = accounts.reconstructAccounts(
+                    ledgerId, targetRule, accountSeeds, dimSeeds, importId);
+            insertedCount = result.insertedCount();
+            deletedCount = result.deletedCount();
+        } else {
+            Map<String, LedgerResponses.Account> existingByCode = existingAccountsByCode(actorId, ledgerId);
+            for (CommitRow row : rows) {
+                String code = row.account().values().get("code");
+                if (existingByCode.containsKey(code)) {
+                    throw problem(409, "ACCOUNT_IMPORT_CODE_CONFLICT", "Account code already exists",
+                            "Account code " + code + " already exists in the ledger");
+                }
+            }
+            insertedCount = accounts.appendAccounts(ledgerId, targetRule, accountSeeds, dimSeeds);
+            deletedCount = 0;
+        }
+
+        imports.markCommitted(importId, ledgerId, insertedCount, deletedCount);
         return get(actorId, ledgerId, importId);
+    }
+
+    public RuleInference inferCodeRule(
+            List<ParsedAccount> parsed, AccountCodeRule currentRule, AccountCodeRule customRule, Format format) {
+        List<String> warnings = new ArrayList<>();
+        if (customRule != null) {
+            return new RuleInference(customRule,
+                    Map.of("level2", "USER_SPECIFIED", "level3", "USER_SPECIFIED", "level4", "USER_SPECIFIED"),
+                    warnings);
+        }
+
+        List<String> codes = parsed.stream()
+                .map(ParsedAccount::code)
+                .filter(c -> c != null && !c.isBlank())
+                .toList();
+
+        for (String code : codes) {
+            if (!code.matches("\\d+")) {
+                throw problem(422, "ACCOUNT_CODE_RULE_INVALID", "Invalid code rule",
+                        "科目编码必须为纯数字，保留前导零：" + code);
+            }
+        }
+
+        boolean hasExplicitParent = parsed.stream()
+                .anyMatch(p -> p.cleaned().get("parentCode") != null && !p.cleaned().get("parentCode").isBlank());
+
+        Integer w2 = null;
+        Integer w3 = null;
+        Integer w4 = null;
+
+        if (hasExplicitParent) {
+            Set<Integer> l2Widths = new HashSet<>();
+            Set<Integer> l3Widths = new HashSet<>();
+            Set<Integer> l4Widths = new HashSet<>();
+
+            for (ParsedAccount account : parsed) {
+                String parent = account.cleaned().get("parentCode");
+                String code = account.code();
+                if (parent != null && !parent.isBlank()) {
+                    int width = code.length() - parent.length();
+                    if (width <= 0 || width > 8) {
+                        throw problem(422, "ACCOUNT_CODE_RULE_INVALID", "Invalid code rule",
+                                "科目 " + code + " 与其上级 " + parent + " 的级长差非法：" + width);
+                    }
+                    if (parent.length() == 4) {
+                        l2Widths.add(width);
+                    } else if (l2Widths.size() == 1 && parent.length() == 4 + l2Widths.iterator().next()) {
+                        l3Widths.add(width);
+                    } else {
+                        l4Widths.add(width);
+                    }
+                }
+            }
+
+            if (l2Widths.size() > 1 || l3Widths.size() > 1 || l4Widths.size() > 1) {
+                throw problem(422, "ACCOUNT_CODE_RULE_INVALID", "Invalid code rule",
+                        "同一层级存在混合级长，无法推断统一编码规则");
+            }
+
+            if (!l2Widths.isEmpty()) w2 = l2Widths.iterator().next();
+            if (!l3Widths.isEmpty()) w3 = l3Widths.iterator().next();
+            if (!l4Widths.isEmpty()) w4 = l4Widths.iterator().next();
+        } else {
+            int[] sortedLengths = codes.stream().mapToInt(String::length).distinct().sorted().toArray();
+            if (sortedLengths.length == 0 || sortedLengths[0] != 4) {
+                throw problem(422, "ACCOUNT_CODE_RULE_INVALID", "Invalid code rule",
+                        "一级科目编码必须为 4 位纯数字");
+            }
+            if (sortedLengths.length > 4) {
+                throw problem(422, "ACCOUNT_CODE_RULE_INVALID", "Invalid code rule",
+                        "科目层级超过系统支持的最大 4 层限制，或同一层级级长不一致");
+            }
+            if (sortedLengths.length >= 2) {
+                w2 = sortedLengths[1] - 4;
+                if (w2 < 1 || w2 > 8) {
+                    throw problem(422, "ACCOUNT_CODE_RULE_INVALID", "Invalid code rule",
+                            "二级科目级长非法：" + w2);
+                }
+            }
+            if (sortedLengths.length >= 3) {
+                w3 = sortedLengths[2] - sortedLengths[1];
+                if (w3 < 1 || w3 > 8) {
+                    throw problem(422, "ACCOUNT_CODE_RULE_INVALID", "Invalid code rule",
+                            "三级科目级长非法：" + w3);
+                }
+            }
+            if (sortedLengths.length >= 4) {
+                w4 = sortedLengths[3] - sortedLengths[2];
+                if (w4 < 1 || w4 > 8) {
+                    throw problem(422, "ACCOUNT_CODE_RULE_INVALID", "Invalid code rule",
+                            "四级科目级长非法：" + w4);
+                }
+            }
+        }
+
+        Map<String, String> sources = new LinkedHashMap<>();
+        int finalW2 = w2 != null ? w2 : currentRule.level2Width();
+        int finalW3 = w3 != null ? w3 : currentRule.level3Width();
+        int finalW4 = w4 != null ? w4 : currentRule.level4Width();
+
+        sources.put("level2", w2 != null ? "OBSERVED" : "LEDGER_DEFAULT");
+        sources.put("level3", w3 != null ? "OBSERVED" : "LEDGER_DEFAULT");
+        sources.put("level4", w4 != null ? "OBSERVED" : "LEDGER_DEFAULT");
+
+        if (w2 == null) {
+            warnings.add("文件未包含二级科目，第二级级长使用默认值 " + finalW2 + "，请确认");
+        }
+        if (w3 == null) {
+            warnings.add("文件未包含三级科目，第三级级长使用默认值 " + finalW3 + "，请确认");
+        }
+        if (w4 == null) {
+            warnings.add("文件未包含四级科目，第四级级长使用默认值 " + finalW4 + "，请确认");
+        }
+
+        AccountCodeRule rule = new AccountCodeRule(finalW2, finalW3, finalW4);
+        return new RuleInference(rule, sources, warnings);
+    }
+
+    public static String issueDescription(String issue, String accountCode, String name) {
+        String code = issue.startsWith("ERROR:") ? issue.substring(6) : issue;
+        return switch (code) {
+            case "INVALID_CODE" -> "科目编码“" + accountCode + "”不符合编码规则或包含非数字字符";
+            case "DUPLICATE_CODE" -> "科目编码“" + accountCode + "”在导入文件中重复出现";
+            case "CODE_EXISTS" -> "科目编码“" + accountCode + "”已在账套中存在，增量追加模式禁止重复编码";
+            case "NAME_REQUIRED" -> "科目“" + accountCode + "”名称不能为空";
+            case "INVALID_NAME" -> "科目名称“" + name + "”不能包含半角连接符“-”，该字符用于分隔科目层级";
+            case "INVALID_CATEGORY" -> "科目“" + accountCode + "”类别无效";
+            case "INVALID_NORMAL_BALANCE" -> "科目“" + accountCode + "”余额方向无效（仅支持借/贷）";
+            case "PARENT_CODE_MISMATCH" -> "科目“" + accountCode + "”指定的上级科目编码与编码规则层级推断不一致";
+            case "PARENT_NOT_FOUND" -> "科目“" + accountCode + "”的上级科目不存在";
+            case "CATEGORY_PARENT_MISMATCH" -> "科目“" + accountCode + "”类别必须与上级科目一致";
+            case "NORMAL_BALANCE_PARENT_MISMATCH" -> "科目“" + accountCode + "”余额方向必须与上级科目一致";
+            case "USED_ACCOUNT_CANNOT_BECOME_PARENT" -> "上级科目已有业务记录，不可新增子科目";
+            case "SAME_NAME_EXISTS" -> "同级已存在同名科目：“" + name + "”";
+            case "UNIT_REQUIRED" -> "科目“" + accountCode + "”启用了数量核算，必须填写计量单位";
+            case "STANDARD_ACCOUNT_KEY_REQUIRED" -> "一级科目“" + accountCode + "”必须映射法定报表归类";
+            case "STANDARD_ACCOUNT_KEY_AMBIGUOUS" -> "一级科目“" + accountCode + "”存在多个候选法定报表归类，无法唯一确定";
+            case "STANDARD_ACCOUNT_KEY_INVALID" -> "科目“" + accountCode + "”的法定报表归类无效或未在当前准则中定义";
+            case "STANDARD_ACCOUNT_KEY_CONFLICT" -> "科目“" + accountCode + "”的法定报表归类与现有科目冲突";
+            default -> issue;
+        };
     }
 
     private byte[] workbook(
@@ -529,7 +880,7 @@ public class AccountExchangeService {
         autosize(bindings, 3);
     }
 
-    private List<ParsedAccount> parse(byte[] content, Format format, AccountCodeRule rule) {
+    private List<ParsedAccount> parseRaw(byte[] content, Format format) {
         ZipSecureFile.setMinInflateRatio(0.01);
         try (Workbook workbook = WorkbookFactory.create(new ByteArrayInputStream(content))) {
             Sheet sheet = workbook.getSheet(format == Format.STANDARD ? "Accounts" : "科目");
@@ -568,23 +919,11 @@ public class AccountExchangeService {
                     }
                     cells.add(value);
                 }
-                rows.add(nativeKingdee ? nativeKingdee(headers, cells, rule)
-                        : parsed(format, headers, cells, rule));
-            }
-            if (nativeKingdee) {
-                Map<String, ParsedAccount> byCode = rows.stream()
-                        .collect(Collectors.toMap(ParsedAccount::code, row -> row));
-                rows.stream().sorted(Comparator.comparingInt(row -> row.code().length())).forEach(row -> {
-                    ParsedAccount parent = byCode.get(row.cleaned().get("parentCode"));
-                    if (parent != null && !parent.issues().contains("ERROR:INVALID_CATEGORY")
-                            && !parent.issues().contains("ERROR:INVALID_NORMAL_BALANCE")) {
-                        row.cleaned().put("category", parent.cleaned().get("category"));
-                        row.issues().remove("ERROR:INVALID_CATEGORY");
-                    }
-                });
+                rows.add(nativeKingdee ? rawNativeKingdee(headers, cells)
+                        : rawParsed(format, headers, cells));
             }
             if (format == Format.STANDARD) {
-                standardControls(workbook, rows, rule);
+                standardControls(workbook, rows);
             }
             return rows;
         } catch (ApiProblemException exception) {
@@ -594,7 +933,7 @@ public class AccountExchangeService {
         }
     }
 
-    private ParsedAccount nativeKingdee(List<String> headers, List<String> cells, AccountCodeRule rule) {
+    private ParsedAccount rawNativeKingdee(List<String> headers, List<String> cells) {
         String category = switch (clean(cells.get(2))) {
             case "流动资产" -> "CURRENT_ASSET";
             case "非流动资产" -> "NON_CURRENT_ASSET";
@@ -616,10 +955,10 @@ public class AccountExchangeService {
             case "贷" -> "CREDIT";
             default -> "";
         };
-        String code = cleanCode(cells.get(0), rule);
-        List<String> adapted = List.of(code, clean(cells.get(1)), rule.parentCode(code).orElse(""),
+        String code = cleanCode(cells.get(0));
+        List<String> adapted = List.of(code, clean(cells.get(1)), "",
                 category, normal, "ACTIVE", "FALSE", "FALSE", "");
-        ParsedAccount parsed = parsed(Format.KINGDEE, KINGDEE_HEADERS, adapted, rule);
+        ParsedAccount parsed = rawParsed(Format.KINGDEE, KINGDEE_HEADERS, adapted);
         Map<String, String> raw = new LinkedHashMap<>();
         for (int index = 0; index < headers.size(); index++) {
             raw.put(headers.get(index), cells.get(index));
@@ -627,15 +966,15 @@ public class AccountExchangeService {
         return new ParsedAccount(parsed.code(), raw, parsed.cleaned(), parsed.issues());
     }
 
-    private ParsedAccount parsed(Format format, List<String> headers, List<String> cells, AccountCodeRule rule) {
+    private ParsedAccount rawParsed(Format format, List<String> headers, List<String> cells) {
         Map<String, String> raw = new LinkedHashMap<>();
         for (int index = 0; index < headers.size(); index++) {
             raw.put(headers.get(index), cells.get(index));
         }
         int categoryIndex = format == Format.STANDARD ? 3 : 3;
-        String code = cleanCode(cells.get(0), rule);
+        String code = cleanCode(cells.get(0));
         String name = clean(cells.get(1));
-        String parent = cleanCode(cells.get(2), rule);
+        String parent = cleanCode(cells.get(2));
         String category = clean(cells.get(categoryIndex)).toUpperCase(Locale.ROOT);
         String normal = clean(cells.get(categoryIndex + 1)).toUpperCase(Locale.ROOT);
         String status = clean(cells.get(categoryIndex + 2)).toUpperCase(Locale.ROOT);
@@ -655,72 +994,87 @@ public class AccountExchangeService {
         cleaned.put("unitName", unit);
         cleaned.put("standardAccountKey", format == Format.STANDARD ? clean(cells.get(10)) : "");
         List<String> issues = new ArrayList<>();
-        if (rule.levelOf(code) == 0) {
-            issues.add("ERROR:INVALID_CODE");
-        }
-        if (name.isBlank()) {
-            issues.add("ERROR:NAME_REQUIRED");
-        }
-        if (!AccountCategory.isValid(category)) {
-            issues.add("ERROR:INVALID_CATEGORY");
-        }
-        if (!Set.of("DEBIT", "CREDIT").contains(normal)) {
-            issues.add("ERROR:INVALID_NORMAL_BALANCE");
-        }
-        String inferred = rule.parentCode(code).orElse("");
-        if (!parent.isBlank() && !parent.equals(inferred)) {
-            issues.add("ERROR:PARENT_CODE_MISMATCH");
-        }
-        if (quantity && unit.isBlank()) {
-            issues.add("ERROR:UNIT_REQUIRED");
-        }
         return new ParsedAccount(code, raw, cleaned, issues);
     }
 
     private void applyStandardMappings(
             Format format, LedgerResponses.Ledger ledger, AccountCodeRule rule,
             List<ParsedAccount> parsed, Map<String, LedgerResponses.Account> existingAccounts) {
-        for (ParsedAccount account : parsed) {
-            LedgerResponses.Account existing = existingAccounts.get(account.code());
+        Map<String, String> resolvedKeys = new HashMap<>();
+        for (LedgerResponses.Account existing : existingAccounts.values()) {
+            if (existing.standardAccountKey() != null && !existing.standardAccountKey().isBlank()) {
+                resolvedKeys.put(existing.code(), existing.standardAccountKey());
+            }
+        }
+
+        List<ParsedAccount> sorted = new ArrayList<>(parsed);
+        sorted.sort(Comparator.comparingInt(a -> rule.levelOf(a.code())));
+
+        for (ParsedAccount account : sorted) {
+            String code = account.code();
+            int level = rule.levelOf(code);
+            LedgerResponses.Account existing = existingAccounts.get(code);
             String importedKey = account.cleaned().get("standardAccountKey");
+
             if (existing != null) {
                 if (format == Format.STANDARD && !importedKey.isBlank()
                         && !java.util.Objects.equals(importedKey, existing.standardAccountKey())) {
                     account.issues().add("ERROR:STANDARD_ACCOUNT_KEY_CONFLICT");
                 } else {
-                    account.cleaned().put("standardAccountKey",
-                            existing.standardAccountKey() == null ? "" : existing.standardAccountKey());
+                    String key = existing.standardAccountKey() == null ? "" : existing.standardAccountKey();
+                    account.cleaned().put("standardAccountKey", key);
+                    if (!key.isBlank()) resolvedKeys.put(code, key);
                 }
                 continue;
             }
+
+            if (level > 1) {
+                String parentCode = rule.parentCode(code).orElse("");
+                String parentKey = resolvedKeys.get(parentCode);
+                if (parentKey != null && !parentKey.isBlank()) {
+                    if (format == Format.STANDARD && !importedKey.isBlank() && !importedKey.equals(parentKey)) {
+                        account.issues().add("ERROR:STANDARD_ACCOUNT_KEY_CONFLICT");
+                    } else {
+                        account.cleaned().put("standardAccountKey", parentKey);
+                        resolvedKeys.put(code, parentKey);
+                    }
+                    continue;
+                }
+            }
+
             if (format == Format.STANDARD) {
                 if (importedKey.isBlank() || !standards.containsStandardAccountKey(
                         ledger.accountingStandardCode(), ledger.accountingStandardVersion(), importedKey)) {
                     account.issues().add("ERROR:STANDARD_ACCOUNT_KEY_INVALID");
+                } else {
+                    resolvedKeys.put(code, importedKey);
                 }
                 continue;
             }
+
             String namedKey = "SME".equalsIgnoreCase(ledger.accountingStandardCode())
-                    && rule.levelOf(account.code()) == 1
+                    && level == 1
                     ? KINGDEE_SME_KEYS_BY_NAME.get(account.cleaned().get("name")) : null;
             if (namedKey != null && standards.containsStandardAccountKey(
                     ledger.accountingStandardCode(), ledger.accountingStandardVersion(), namedKey)) {
                 account.cleaned().put("standardAccountKey", namedKey);
+                resolvedKeys.put(code, namedKey);
                 continue;
             }
             List<String> matches = standards.legacyCodeMatches(
                     ledger.accountingStandardCode(), ledger.accountingStandardVersion(), account.code());
             if (matches.size() == 1) {
                 account.cleaned().put("standardAccountKey", matches.getFirst());
+                resolvedKeys.put(code, matches.getFirst());
             } else if (matches.size() > 1) {
                 account.issues().add("ERROR:STANDARD_ACCOUNT_KEY_AMBIGUOUS");
-            } else if (rule.levelOf(account.code()) == 1) {
+            } else if (level == 1) {
                 account.issues().add("ERROR:STANDARD_ACCOUNT_KEY_REQUIRED");
             }
         }
     }
 
-    private void standardControls(Workbook workbook, List<ParsedAccount> accounts, AccountCodeRule rule) {
+    private void standardControls(Workbook workbook, List<ParsedAccount> accounts) {
         Sheet metadataSheet = workbook.getSheet("Metadata");
         Sheet typesSheet = workbook.getSheet("DimensionTypes");
         Sheet bindingsSheet = workbook.getSheet("AccountDimensions");
@@ -766,7 +1120,7 @@ public class AccountExchangeService {
             if (row == null || blank(row, 3, formatter)) {
                 continue;
             }
-            String accountCode = cleanCode(cleanCell(row, 0, formatter, rowNo), rule);
+            String accountCode = cleanCode(cleanCell(row, 0, formatter, rowNo));
             String typeCode = cleanCell(row, 1, formatter, rowNo).toUpperCase(Locale.ROOT);
             String required = cleanCell(row, 2, formatter, rowNo);
             if (accounts.stream().noneMatch(account -> account.code().equals(accountCode))
@@ -938,7 +1292,7 @@ public class AccountExchangeService {
         return Normalizer.normalize(value == null ? "" : value, Normalizer.Form.NFKC).trim();
     }
 
-    private String cleanCode(String value, AccountCodeRule rule) {
+    private String cleanCode(String value) {
         return clean(value).replace(" ", "").replace(".", "").replace("-", "");
     }
 
@@ -974,14 +1328,17 @@ public class AccountExchangeService {
 
     private ImportHeader importHeader(UUID ledgerId, UUID importId) {
         AccountImportRepository.Header saved = imports.findHeader(ledgerId, importId);
-        ImportHeader header = saved == null ? null : new ImportHeader(
-                saved.id(), saved.ledgerId(), Format.valueOf(saved.format()), saved.status(),
-                saved.ledgerVersion(), saved.filename(), saved.rowCount(), saved.errorCount(), saved.aiStatus());
-        if (header == null) {
+        if (saved == null) {
             throw problem(404, "ACCOUNT_IMPORT_NOT_FOUND", "Account import not found",
                     "The account import is not available to this ledger");
         }
-        return header;
+        return new ImportHeader(
+                saved.id(), saved.ledgerId(), Format.valueOf(saved.format()),
+                ImportMode.valueOf(saved.mode()), saved.status(),
+                saved.ledgerVersion(), saved.filename(), saved.contentSha256(),
+                saved.rowCount(), saved.errorCount(), saved.insertedCount(), saved.deletedCount(),
+                saved.targetRuleLevel2Width(), saved.targetRuleLevel3Width(), saved.targetRuleLevel4Width(),
+                saved.codeRuleSourcesJson(), saved.blockersJson(), saved.aiStatus());
     }
 
     private void requireWrite(UUID actorId, UUID ledgerId) {
@@ -1002,6 +1359,9 @@ public class AccountExchangeService {
     }
 
     private Map<String, String> map(String json) {
+        if (json == null || json.isBlank()) {
+            return Map.of();
+        }
         try {
             return objectMapper.readValue(json, new TypeReference<>() {
             });
@@ -1011,6 +1371,9 @@ public class AccountExchangeService {
     }
 
     private List<String> strings(String json) {
+        if (json == null || json.isBlank()) {
+            return List.of();
+        }
         try {
             return objectMapper.readValue(json, new TypeReference<>() {
             });
@@ -1022,32 +1385,6 @@ public class AccountExchangeService {
     private Map<String, LedgerResponses.Account> existingAccountsByCode(UUID actorId, UUID ledgerId) {
         return ledgers.listAccounts(actorId, ledgerId).stream()
                 .collect(Collectors.toMap(LedgerResponses.Account::code, account -> account));
-    }
-
-    private void validateOverwriteRules(
-            UUID ledgerId, List<CommitRow> rows, Map<String, LedgerResponses.Account> existingByCode) {
-        for (CommitRow row : rows) {
-            String code = row.account().values().get("code");
-            LedgerResponses.Account sameCode = existingByCode.get(code);
-            if (sameCode == null) {
-                continue;
-            }
-            if (!"UPDATE".equals(row.action())) {
-                throw problem(409, "ACCOUNT_IMPORT_OVERWRITE_REQUIRED",
-                        "Account import must overwrite an existing code",
-                        "Account code " + code + " already exists and must be overwritten");
-            }
-            if (row.targetAccountId() == null || !row.targetAccountId().equals(sameCode.id())) {
-                throw problem(409, "ACCOUNT_IMPORT_OVERWRITE_REQUIRED",
-                        "Account import target is invalid",
-                        "Account code " + code + " must be overwritten with its existing account");
-            }
-            if (sameCode.hasBusinessUsage()
-                    || (!sameCode.isLeaf() && accounts.hasNonZeroBalance(ledgerId, sameCode.id()))) {
-                throw problem(409, "ACCOUNT_OVERWRITE_FORBIDDEN", "Account cannot be overwritten",
-                        "Account " + code + " has business usage or a non-zero balance");
-            }
-        }
     }
 
     private ImportedAccount imported(String json) {
@@ -1085,6 +1422,37 @@ public class AccountExchangeService {
         STANDARD, KINGDEE
     }
 
+    public enum ImportMode {
+        APPEND, OVERWRITE
+    }
+
+    @Schema(name = "AccountImportBlocker")
+    public record ImportBlocker(
+            @Schema(requiredMode = Schema.RequiredMode.REQUIRED, description = "阻断类型") String type,
+            @Schema(requiredMode = Schema.RequiredMode.REQUIRED, description = "阻断原因说明") String message) {
+    }
+
+    @Schema(name = "AccountImportError")
+    public record ImportError(
+            @Schema(description = "行号，账套级错误为 null", nullable = true) Integer rowNo,
+            @Schema(description = "科目编码，账套级错误为 null", nullable = true) String accountCode,
+            @Schema(description = "错误类型代码") String code,
+            @Schema(description = "可操作的错误说明") String message) {
+    }
+
+    @Schema(name = "AccountImportRuleInference")
+    public record RuleInference(
+            @Schema(requiredMode = Schema.RequiredMode.REQUIRED) AccountCodeRule rule,
+            @Schema(requiredMode = Schema.RequiredMode.REQUIRED) Map<String, String> sources,
+            @Schema(requiredMode = Schema.RequiredMode.REQUIRED) List<String> warnings) {
+    }
+
+    @Schema(name = "AccountReconstructionEligibilityResponse")
+    public record ReconstructionEligibilityResponse(
+            @Schema(requiredMode = Schema.RequiredMode.REQUIRED) boolean eligible,
+            @Schema(requiredMode = Schema.RequiredMode.REQUIRED) List<ImportBlocker> blockers) {
+    }
+
     @Schema(name = "AccountImportDecision")
     public record Decision(
             @Schema(requiredMode = Schema.RequiredMode.REQUIRED, nullable = true) String action,
@@ -1100,13 +1468,23 @@ public class AccountExchangeService {
             @Schema(requiredMode = Schema.RequiredMode.REQUIRED) UUID id,
             @Schema(requiredMode = Schema.RequiredMode.REQUIRED) UUID ledgerId,
             @Schema(requiredMode = Schema.RequiredMode.REQUIRED) Format format,
+            @Schema(requiredMode = Schema.RequiredMode.REQUIRED) ImportMode mode,
             @Schema(requiredMode = Schema.RequiredMode.REQUIRED) String status,
             @Schema(requiredMode = Schema.RequiredMode.REQUIRED) long ledgerVersion,
             @Schema(requiredMode = Schema.RequiredMode.REQUIRED) String filename,
+            @Schema(requiredMode = Schema.RequiredMode.REQUIRED) String contentSha256,
             @Schema(requiredMode = Schema.RequiredMode.REQUIRED) int rowCount,
             @Schema(requiredMode = Schema.RequiredMode.REQUIRED) int errorCount,
+            @Schema(requiredMode = Schema.RequiredMode.REQUIRED) int insertCount,
+            @Schema(requiredMode = Schema.RequiredMode.REQUIRED) int deleteCount,
+            @Schema(requiredMode = Schema.RequiredMode.REQUIRED) AccountCodeRule currentCodeRule,
+            @Schema(requiredMode = Schema.RequiredMode.REQUIRED) AccountCodeRule targetCodeRule,
+            @Schema(requiredMode = Schema.RequiredMode.REQUIRED) Map<String, String> codeRuleSources,
             @Schema(requiredMode = Schema.RequiredMode.REQUIRED) String aiStatus,
-            @Schema(requiredMode = Schema.RequiredMode.REQUIRED) List<PreviewRow> rows) {
+            @Schema(requiredMode = Schema.RequiredMode.REQUIRED) List<ImportBlocker> blockers,
+            @Schema(requiredMode = Schema.RequiredMode.REQUIRED) List<String> warnings,
+            @Schema(requiredMode = Schema.RequiredMode.REQUIRED) List<PreviewRow> rows,
+            @Schema(requiredMode = Schema.RequiredMode.REQUIRED) List<ImportError> errors) {
     }
 
     @Schema(name = "AccountImportPreviewRow")
@@ -1128,8 +1506,10 @@ public class AccountExchangeService {
     }
 
     private record ImportHeader(
-            UUID id, UUID ledgerId, Format format, String status, long ledgerVersion,
-            String filename, int rowCount, int errorCount, String aiStatus) {
+            UUID id, UUID ledgerId, Format format, ImportMode mode, String status, long ledgerVersion,
+            String filename, String contentSha256, int rowCount, int errorCount, int insertedCount, int deletedCount,
+            Integer targetRuleLevel2Width, Integer targetRuleLevel3Width, Integer targetRuleLevel4Width,
+            String codeRuleSourcesJson, String blockersJson, String aiStatus) {
     }
 
     private record CommitRow(
@@ -1148,36 +1528,12 @@ public class AccountExchangeService {
             List<DimensionTypeSeed> dimensionTypes,
             List<DimensionRequirementSeed> dimensionRequirements) {
 
-        LedgerRequests.AccountCreate createRequest(
-                Map<String, UUID> dimensionIds, Map<String, UUID> cashFlowIds) {
-            return new LedgerRequests.AccountCreate(
-                    values.get("code"), values.get("name"), emptyToNull(values.get("standardAccountKey")), values.get("category"),
-                    values.get("normalBalance"), null, Boolean.valueOf(values.get("cashFlowRequired")),
-                    cashFlowIds.get(values.get("defaultCashFlowItemCode")),
-                    Boolean.valueOf(values.get("quantityEnabled")), emptyToNull(values.get("unitName")),
-                    requirements(dimensionIds));
-        }
-
-        LedgerRequests.AccountPatch patchRequest(
-                long version, Map<String, UUID> dimensionIds, Map<String, UUID> cashFlowIds) {
-            return new LedgerRequests.AccountPatch(
-                    version, values.get("code"), values.get("name"), null, values.get("category"),
-                    values.get("normalBalance"), values.getOrDefault("status", "ACTIVE"),
-                    Boolean.valueOf(values.get("cashFlowRequired")),
-                    cashFlowIds.get(values.get("defaultCashFlowItemCode")),
-                    Boolean.valueOf(values.get("quantityEnabled")), emptyToNull(values.get("unitName")),
-                    requirements(dimensionIds));
-        }
-
-        private List<LedgerRequests.DimensionRequirement> requirements(Map<String, UUID> dimensionIds) {
-            return dimensionRequirements.stream()
-                    .map(binding -> new LedgerRequests.DimensionRequirement(
-                            dimensionIds.get(binding.code()), binding.required()))
-                    .toList();
-        }
-
         private static String emptyToNull(String value) {
             return value == null || value.isBlank() ? null : value;
         }
+    }
+
+    private static String emptyToNull(String value) {
+        return value == null || value.isBlank() ? null : value;
     }
 }
