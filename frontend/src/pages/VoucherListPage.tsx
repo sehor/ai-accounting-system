@@ -195,7 +195,7 @@ export function VoucherListPage() {
   const accountLabel = (accountId?: string) => {
     if (!accountId) return '—'
     const account = accountById.get(accountId)
-    return account ? `${account.code} ${account.name}` : accountId
+    return account ? `${account.code} ${account.fullName || account.name}` : accountId
   }
   const mergedCell = (row: DisplayRow) => ({ rowSpan: row.lineIndex === 0 ? row.lineCount : 0 })
   const mergedTopCell = (row: DisplayRow) => ({

@@ -433,7 +433,7 @@ export function VoucherEditorPage() {
               // Reset the cash-flow item on account change; the item cell auto-fills the
               // new account's default once the reportable item catalogue is available.
               if (cashFlowCheckEnabled) form.setFieldValue(['lines', field.name, 'cashFlowItemId'], undefined)
-            }} options={(accounts.data || []).filter((account) => account.status === 'ACTIVE' && account.isLeaf).map((account) => ({ value: account.id, label: `${account.code} ${account.name}` }))} /></Form.Item> },
+            }} options={(accounts.data || []).filter((account) => account.status === 'ACTIVE' && account.isLeaf).map((account) => ({ value: account.id, label: `${account.code} ${account.fullName || account.name}` }))} /></Form.Item> },
             { title: '辅助核算', width: 280, render: (_, field) => <VoucherDimensionFields form={form} fieldName={field.name} accountsById={accountsById} dimensionTypesById={dimensionTypesById} dimensionValuesByType={dimensionValuesByType} /> },
             ...(cashFlowCheckEnabled ? [{ title: '现金流项目', width: 210, render: (_: unknown, field: { name: number }) => <VoucherCashFlowItemCell form={form} fieldName={field.name} accountsById={accountsById} lines={lines} reportableItems={reportableCashFlowItems} allItems={cashFlowItems.data || []} isCashAccount={isCashAccount} policyReady={cashFlowPolicyReady} /> }] : []),
             { title: '借方金额', width: 150, align: 'right', className: 'voucher-amount-column voucher-debit-column', render: (_, field) => <VoucherAmountCell form={form} fieldName={field.name} side="DEBIT" onChange={() => setDirty(true)} /> },

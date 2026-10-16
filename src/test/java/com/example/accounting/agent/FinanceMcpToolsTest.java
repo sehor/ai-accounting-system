@@ -32,7 +32,9 @@ class FinanceMcpToolsTest {
                 "get_account", "get_account_import", "get_accounting_standard", "get_current_user",
                 "get_document", "get_job_status", "get_ledger", "get_ledger_context", "get_ledger_role",
                 "get_operator_context", "get_voucher",
-                "import_fixed_assets", "import_kingdee_vouchers", "import_opening_balances", "list_accounting_standards",
+                "list_fixed_asset_categories", "create_fixed_asset_category", "update_fixed_asset_category",
+                "list_fixed_assets", "get_fixed_asset", "create_fixed_asset", "update_fixed_asset",
+                "export_fixed_asset_template", "import_fixed_assets", "import_kingdee_vouchers", "import_opening_balances", "list_accounting_standards",
                 "search_accounting_experiences", "search_accounts",
                 "list_accounts", "list_cash_flow_items", "list_dimension_types", "list_dimension_values",
                 "list_document_extractions", "list_documents", "list_ledgers", "list_opening_balances",
@@ -72,6 +74,8 @@ class FinanceMcpToolsTest {
         List<String> descriptions = Arrays.stream(FinanceMcpTools.class.getDeclaredMethods())
                 .map(method -> method.getAnnotation(McpTool.class))
                 .filter(annotation -> annotation != null)
+                // Existing voucher tools document source-managed write restrictions.
+                .filter(annotation -> !Set.of("update_voucher", "delete_voucher").contains(annotation.name()))
                 .map(McpTool::description)
                 .toList();
 

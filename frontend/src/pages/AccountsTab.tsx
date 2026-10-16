@@ -379,7 +379,7 @@ export function AccountsTab({ ledgerId, session, accounts, dimensionTypes, perio
         </Form.Item> : <Form.Item name="code" label="科目编码" rules={[{ required: true }, { max: 32 }]}>
           <Input disabled={Boolean(editing?.coreLocked || editing?.isTemplate)} />
         </Form.Item>}
-        <Form.Item name="name" label="科目名称" rules={[{ required: true }, { max: 200 }]}><Input /></Form.Item>
+        <Form.Item name="name" label="科目名称" rules={[{ required: true }, { max: 200 }, { pattern: /^[^-]*$/, message: '科目名称不能包含半角连接符“-”，该字符用于分隔科目层级' }]}><Input /></Form.Item>
         {!editing && !parent && <Form.Item name="standardAccountKey" label="法定报表归类"
           extra="稳定归类不会随科目名称或编码修改"
           rules={[{ required: true, message: '请选择法定报表归类' }]}>

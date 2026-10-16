@@ -7,6 +7,7 @@ import com.example.accounting.identity.CurrentUserResolver;
 import com.example.accounting.identity.IdentityService;
 import com.example.accounting.identity.UserResponse;
 import com.example.accounting.ledger.AccountCodeRule;
+import com.example.accounting.ledger.AccountFullName;
 import com.example.accounting.ledger.AccountCategory;
 import com.example.accounting.ledger.AccountingStandard;
 import com.example.accounting.ledger.AccountingStandardCatalog;
@@ -188,7 +189,7 @@ public class DefaultLedgerService implements LedgerService {
     @Transactional(readOnly = true)
     public List<LedgerResponses.Account> listAccounts(UUID actorId, UUID ledgerId) {
         requireRole(actorId, ledgerId, VIEW_ROLES);
-        return accounts.list(ledgerId);
+        return AccountFullName.populate(accounts.list(ledgerId));
     }
 
     @Override
@@ -1092,6 +1093,9 @@ public class DefaultLedgerService implements LedgerService {
             UUID ledgerId, String code, String name, String category, String normalBalance,
             boolean cashFlowRequired, UUID defaultCashFlowItemId, boolean quantityEnabled,
             String unitName, List<LedgerRequests.DimensionRequirement> dimensions) {
+        if (name.contains("-")) {
+            throw accountInvalid("科目名称不能包含半角连接符“-”，该字符用于分隔科目层级");
+        }
         if (code.length() > 32 || name.isBlank() || name.length() > 200
                 || !AccountCategory.isValid(category)
                 || !Set.of("DEBIT", "CREDIT").contains(normalBalance)) {

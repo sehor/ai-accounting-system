@@ -22,6 +22,14 @@ Use the `accounting` MCP service for all system reads and writes. Never write ac
 3. Resolve material uncertainties for the entire requested bookkeeping batch before any accounting-system mutation. Ask the user about unresolved amounts, periods, accounts, counterparties, tax treatment, or conflicting evidence, then wait for an explicit answer. Continue read-only checks while waiting, but do not post the clear portion first, create system drafts, reclassify existing vouchers, or split the batch to bypass the unanswered question. If the user is unavailable or the turn must end without an answer, abandon execution of this batch and report that it remains unbooked with the pending questions. Silence, elapsed time, and a preselected option are not confirmation. Resume only after the user answers, rechecking current vouchers to prevent duplicates. Honor an explicit user instruction to process a specified independent subset.
 4. Call the MCP operation that matches the requested end state and report the returned IDs, status, and unresolved items.
 
+## Voucher summaries
+
+Apply these rules to every voucher and voucher line, across all ledgers and business types:
+
+- Keep the summary to a short business description. First refer to comparable vouchers in the same ledger and follow their concise wording, such as `银行转账`, `支付货款`, `收货款`, `发放工资`, `缴纳税费`, or `费用报销`.
+- Include only details needed to distinguish the business, such as a relevant period or purpose. Account names, amounts, and voucher fields already show the remaining accounting information.
+- Keep source row references, bank transaction IDs, original narratives, calculation details, and user-confirmation or processing notes in source attachments or reconciliation records, outside voucher and line summaries. Preserve traceability there.
+
 ## Handle spreadsheet source materials
 
 - For `.xlsx`, `.csv`, and `.tsv` source files or intermediates, load the `Spreadsheets` skill and use `@oai/artifact-tool` exclusively to read, inspect, transform, render, or create workbooks.
@@ -56,3 +64,4 @@ Use the `accounting` MCP service for all system reads and writes. Never write ac
 - For account imports, use `preview_account_import`, submit all row decisions in one `decide_account_import_rows` call, then `commit_account_import`. Do not emulate a missing batch step with repeated single-row writes.
 - Store only confirmed, company-specific rules as `LEDGER` experience. Cross-ledger rules belong in these plugin skills; experience operations require an `AGENT` identity.
 - Treat the installed MCP tool names and input schemas as authoritative. Report a missing capability or contract mismatch instead of switching to REST, SQL, another host, or another database.
+

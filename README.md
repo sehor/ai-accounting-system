@@ -110,6 +110,8 @@ MCP 使用 `POST /mcp`。本地联调启用上述开关后，`X-User-Id` 同时�
 
 MCP 的 `update_voucher` 和 `delete_voucher` 与 REST 使用相同规则：开放期间内，手工和导入凭证（包括已记账凭证）可通用修改或删除，并在同一事务中同步余额投影。带来源的自动生成凭证只能由其固定资产或期末结账等来源流程管理；通用修改、恢复或删除返回 HTTP 409，code 为 `GENERATED_VOUCHER_MANAGED_BY_SOURCE`。
 
+固定资产 MCP 支持 `list_fixed_asset_categories`、`create_fixed_asset_category`、`update_fixed_asset_category`、`list_fixed_assets`、`get_fixed_asset`、`create_fixed_asset`、`update_fixed_asset` 和 `export_fixed_asset_template`。建卡与修改复用 REST 的字段、权限和业务校验，可指定部门、原购置凭证及独立核算科目；建卡仅登记资产，不自动生成购置凭证。列表默认第 1 页、每页 50 条，最多 500 条；可选择估值期间、类别、部门、状态和编码/名称。资产编码在账套内唯一，修改使用 `expectedVersion`，类别与卡片的写入参数执行与 REST 一致的 Bean Validation。
+
 固定资产 Excel 可通过 `import_fixed_assets(ledgerId, fileName, base64Content)` 导入；文件格式、大小限制、类别编码和行校验规则与 REST 固定资产导入接口一致，存在任意行错误时整批不提交。
 
 你提供的 `postgresql+asyncpg://...` 是 Python 异步客户端格式；本项目 Spring JDBC 对应使用 `DB_URL=jdbc:postgresql://localhost:5432/ai-accounting`。

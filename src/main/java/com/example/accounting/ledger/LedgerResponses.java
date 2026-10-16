@@ -66,7 +66,28 @@ public final class LedgerResponses {
             boolean quantityEnabled,
             @Schema(nullable = true) String unitName,
             List<DimensionRequirement> dimensionRequirements,
-            @Schema(nullable = true) OffsetDateTime createdAt) {
+            @Schema(nullable = true) OffsetDateTime createdAt,
+            @Schema(description = "科目列表中的全路径名称，以 - 分隔各级科目", nullable = true) String fullName) {
+
+        public Account(UUID id, UUID ledgerId, String code, String name, String standardAccountKey,
+                       String category, String normalBalance, String status, UUID parentId, int level,
+                       boolean isLeaf, boolean isTemplate, boolean hasBusinessUsage,
+                       boolean coreLocked, boolean legacyCode, long version,
+                       boolean cashFlowRequired, UUID defaultCashFlowItemId,
+                       boolean quantityEnabled, String unitName,
+                       List<DimensionRequirement> dimensionRequirements, OffsetDateTime createdAt) {
+            this(id, ledgerId, code, name, standardAccountKey, category, normalBalance, status,
+                    parentId, level, isLeaf, isTemplate, hasBusinessUsage, coreLocked, legacyCode,
+                    version, cashFlowRequired, defaultCashFlowItemId, quantityEnabled, unitName,
+                    dimensionRequirements, createdAt, null);
+        }
+
+        public Account withFullName(String fullName) {
+            return new Account(id, ledgerId, code, name, standardAccountKey, category, normalBalance,
+                    status, parentId, level, isLeaf, isTemplate, hasBusinessUsage, coreLocked,
+                    legacyCode, version, cashFlowRequired, defaultCashFlowItemId, quantityEnabled,
+                    unitName, dimensionRequirements, createdAt, fullName);
+        }
 
         public Account(UUID id, UUID ledgerId, String code, String name, String category,
                        String normalBalance, String status) {

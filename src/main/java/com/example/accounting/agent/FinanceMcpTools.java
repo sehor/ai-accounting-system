@@ -12,6 +12,8 @@ import com.example.accounting.ledger.LedgerBackupService;
 import com.example.accounting.ledger.LedgerService;
 import com.example.accounting.exchange.KingdeeExchange;
 import com.example.accounting.fixedasset.FixedAssetResponses;
+import com.example.accounting.fixedasset.FixedAssetRequests;
+import jakarta.validation.Validator;
 import com.example.accounting.fixedasset.FixedAssetService;
 import com.example.accounting.documents.DocumentResponses;
 import com.example.accounting.documents.DocumentService;
@@ -69,6 +71,7 @@ public class FinanceMcpTools {
     private final ExtractionService extractionService;
     private final JobService jobService;
     private final AsyncAgentToolAuditService audits;
+    private final Validator validator;
     private final ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
 
     public FinanceMcpTools(CurrentUserResolver currentUserResolver, IdentityService identityService,
@@ -79,7 +82,7 @@ public class FinanceMcpTools {
                            AccountExchangeService accountExchange, KingdeeExchange kingdeeExchange,
                            ReportingService reportingService, VoucherService voucherService,
                            DocumentService documentService, ExtractionService extractionService,
-                           JobService jobService, AsyncAgentToolAuditService audits) {
+                           JobService jobService, AsyncAgentToolAuditService audits, Validator validator) {
         this.currentUserResolver = currentUserResolver;
         this.identityService = identityService;
         this.experienceService = experienceService;
@@ -95,6 +98,7 @@ public class FinanceMcpTools {
         this.extractionService = extractionService;
         this.jobService = jobService;
         this.audits = audits;
+        this.validator = validator;
     }
 
     @McpTool(name = "list_ledgers", description = "List ledgers")
@@ -419,6 +423,92 @@ public class FinanceMcpTools {
         byte[] content = decode(base64Content, "OPENING_BALANCE_CONTENT_INVALID");
         return audited(actorId, "import_opening_balances", ledgerId, hash(base64Content),
                 () -> ledgerService.importOpeningBalances(actorId, ledgerId, new ByteArrayInputStream(content)));
+    }
+
+
+    @McpTool(name = "list_fixed_asset_categories", description = "List fixed asset categories")
+    @PreAuthorize("isAuthenticated()")
+    public List<FixedAssetResponses.Category> listFixedAssetCategories(@McpToolParam UUID ledgerId) {
+        UUID actorId = actor();
+        return audited(actorId, "list_fixed_asset_categories", ledgerId, "",
+                () -> fixedAssetService.listCategories(actorId, ledgerId));
+    }
+
+    @McpTool(name = "create_fixed_asset_category", description = "Create a fixed asset category")
+    @PreAuthorize("isAuthenticated()")
+    public FixedAssetResponses.Category createFixedAssetCategory(
+            @McpToolParam UUID ledgerId,
+            @McpToolParam(description = "Category defaults and accounting accounts") FixedAssetRequests.CategoryCreate request) {
+        UUID actorId = actor();
+        return audited(actorId, "create_fixed_asset_category", ledgerId, String.valueOf(request),
+                () -> fixedAssetService.createCategory(actorId, ledgerId, validatedFixedAssetRequest(request)));
+    }
+
+    @McpTool(name = "update_fixed_asset_category", description = "Update a fixed asset category")
+    @PreAuthorize("isAuthenticated()")
+    public FixedAssetResponses.Category updateFixedAssetCategory(
+            @McpToolParam UUID ledgerId, @McpToolParam UUID categoryId,
+            @McpToolParam(description = "Category changes with expectedVersion") FixedAssetRequests.CategoryPatch request) {
+        UUID actorId = actor();
+        return audited(actorId, "update_fixed_asset_category", ledgerId, categoryId + ":" + request,
+                () -> fixedAssetService.updateCategory(actorId, ledgerId, categoryId, validatedFixedAssetRequest(request)));
+    }
+
+    @McpTool(name = "list_fixed_assets", description = "List fixed asset cards")
+    @PreAuthorize("isAuthenticated()")
+    public FixedAssetResponses.Page listFixedAssets(
+            @McpToolParam UUID ledgerId,
+            @McpToolParam(required = false, description = "Valuation period; defaults to current period") UUID periodId,
+            @McpToolParam(required = false) String status,
+            @McpToolParam(required = false) UUID categoryId,
+            @McpToolParam(required = false) UUID departmentValueId,
+            @McpToolParam(required = false, description = "Asset code or name search") String search,
+            @McpToolParam(required = false, description = "One-based page; defaults to 1") Integer page,
+            @McpToolParam(required = false, description = "1-500 rows; defaults to 50") Integer pageSize) {
+        UUID actorId = actor();
+        return audited(actorId, "list_fixed_assets", ledgerId,
+                periodId + ":" + status + ":" + categoryId + ":" + departmentValueId + ":" + search + ":" + page + ":" + pageSize,
+                () -> fixedAssetService.listAssets(actorId, ledgerId, periodId, status, categoryId,
+                        departmentValueId, search, page == null ? 1 : page, pageSize == null ? 50 : pageSize));
+    }
+
+    @McpTool(name = "get_fixed_asset", description = "Get a fixed asset card")
+    @PreAuthorize("isAuthenticated()")
+    public FixedAssetResponses.Asset getFixedAsset(
+            @McpToolParam UUID ledgerId, @McpToolParam UUID assetId,
+            @McpToolParam(required = false, description = "Valuation period; defaults to current period") UUID periodId) {
+        UUID actorId = actor();
+        return audited(actorId, "get_fixed_asset", ledgerId, assetId + ":" + periodId,
+                () -> fixedAssetService.findAsset(actorId, ledgerId, assetId, periodId));
+    }
+
+    @McpTool(name = "create_fixed_asset", description = "Create a fixed asset card")
+    @PreAuthorize("isAuthenticated()")
+    public FixedAssetResponses.Asset createFixedAsset(
+            @McpToolParam UUID ledgerId,
+            @McpToolParam(description = "Card fields and accounts; creates no acquisition voucher") FixedAssetRequests.AssetCreate request) {
+        UUID actorId = actor();
+        return audited(actorId, "create_fixed_asset", ledgerId, String.valueOf(request),
+                () -> fixedAssetService.createAsset(actorId, ledgerId, validatedFixedAssetRequest(request)));
+    }
+
+    @McpTool(name = "update_fixed_asset", description = "Update a fixed asset card")
+    @PreAuthorize("isAuthenticated()")
+    public FixedAssetResponses.Asset updateFixedAsset(
+            @McpToolParam UUID ledgerId, @McpToolParam UUID assetId,
+            @McpToolParam(description = "Card changes with expectedVersion") FixedAssetRequests.AssetPatch request) {
+        UUID actorId = actor();
+        return audited(actorId, "update_fixed_asset", ledgerId, assetId + ":" + request,
+                () -> fixedAssetService.updateAsset(actorId, ledgerId, assetId, validatedFixedAssetRequest(request)));
+    }
+
+    @McpTool(name = "export_fixed_asset_template", description = "Export a fixed asset import template")
+    @PreAuthorize("isAuthenticated()")
+    public ExportedFile exportFixedAssetTemplate(@McpToolParam UUID ledgerId) {
+        UUID actorId = actor();
+        return audited(actorId, "export_fixed_asset_template", ledgerId, "",
+                () -> file("fixed-assets-template.xlsx", XLSX_CONTENT_TYPE,
+                        fixedAssetService.importTemplate(actorId, ledgerId)));
     }
 
     @McpTool(name = "import_fixed_assets", description = "Import fixed assets")
@@ -960,6 +1050,23 @@ public class FinanceMcpTools {
         UUID actorId = actor();
         return audited(actorId, "create_voucher_draft_from_document", ledgerId, documentId.toString(),
                 () -> extractionService.createAgentVoucherDraft(actorId, ledgerId, documentId));
+    }
+
+
+    private <T> T validatedFixedAssetRequest(T request) {
+        if (request == null) {
+            throw new ApiProblemException(422, "FIXED_ASSET_REQUEST_INVALID", "Invalid fixed asset request",
+                    "The request payload is required", false);
+        }
+        var violations = validator.validate(request);
+        if (!violations.isEmpty()) {
+            String detail = violations.stream()
+                    .map(violation -> violation.getPropertyPath() + ": " + violation.getMessage())
+                    .sorted().collect(java.util.stream.Collectors.joining("; "));
+            throw new ApiProblemException(422, "FIXED_ASSET_REQUEST_INVALID", "Invalid fixed asset request",
+                    detail, false);
+        }
+        return request;
     }
 
     private UUID actor() {

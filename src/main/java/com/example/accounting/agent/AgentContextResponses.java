@@ -40,7 +40,10 @@ public final class AgentContextResponses {
                     "import_kingdee_vouchers", "export_kingdee_vouchers")),
             new ToolGroup("reports", List.of(
                     "finance_query", "finance_query_advanced", "export_report", "export_report_range")),
-            new ToolGroup("assets", List.of("import_fixed_assets")),
+            new ToolGroup("assets", List.of(
+                    "list_fixed_asset_categories", "create_fixed_asset_category", "update_fixed_asset_category",
+                    "list_fixed_assets", "get_fixed_asset", "create_fixed_asset", "update_fixed_asset",
+                    "export_fixed_asset_template", "import_fixed_assets")),
             new ToolGroup("experience", List.of(
                     "search_accounting_experiences", "create_accounting_experience",
                     "update_accounting_experience", "archive_accounting_experience"))));

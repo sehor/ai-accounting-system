@@ -2660,6 +2660,8 @@ export interface components {
         };
         /** @default null */
         Account: {
+            /** @description 科目列表中的全路径名称，以 - 分隔各级科目 */
+            fullName?: string | null;
             /** Format: uuid */
             id: string;
             /** Format: uuid */

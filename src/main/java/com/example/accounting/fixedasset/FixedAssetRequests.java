@@ -1,5 +1,7 @@
 package com.example.accounting.fixedasset;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
+
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.DecimalMin;
@@ -25,7 +27,7 @@ public final class FixedAssetRequests {
             @NotNull UUID assetAccountId,
             @NotNull UUID accumulatedDepreciationAccountId,
             @NotNull UUID depreciationExpenseAccountId,
-            UUID impairmentAccountId,
+            @JsonProperty(required = false) UUID impairmentAccountId,
             @NotNull UUID clearingAccountId,
             @NotNull UUID disposalGainAccountId,
             @NotNull UUID disposalLossAccountId) {
@@ -33,17 +35,17 @@ public final class FixedAssetRequests {
 
     public record CategoryPatch(
             @NotNull Long expectedVersion,
-            @Size(max = 200) String name,
-            @Min(1) @Max(1200) Integer usefulLifeMonths,
-            @DecimalMin("0") BigDecimal residualRate,
-            UUID assetAccountId,
-            UUID accumulatedDepreciationAccountId,
-            UUID depreciationExpenseAccountId,
-            UUID impairmentAccountId,
-            UUID clearingAccountId,
-            UUID disposalGainAccountId,
-            UUID disposalLossAccountId,
-            String status) {
+            @Size(max = 200) @JsonProperty(required = false) String name,
+            @Min(1) @Max(1200) @JsonProperty(required = false) Integer usefulLifeMonths,
+            @DecimalMin("0") @JsonProperty(required = false) BigDecimal residualRate,
+            @JsonProperty(required = false) UUID assetAccountId,
+            @JsonProperty(required = false) UUID accumulatedDepreciationAccountId,
+            @JsonProperty(required = false) UUID depreciationExpenseAccountId,
+            @JsonProperty(required = false) UUID impairmentAccountId,
+            @JsonProperty(required = false) UUID clearingAccountId,
+            @JsonProperty(required = false) UUID disposalGainAccountId,
+            @JsonProperty(required = false) UUID disposalLossAccountId,
+            @JsonProperty(required = false) String status) {
     }
 
     public record AssetCreate(
@@ -59,40 +61,40 @@ public final class FixedAssetRequests {
             @NotNull @DecimalMin("0") BigDecimal openingAccumulatedDepreciation,
             @NotNull @Min(0) Integer openingDepreciatedMonths,
             @NotNull @DecimalMin("0") BigDecimal impairmentAmount,
-            UUID departmentValueId,
-            UUID acquisitionVoucherId,
-            UUID assetAccountId,
-            UUID accumulatedDepreciationAccountId,
-            UUID depreciationExpenseAccountId,
-            UUID impairmentAccountId,
-            UUID clearingAccountId,
-            UUID disposalGainAccountId,
-            UUID disposalLossAccountId,
-            @Size(max = 2000) String note) {
+            @JsonProperty(required = false) UUID departmentValueId,
+            @JsonProperty(required = false) UUID acquisitionVoucherId,
+            @JsonProperty(required = false) UUID assetAccountId,
+            @JsonProperty(required = false) UUID accumulatedDepreciationAccountId,
+            @JsonProperty(required = false) UUID depreciationExpenseAccountId,
+            @JsonProperty(required = false) UUID impairmentAccountId,
+            @JsonProperty(required = false) UUID clearingAccountId,
+            @JsonProperty(required = false) UUID disposalGainAccountId,
+            @JsonProperty(required = false) UUID disposalLossAccountId,
+            @Size(max = 2000) @JsonProperty(required = false) String note) {
     }
 
     public record AssetPatch(
             @NotNull Long expectedVersion,
-            @Size(max = 200) String name,
-            @DecimalMin("0.000001") BigDecimal quantity,
-            LocalDate serviceDate,
-            @DecimalMin("0.01") BigDecimal originalCost,
-            @DecimalMin("0") BigDecimal inputTax,
-            @Min(1) @Max(1200) Integer usefulLifeMonths,
-            @DecimalMin("0") BigDecimal residualRate,
-            @DecimalMin("0") BigDecimal impairmentAmount,
-            UUID departmentValueId,
-            UUID acquisitionVoucherId,
-            UUID assetAccountId,
-            UUID accumulatedDepreciationAccountId,
-            UUID depreciationExpenseAccountId,
-            UUID impairmentAccountId,
-            UUID clearingAccountId,
-            UUID disposalGainAccountId,
-            UUID disposalLossAccountId,
-            UUID changePeriodId,
-            @Size(max = 1000) String reason,
-            @Size(max = 2000) String note) {
+            @Size(max = 200) @JsonProperty(required = false) String name,
+            @DecimalMin("0.000001") @JsonProperty(required = false) BigDecimal quantity,
+            @JsonProperty(required = false) LocalDate serviceDate,
+            @DecimalMin("0.01") @JsonProperty(required = false) BigDecimal originalCost,
+            @DecimalMin("0") @JsonProperty(required = false) BigDecimal inputTax,
+            @Min(1) @Max(1200) @JsonProperty(required = false) Integer usefulLifeMonths,
+            @DecimalMin("0") @JsonProperty(required = false) BigDecimal residualRate,
+            @DecimalMin("0") @JsonProperty(required = false) BigDecimal impairmentAmount,
+            @JsonProperty(required = false) UUID departmentValueId,
+            @JsonProperty(required = false) UUID acquisitionVoucherId,
+            @JsonProperty(required = false) UUID assetAccountId,
+            @JsonProperty(required = false) UUID accumulatedDepreciationAccountId,
+            @JsonProperty(required = false) UUID depreciationExpenseAccountId,
+            @JsonProperty(required = false) UUID impairmentAccountId,
+            @JsonProperty(required = false) UUID clearingAccountId,
+            @JsonProperty(required = false) UUID disposalGainAccountId,
+            @JsonProperty(required = false) UUID disposalLossAccountId,
+            @JsonProperty(required = false) UUID changePeriodId,
+            @Size(max = 1000) @JsonProperty(required = false) String reason,
+            @Size(max = 2000) @JsonProperty(required = false) String note) {
     }
 
     public record DepreciationAction(@NotNull UUID periodId, String reason) {
